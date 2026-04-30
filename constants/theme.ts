@@ -1,41 +1,70 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Colores oficiales para Floxly - Estética "Crimson Glass VIP"
+ * Configurado exclusivamente para Dark Mode para mantener máxima privacidad.
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// El AccentPrimary: Carmesí / Rojo Rubí (Alto contraste, exclusivo y llamativo)
+const tintColorDark = '#DC143C';
 
 export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    // --- Tipografía ---
+    text: '#F2E8D8',             // Marfil (Ivory) para una lectura suave, descansa la vista y se ve premium
+    textSecondary: '#8A8A8A',    // Gris neutro apagado para información secundaria
+
+    // --- Fondos y Superficies ---
+    background: '#000000',       // Negro Ónix: El negro profundo de la alta costura
+    surface: '#161616',          // Gris carbón levísimo para darle profundidad a las tarjetas base
+
+    // --- Acentos e Íconos ---
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#4A4A4A',             // Íconos inactivos muy discretos para mantener la vibra privada
+    tabIconDefault: '#4A4A4A',
+    tabIconSelected: tintColorDark, // El Carmesí brillará guiando al usuario
+    activeIcon: tintColorDark,
+
+    // --- Efecto "Liquid Glass" (Premium Glassmorphism) ---
+    // Reflejos sutiles usando el código RGB del Carmesí (220, 20, 60)
+    // Esto hace que el cristal oscuro tenga un levísimo tinte rojizo, muy elegante.
+    glassBorder: 'rgba(220, 20, 60, 0.15)',
+    glassBackground: 'rgba(220, 20, 60, 0.03)',
+    glassHighlight: 'rgba(220, 20, 60, 0.10)',
+
+    // --- Feedback Semántico ---
+    error: '#8B1538',            // Borgoña oscuro (para no competir con el brillo de tu Carmesí)
+    success: '#D6B98C',          // Oro champaña para confirmaciones con un toque de lujo
+    warning: '#C9A227',          // Oro viejo
+  },
+
+  // Forzamos el esquema "light" a usar los mismos valores oscuros.
+  // Así, sin importar la configuración del iPhone del usuario, 
+  // Floxly siempre mantendrá su identidad "VIP & Discrete".
+  light: {
+    text: '#F2E8D8',
+    textSecondary: '#8A8A8A',
+    background: '#0A0A0A',
+    surface: '#161616',
+    tint: tintColorDark,
+    icon: '#4A4A4A',
+    tabIconDefault: '#4A4A4A',
     tabIconSelected: tintColorDark,
+    activeIcon: tintColorDark,
+    glassBorder: 'rgba(220, 20, 60, 0.15)',
+    glassBackground: 'rgba(220, 20, 60, 0.03)',
+    glassHighlight: 'rgba(220, 20, 60, 0.10)',
+    error: '#8B1538',
+    success: '#D6B98C',
+    warning: '#C9A227',
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -51,3 +80,7 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+export const getThemeColor = (colorName: keyof typeof Colors.dark) => {
+  return Colors.dark[colorName];
+};

@@ -1,29 +1,28 @@
 {
   "expo": {
-    "name": "DiscretApp",
-    "slug": "DiscretApp",
+    "name": "Nimly",
+    "slug": "Nimly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "discretapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "scheme": "nimly",
+    "backgroundColor": "#000000",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#000000",
+      "resizeMode": "contain"
+    },
     "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "deploymentTarget": "16.0",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.nimly.app",
+      "appleTeamId": "B88RJAR9J7",
+      "infoPlist": {
+        "UIUserInterfaceStyle": "Dark",
+        "NSPhotoLibraryUsageDescription": "Needed to upload photos to your vault.",
+        "NSCameraUsageDescription": "Needed to capture secure photos for the vault.",
+        "NSMicrophoneUsageDescription": "Needed for video recording within the vault."
+      }
     },
     "plugins": [
       "expo-router",
@@ -33,16 +32,25 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#000000"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-camera",
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "jemv05",
+    "extra": {
+      "eas": {
+        "projectId": "a641f4fb-5891-4c81-9427-c57bb896c1b7"
+      }
     }
   }
 }
