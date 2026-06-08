@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nimly — Absolute privacy. Exclusive connections.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;1,9..40,300&display=swap"
+        rel="stylesheet" />
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #000000;
+            --surface: #161616;
+            --surface2: #1e1e1e;
+            --text: #F2E8D8;
+            --muted: #8A8A8A;
+            --icon: #4A4A4A;
+            --crimson: #DC143C;
+            --crimson-dim: rgba(220, 20, 60, 0.15);
+            --crimson-glow: rgba(220, 20, 60, 0.08);
+            --crimson-hi: rgba(220, 20, 60, 0.10);
+            --glass-bg: rgba(22, 22, 22, 0.72);
+            --gold: #D6B98C;
+            --border: rgba(242, 232, 216, 0.06);
+            --border-red: rgba(220, 20, 60, 0.15);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-weight: 300;
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Subtle noise grain overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.4;
+        }
+
+        /* Crimson radial glow top */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 700px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(220, 20, 60, 0.12) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ——— NAV ——— */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.1rem 2.5rem;
+            backdrop-filter: blur(24px) saturate(1.4);
+            -webkit-backdrop-filter: blur(24px) saturate(1.4);
+            background: rgba(0, 0, 0, 0.75);
+            border-bottom: 1px solid var(--border-red);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            text-decoration: none;
+        }
+
+        .logo-n {
+            width: 32px;
+            height: 32px;
+            background: var(--crimson);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1rem;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(220, 20, 60, 0.4);
+        }
+
+        .logo-text {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.1rem;
+            letter-spacing: 0.1em;
+            color: var(--text);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.78rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--crimson);
+        }
+
+        /* ——— HERO ——— */
+        #home {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8rem 2rem 5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--crimson);
+            border: 1px solid var(--crimson-dim);
+            background: var(--crimson-glow);
+            padding: 0.4rem 1.1rem;
+            border-radius: 100px;
+            margin-bottom: 2.2rem;
+            animation: fadeUp 0.9s ease both;
+            backdrop-filter: blur(8px);
+        }
+
+        .eyebrow-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--crimson);
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        h1 {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(3.2rem, 9vw, 7.5rem);
+            line-height: 0.93;
+            letter-spacing: -0.04em;
+            color: var(--text);
+            animation: fadeUp 0.9s 0.1s ease both;
+            margin-bottom: 0.3rem;
+        }
+
+        h1 .outline {
+            color: transparent;
+            -webkit-text-stroke: 1px rgba(242, 232, 216, 0.2);
+            display: block;
+        }
+
+        h1 .crimson-word {
+            color: var(--crimson);
+            display: block;
+            filter: drop-shadow(0 0 30px rgba(220, 20, 60, 0.4));
+        }
+
+        .hero-sub {
+            max-width: 440px;
+            margin: 2rem auto 0;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.75;
+            animation: fadeUp 0.9s 0.2s ease both;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 2.8rem;
+            padding: 0.55rem 1.3rem;
+            background: var(--surface);
+            border: 1px solid var(--border-red);
+            border-radius: 100px;
+            font-size: 0.78rem;
+            color: var(--muted);
+            animation: fadeUp 0.9s 0.3s ease both;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #C9A227;
+            box-shadow: 0 0 8px rgba(201, 162, 39, 0.6);
+            animation: pulse 2.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(0.75);
+                opacity: 0.5;
+            }
+        }
+
+        /* phone mockups row */
+        .phones {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 4rem;
+            animation: fadeUp 0.9s 0.4s ease both;
+            position: relative;
+        }
+
+        .phone {
+            width: 150px;
+            border-radius: 22px;
+            border: 1px solid var(--border-red);
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(220, 20, 60, 0.08), 0 20px 60px rgba(0, 0, 0, 0.6);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background: #000;
+        }
+
+        .phone:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 0 60px rgba(220, 20, 60, 0.15), 0 30px 80px rgba(0, 0, 0, 0.7);
+        }
+
+        .phone.center {
+            width: 175px;
+            transform: translateY(-16px);
+            box-shadow: 0 0 60px rgba(220, 20, 60, 0.18), 0 30px 80px rgba(0, 0, 0, 0.7);
+        }
+
+        .phone.center:hover {
+            transform: translateY(-24px);
+        }
+
+        .phone img {
+            width: 100%;
+            display: block;
+        }
+
+        /* ——— DIVIDER ——— */
+        .divider {
+            position: relative;
+            z-index: 1;
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--crimson-dim), transparent);
+            margin: 0 2rem;
+        }
+
+        /* ——— ABOUT ——— */
+        #about {
+            padding: 7rem 2rem;
+            max-width: 960px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-label {
+            font-size: 0.68rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--crimson);
+            margin-bottom: 1.2rem;
+        }
+
+        h2 {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(2rem, 5vw, 3rem);
+            line-height: 1.08;
+            letter-spacing: -0.03em;
+            color: var(--text);
+            margin-bottom: 1.2rem;
+        }
+
+        .about-body {
+            color: var(--muted);
+            font-size: 1rem;
+            max-width: 560px;
+            margin-bottom: 3.5rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1px;
+            background: var(--border-red);
+            border: 1px solid var(--border-red);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .feature {
+            background: var(--surface);
+            padding: 2rem 1.8rem;
+            transition: background 0.25s;
+            position: relative;
+        }
+
+        .feature::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--crimson-glow);
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+
+        .feature:hover {
+            background: var(--surface2);
+        }
+
+        .feature:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            font-size: 1.4rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .feature h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 0.35rem;
+            letter-spacing: 0.01em;
+        }
+
+        .feature p {
+            font-size: 0.85rem;
+            color: var(--muted);
+            line-height: 1.65;
+        }
+
+        /* ——— LEGAL ——— */
+        .legal-section {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 6rem 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .legal-section+.legal-section {
+            border-top: 1px solid var(--border);
+        }
+
+        .legal-section h2 {
+            font-size: clamp(1.8rem, 4vw, 2.4rem);
+            margin-bottom: 0.4rem;
+        }
+
+        .legal-date {
+            font-size: 0.78rem;
+            color: var(--icon);
+            margin-bottom: 2.5rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .legal-section h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--crimson);
+            margin: 2.2rem 0 0.5rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .legal-section p,
+        .legal-section li {
+            font-size: 0.92rem;
+            color: #6e6e6e;
+            line-height: 1.85;
+            margin-bottom: 0.5rem;
+        }
+
+        .legal-section ul {
+            padding-left: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .legal-section a {
+            color: var(--crimson);
+            text-decoration: none;
+            border-bottom: 1px solid var(--crimson-dim);
+            transition: border-color 0.2s;
+        }
+
+        .legal-section a:hover {
+            border-color: var(--crimson);
+        }
+
+        /* glass card for legal intro */
+        .glass-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--border-red);
+            border-radius: 14px;
+            padding: 1.4rem 1.6rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .glass-card p {
+            font-size: 0.92rem;
+            color: var(--muted);
+            margin: 0;
+        }
+
+        /* ——— FOOTER ——— */
+        footer {
+            position: relative;
+            z-index: 1;
+            border-top: 1px solid var(--border-red);
+            padding: 2.5rem 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            background: rgba(220, 20, 60, 0.02);
+        }
+
+        .footer-logo {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1rem;
+            color: var(--icon);
+            letter-spacing: 0.08em;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 1.8rem;
+            list-style: none;
+        }
+
+        .footer-links a {
+            color: var(--icon);
+            text-decoration: none;
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--crimson);
+        }
+
+        .footer-copy {
+            font-size: 0.74rem;
+            color: #2e2e2e;
+            width: 100%;
+        }
+
+        /* ——— ANIMATIONS ——— */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ——— MOBILE ——— */
+        @media (max-width: 640px) {
+            nav {
+                padding: 1rem 1.4rem;
+            }
+
+            .nav-links {
+                gap: 1.2rem;
+            }
+
+            .phones {
+                gap: 0.5rem;
+            }
+
+            .phone {
+                width: 100px;
+                border-radius: 16px;
+            }
+
+            .phone.center {
+                width: 120px;
+            }
+
+            footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAV -->
+    <nav>
+        <a href="#home" class="logo">
+            <div class="logo-n">N</div>
+            <span class="logo-text">NIMLY</span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#about">About</a></li>
+            <li><a href="#privacy">Privacy</a></li>
+            <li><a href="#terms">Terms</a></li>
+        </ul>
+    </nav>
+
+    <!-- HERO -->
+    <section id="home">
+        <div class="eyebrow">
+            <span class="eyebrow-dot"></span>
+            Early Access — iOS
+        </div>
+
+        <h1>
+            Absolute
+            <span class="crimson-word">Privacy.</span>
+            <span class="outline">No filters.</span>
+        </h1>
+
+        <p class="hero-sub">
+            Nimly is an anonymous social network where your thoughts matter more than your identity.
+            No real names. No profiles. Just raw, unfiltered expression.
+        </p>
+
+        <div class="hero-badge">
+            <span class="status-dot"></span>
+            Currently under App Store review
+        </div>
+
+        <div class="phones">
+            <div class="phone">
+                <img src="screenshots/screen2.png" alt="Profile screen"
+                    onerror="this.style.display='none'; this.parentNode.style.background='#161616'; this.parentNode.style.height='280px'" />
+            </div>
+            <div class="phone center">
+                <img src="screenshots/screen5.png" alt="Nimly splash"
+                    onerror="this.style.display='none'; this.parentNode.style.background='#161616'; this.parentNode.style.height='320px'" />
+            </div>
+            <div class="phone">
+                <img src="screenshots/screen1.png" alt="Vault entry"
+                    onerror="this.style.display='none'; this.parentNode.style.background='#161616'; this.parentNode.style.height='280px'" />
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ABOUT -->
+    <section id="about">
+        <p class="section-label">The app</p>
+        <h2>Built for honest expression</h2>
+        <p class="about-body">
+            Most social networks reward performance. Nimly rewards honesty.
+            Post your thoughts without worrying about your follower count,
+            your employer, or your reputation. Just your words — raw and unfiltered.
+        </p>
+
+        <div class="features-grid">
+            <div class="feature">
+                <div class="feature-icon">🎭</div>
+                <h3>Full Anonymity</h3>
+                <p>No real name, no photo. Every user starts on equal footing with a custom avatar.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔒</div>
+                <h3>Encrypted Profiles</h3>
+                <p>Profile data is encrypted. What you share stays exactly as private as you want.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📝</div>
+                <h3>Vault Entry</h3>
+                <p>Share your secrets with the community. Text posts, no algorithm, just people.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">💬</div>
+                <h3>Direct Messages</h3>
+                <p>Connect one-on-one without ever revealing who you really are.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🚫</div>
+                <h3>Report & Block</h3>
+                <p>Tools to keep the space respectful. Reports are reviewed within 24 hours.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🌙</div>
+                <h3>Crimson Dark UI</h3>
+                <p>A premium dark interface with crimson glass accents. Built for late-night thoughts.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- PRIVACY POLICY -->
+    <section id="privacy" class="legal-section">
+        <p class="section-label">Legal</p>
+        <h2>Privacy Policy</h2>
+        <p class="legal-date">Last updated: May 2026</p>
+
+        <div class="glass-card">
+            <p>Nimly is built around privacy. We collect the minimum information necessary to operate the service — and
+                we never sell your data.</p>
+        </div>
+
+        <h3>1. Information We Collect</h3>
+        <p>Because Nimly is an anonymous platform, we intentionally collect as little personal information as possible:
+        </p>
+        <ul>
+            <li><strong style="color:#F2E8D8; font-weight:400;">Account data:</strong> A username (no real name
+                required) and a hashed password.</li>
+            <li><strong style="color:#F2E8D8; font-weight:400;">Content you post:</strong> Text posts, comments,
+                reactions, and direct messages.</li>
+            <li><strong style="color:#F2E8D8; font-weight:400;">Device & usage data:</strong> Device type, OS version,
+                and app version for debugging purposes only.</li>
+            <li><strong style="color:#F2E8D8; font-weight:400;">Camera access:</strong> Only when you choose to attach a
+                photo. Images are not stored beyond what you explicitly share.</li>
+        </ul>
+        <p>We do not collect your real name, email address, phone number, or precise location.</p>
+
+        <h3>2. How We Use Your Information</h3>
+        <ul>
+            <li>To operate and maintain the Nimly service</li>
+            <li>To moderate content and enforce community guidelines</li>
+            <li>To respond to support requests</li>
+            <li>To improve app performance and fix bugs</li>
+        </ul>
+        <p>We do not sell your data. We do not use your data for advertising.</p>
+
+        <h3>3. Data Storage & Security</h3>
+        <p>Your data is stored securely using industry-standard encryption. We use reputable third-party backend
+            services that comply with applicable data protection regulations. We retain your data only as long as your
+            account is active, or as required by law.</p>
+
+        <h3>4. User-Generated Content</h3>
+        <p>Content you post on Nimly is visible to other users. Because Nimly is anonymous, posts are not directly
+            linked to your real identity. However, avoid sharing sensitive personal details in public posts.</p>
+
+        <h3>5. Content Moderation</h3>
+        <p>We review reported content and take action within 24 hours. Content that violates our community guidelines
+            will be removed. Repeat offenders will be permanently banned.</p>
+
+        <h3>6. Your Rights</h3>
+        <p>You may request deletion of your account and all associated data at any time by opening a request at <a
+                href="https://github.com/TheJemv/Nimly/issues" target="_blank">github.com/TheJemv/Nimly/issues</a>.</p>
+
+        <h3>7. Children's Privacy</h3>
+        <p>Nimly is not intended for users under the age of 17. We do not knowingly collect data from minors. If you
+            believe a minor has created an account, please contact us immediately.</p>
+
+        <h3>8. Changes to This Policy</h3>
+        <p>We may update this Privacy Policy from time to time. Continued use of Nimly after changes constitutes
+            acceptance of the updated policy.</p>
+
+        <h3>9. Contact</h3>
+        <p>Privacy questions? Open an issue at <a href="https://github.com/TheJemv/Nimly/issues"
+                target="_blank">github.com/TheJemv/Nimly/issues</a>.</p>
+    </section>
+
+    <!-- TERMS OF USE -->
+    <section id="terms" class="legal-section">
+        <p class="section-label">Legal</p>
+        <h2>Terms of Use</h2>
+        <p class="legal-date">Last updated: May 2026</p>
+
+        <div class="glass-card">
+            <p>By downloading or using Nimly, you agree to these Terms. Anonymity on Nimly does not mean freedom from
+                responsibility — you are accountable for what you post.</p>
+        </div>
+
+        <h3>1. Eligibility</h3>
+        <p>You must be at least 17 years old to use Nimly. By using the app, you confirm that you meet this requirement.
+        </p>
+
+        <h3>2. Anonymous Use</h3>
+        <p>Nimly allows anonymous participation. However, anonymity does not grant immunity from these Terms. You are
+            responsible for all content you post, regardless of your identity.</p>
+
+        <h3>3. Acceptable Use</h3>
+        <p>You agree not to use Nimly to:</p>
+        <ul>
+            <li>Harass, threaten, or abuse other users</li>
+            <li>Post illegal content of any kind</li>
+            <li>Share content promoting violence, self-harm, or discrimination</li>
+            <li>Impersonate another person or entity</li>
+            <li>Attempt to de-anonymize other users</li>
+            <li>Spam or post repetitive low-quality content</li>
+            <li>Exploit, hack, or disrupt the platform</li>
+        </ul>
+
+        <h3>4. Content Ownership</h3>
+        <p>You retain ownership of the content you post. By posting on Nimly, you grant us a non-exclusive, royalty-free
+            license to display and moderate that content within the app.</p>
+
+        <h3>5. Content Moderation</h3>
+        <p>We reserve the right to remove any content that violates these Terms. We aim to act on reported content
+            within 24 hours. Users who violate these Terms may be suspended or permanently banned without notice.</p>
+
+        <h3>6. Reporting & Blocking</h3>
+        <p>The app provides mechanisms to report objectionable content and block abusive users. All reports are reviewed
+            by the developer.</p>
+
+        <h3>7. Disclaimer of Warranties</h3>
+        <p>Nimly is provided "as is" without warranties of any kind. We do not guarantee uninterrupted service or that
+            the platform will be free of errors.</p>
+
+        <h3>8. Limitation of Liability</h3>
+        <p>To the maximum extent permitted by law, we are not liable for any indirect, incidental, or consequential
+            damages arising from your use of Nimly.</p>
+
+        <h3>9. Changes to These Terms</h3>
+        <p>We reserve the right to modify these Terms at any time. Continued use of Nimly after changes means you accept
+            the updated Terms.</p>
+
+        <h3>10. Contact</h3>
+        <p>Questions? Reach us at <a href="https://github.com/TheJemv/Nimly/issues"
+                target="_blank">github.com/TheJemv/Nimly/issues</a>.</p>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <span class="footer-logo">NIMLY</span>
+        <ul class="footer-links">
+            <li><a href="#about">About</a></li>
+            <li><a href="#privacy">Privacy</a></li>
+            <li><a href="#terms">Terms</a></li>
+            <li><a href="https://github.com/TheJemv/Nimly/issues" target="_blank">Support</a></li>
+        </ul>
+        <p class="footer-copy">© 2026 Nimly · Built by <a href="https://github.com/TheJemv"
+                style="color:#3a3a3a; text-decoration:none;">TheJemv</a> · All rights reserved.</p>
+    </footer>
+
+</body>
+
+</html>
