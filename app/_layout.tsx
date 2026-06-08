@@ -13,7 +13,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 function RootLayoutNav() {
-    const { isLoading, user } = useAuth(); // Asumo que tienes 'user' para saber si está logueado
+    const { isLoading } = useAuth(); // Asumo que tienes 'user' para saber si está logueado
     const router = useRouter();
     const bg = getThemeColor('background');
     const accent = getThemeColor('tint');

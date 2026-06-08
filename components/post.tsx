@@ -2,7 +2,7 @@ import { deletePost, toggleLike } from "@/api/posts";
 import { reportsApi } from "@/api/reports";
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from "@/constants/theme";
-import { supabase, supabaseUrl as SUPABASE_URL } from "@/lib/supabase";
+import { supabase, supabaseUrl } from "@/lib/supabase";
 import { createAvatar } from "@dicebear/core";
 import { Image } from "expo-image";
 import { SymbolView } from "expo-symbols";
@@ -86,7 +86,7 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
    const isOwner = currentUserId === post.user_id;
    const isMedia = post.type === 'IMAGE' || post.type === 'VIDEO';
    const mediaUrl = isMedia && post.content
-      ? `${SUPABASE_URL}/storage/v1/object/authenticated/media/${post.content}`
+      ? `${supabaseUrl}/storage/v1/object/authenticated/media/${post.content}`
       : null;
 
    const postText = post.type === 'TEXT' ? post.content : '';
