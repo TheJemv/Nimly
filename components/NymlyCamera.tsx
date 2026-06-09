@@ -59,7 +59,7 @@ export default function NymlyCamera({
                 <View style={styles.permissionContainer}>
                     <Text style={{ color: '#fff' }}>Nymly necesita acceso a la cámara.</Text>
                     <TouchableOpacity onPress={requestPermission} style={styles.btn}>
-                        <Text>Conceder Permiso</Text>
+                        <Text>Continuar</Text>
                     </TouchableOpacity>
                 </View>
             </Modal>

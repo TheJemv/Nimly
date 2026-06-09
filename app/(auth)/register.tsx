@@ -1,5 +1,5 @@
 import { getThemeColor } from '@/constants/theme';
-import { supabase } from '@/lib/supabase'; // Asegúrate de tener tu cliente configurado
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -19,6 +19,7 @@ export default function RegisterScreen() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(false);
 
     // Theme colors
     const bg = getThemeColor('background');
@@ -34,9 +35,13 @@ export default function RegisterScreen() {
             return;
         }
 
+        if (!termsAccepted) {
+            Alert.alert('Terms Required', 'You must accept the Terms of Use to create an account.');
+            return;
+        }
+
         setLoading(true);
 
-        // El truco del email fake para usar solo Username
         const fakeEmail = `${username.toLowerCase().trim()}@nimly.com`;
 
         const { error } = await supabase.auth.signUp({
@@ -45,6 +50,8 @@ export default function RegisterScreen() {
             options: {
                 data: {
                     username: username.trim(),
+                    terms_accepted: true,
+                    terms_accepted_at: new Date().toISOString(),
                 }
             }
         });
@@ -53,7 +60,6 @@ export default function RegisterScreen() {
             Alert.alert('Registration Error', error.message);
             setLoading(false);
         } else {
-            // El AuthContext detectará la sesión y redirigirá a (app)
             setLoading(false);
         }
     };
@@ -85,7 +91,7 @@ export default function RegisterScreen() {
                             autoCapitalize="none"
                             value={username}
                             onChangeText={setUsername}
-                            selectionColor={getThemeColor("tint")}
+                            selectionColor={getThemeColor('tint')}
                         />
                     </View>
 
@@ -102,19 +108,60 @@ export default function RegisterScreen() {
                             secureTextEntry
                             value={password}
                             onChangeText={setPassword}
-                            selectionColor={getThemeColor("tint")}
+                            selectionColor={getThemeColor('tint')}
                         />
                     </View>
 
+                    {/* ——— TERMS CHECKBOX ——— */}
                     <TouchableOpacity
-                        style={[styles.buttonPrimary, { backgroundColor: accent }]}
+                        style={styles.termsRow}
+                        onPress={() => setTermsAccepted(!termsAccepted)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[
+                            styles.checkbox,
+                            {
+                                borderColor: termsAccepted ? accent : glassBorder,
+                                backgroundColor: termsAccepted ? accent : 'transparent',
+                            }
+                        ]}>
+                            {termsAccepted && (
+                                <Text style={styles.checkmark}>✓</Text>
+                            )}
+                        </View>
+
+                        <Text style={[styles.termsText, { color: textSec }]}>
+                            I have read and accept the{' '}
+                            <Text
+                                style={[styles.termsLink, { color: accent }]}
+                                onPress={() => router.push('/(auth)/terms')}
+                            >
+                                Terms of Use
+                            </Text>
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.buttonPrimary,
+                            {
+                                backgroundColor: termsAccepted ? accent : surface,
+                                borderWidth: termsAccepted ? 0 : 1,
+                                borderColor: glassBorder,
+                            }
+                        ]}
                         onPress={handleSignUp}
                         disabled={loading}
                     >
                         {loading ? (
                             <ActivityIndicator color="#ffffff" />
                         ) : (
-                            <Text style={styles.buttonText}>CREATE ACCOUNT</Text>
+                            <Text style={[
+                                styles.buttonText,
+                                { color: termsAccepted ? '#ffffff' : textSec }
+                            ]}>
+                                CREATE ACCOUNT
+                            </Text>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -138,11 +185,6 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: 30,
         paddingTop: 20,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
     },
     header: {
         marginTop: 40,
@@ -176,6 +218,38 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         fontSize: 16,
     },
+    // ——— TERMS ———
+    termsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginTop: -8,
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 5,
+        borderWidth: 1.5,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+    },
+    checkmark: {
+        color: '#ffffff',
+        fontSize: 13,
+        fontWeight: 'bold',
+        lineHeight: 16,
+    },
+    termsText: {
+        fontSize: 13,
+        lineHeight: 20,
+        flex: 1,
+    },
+    termsLink: {
+        fontWeight: '700',
+        textDecorationLine: 'underline',
+    },
+    // ——— BUTTON ———
     buttonPrimary: {
         height: 55,
         borderRadius: 8,
@@ -184,7 +258,6 @@ const styles = StyleSheet.create({
         marginTop: 10,
     },
     buttonText: {
-        color: '#ffffff',
         fontSize: 14,
         fontWeight: 'bold',
         letterSpacing: 1,
@@ -193,5 +266,5 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         marginTop: 40,
-    }
+    },
 });
