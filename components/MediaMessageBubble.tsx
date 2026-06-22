@@ -1,9 +1,8 @@
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
-import * as FileSystem from 'expo-file-system/legacy';
 import { SymbolView } from 'expo-symbols';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -12,42 +11,71 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const [imageUri, setImageUri] = useState<string | null>(vaultRAMCache[filePath] || null);
     const [isLoading, setIsLoading] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
-    const [error, setError] = useState(false);
 
-    // --- ESTADO DE BLOQUEO LOCAL INMEDIATO ---
+    const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
 
-    // Rutina de descarga y desencriptación
-    const downloadAndDecrypt = async () => {
-        if (wasConsumed) return;
-        if (imageUri) {
-            setIsFullScreen(true);
+    // AUTO-DESCARGA PARA FOTOS NORMALES (solo si no vino ya del prefetch)
+    useEffect(() => {
+        if (!isViewOnce && !imageUri && !isLocked && filePath) {
+            downloadAndDecrypt(false);
+        }
+    }, [filePath, isViewOnce]);
+
+    const downloadAndDecrypt = async (triggerFullScreen = true) => {
+        if (wasConsumed || isLocked) return;
+
+        if (vaultRAMCache[filePath] && vaultRAMCache[filePath] !== 'LOCKED_CAPSULE') {
+            setImageUri(vaultRAMCache[filePath]);
+            if (triggerFullScreen) setIsFullScreen(true);
+            return;
+        }
+
+        if (imageUri && imageUri !== 'LOCKED_CAPSULE') {
+            if (triggerFullScreen) setIsFullScreen(true);
             return;
         }
 
         try {
+            // 1. Activamos el estado de carga
             setIsLoading(true);
+
+            // 2. TRUCO DE ORO: Pausa de 50ms para que React Native alcance a dibujar el ActivityIndicator en la pantalla
+            await new Promise(resolve => setTimeout(resolve, 50));
+
             const { data: urlData, error: urlError } = await supabase.storage
                 .from('chat-media')
                 .createSignedUrl(filePath, 60);
 
-            if (urlError || !urlData?.signedUrl) throw new Error("No URL");
+            if (urlError || !urlData?.signedUrl) {
+                setIsLoading(false);
+                return;
+            }
 
-            const tempFileUri = `${FileSystem.documentDirectory}temp_vault_${Date.now()}.txt`;
-            await FileSystem.downloadAsync(urlData.signedUrl, tempFileUri);
-            const encryptedText = await FileSystem.readAsStringAsync(tempFileUri, { encoding: 'utf8' });
-            await FileSystem.deleteAsync(tempFileUri, { idempotent: true });
+            const response = await fetch(urlData.signedUrl);
+            const encryptedText = await response.text();
+
+            // 3. Otra pequeña pausa antes del golpe de procesamiento AES
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             const base64Data = await vaultCrypto.decryptMessage(encryptedText.trim(), friendPublicKey);
-            if (base64Data.startsWith("🔒")) throw new Error("Math Failed");
+
+            if (base64Data.startsWith("🔒")) {
+                vaultRAMCache[filePath] = 'LOCKED_CAPSULE';
+                setIsLocked(true);
+                setIsLoading(false);
+                return;
+            }
 
             const finalUri = `data:image/jpeg;base64,${base64Data}`;
+            vaultRAMCache[filePath] = finalUri;
             setImageUri(finalUri);
             setIsLoading(false);
-            setIsFullScreen(true);
+
+            if (triggerFullScreen) {
+                setIsFullScreen(true);
+            }
         } catch (e) {
-            console.error("Vault Error:", e);
-            setError(true);
             setIsLoading(false);
         }
     };
@@ -56,12 +84,10 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         setIsFullScreen(false);
 
         if (isViewOnce && !isMine) {
-            // 1. BLOQUEO INSTANTÁNEO: Ya no hay vuelta atrás
             setWasConsumed(true);
             setImageUri(null);
 
             try {
-                // 2. Borrado físico y actualización en segundo plano
                 await supabase.storage.from('chat-media').remove([filePath]);
                 await supabase.from('messages')
                     .update({ content: 'OPENED_CAPSULE', type: 'text' })
@@ -69,7 +95,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
 
                 delete vaultRAMCache[filePath];
             } catch (e) {
-                console.error("Burn error:", e);
+                // Silencioso
             }
         }
     };
@@ -83,33 +109,48 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         );
     }
 
-    // --- CASO 1: FOTO NORMAL (Cualquier usuario) ---
+    if (isLocked) {
+        return (
+            <View style={styles.lockedContainer}>
+                <Text style={styles.lockedText}>🔒 Locked Capsule</Text>
+            </View>
+        );
+    }
+
     if (!isViewOnce) {
         return (
             <>
-                <TouchableOpacity onPress={downloadAndDecrypt} style={styles.standardImageContainer}>
+                <TouchableOpacity
+                    onPress={() => downloadAndDecrypt(true)}
+                    style={styles.standardImageContainer}
+                    disabled={isLoading} // Evita que le den tap 20 veces mientras carga
+                >
                     {imageUri ? (
                         <Image source={{ uri: imageUri }} style={styles.imageMini} />
                     ) : (
                         <View style={styles.placeholder}>
-                            <ActivityIndicator color="#666" />
+                            {isLoading ? (
+                                <>
+                                    <ActivityIndicator color={getThemeColor('tint')} size="large" />
+                                    <Text style={{ color: '#aaa', marginTop: 10, fontSize: 12, fontWeight: '500' }}>
+                                        Decrypting secure image...
+                                    </Text>
+                                </>
+                            ) : (
+                                // Muestra un ícono si no está cargando y aún no hay imagen
+                                <SymbolView name="photo.fill" size={30} tintColor="#666" />
+                            )}
                         </View>
                     )}
                 </TouchableOpacity>
 
                 <Modal visible={isFullScreen} transparent={false} animationType="fade">
-                    <View style={styles.fullScreenContainer}>
-                        <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-                            <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
-                        </TouchableOpacity>
-                        <Image source={{ uri: imageUri || '' }} style={styles.fullScreenImage} resizeMode="contain" />
-                    </View>
+                    {/* ... tu código de Modal se queda igual ... */}
                 </Modal>
             </>
         );
     }
 
-    // --- CASO 2: VIEW ONCE - REMITENTE (USUARIO A) ---
     if (isMine) {
         return (
             <View style={styles.senderVO}>
@@ -119,19 +160,20 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         );
     }
 
-    // --- CASO 3: VIEW ONCE - RECEPTOR (USUARIO B) ---
     return (
         <>
             <TouchableOpacity
-                style={styles.receiverVO}
-                onPress={downloadAndDecrypt}
+                style={styles.receiverVOContainer}
+                onPress={() => downloadAndDecrypt(true)}
                 disabled={isLoading}
             >
                 {isLoading ? (
                     <ActivityIndicator color={getThemeColor('tint')} size="small" />
                 ) : (
                     <>
-                        <SymbolView name="play.fill" size={12} tintColor={getThemeColor('tint')} />
+                        <View style={styles.iconCircle}>
+                            <SymbolView name="play.fill" size={10} tintColor="#fff" />
+                        </View>
                         <Text style={styles.receiverVOText}>View Photo</Text>
                     </>
                 )}
@@ -142,7 +184,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                     <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
                         <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
                     </TouchableOpacity>
-                    {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="cover" />}
+                    {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="contain" />}
                 </View>
             </Modal>
         </>
@@ -153,14 +195,36 @@ const styles = StyleSheet.create({
     standardImageContainer: { width: 200, height: 250, borderRadius: 15, overflow: 'hidden', backgroundColor: '#1c1c1e' },
     imageMini: { width: '100%', height: '100%' },
     placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    // Diseño Usuario A (Minimalista)
     senderVO: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     senderVOText: { color: '#fff', fontSize: 14, opacity: 0.8 },
-    // Diseño Usuario B (Botón tipo mensaje)
+    receiverVOContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#1C1C1E',
+    },
+    iconCircle: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    receiverVOText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '500'
+    },
     receiverVO: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
-    receiverVOText: { color: getThemeColor('tint'), fontSize: 16, fontWeight: '600' },
-    // Pantalla Completa
     fullScreenContainer: { flex: 1, backgroundColor: '#000' },
     fullScreenImage: { width: width, height: height },
-    closeBtn: { position: 'absolute', top: 60, right: 25, zIndex: 99, shadowColor: '#000', shadowRadius: 10, shadowOpacity: 0.5 }
+    closeBtn: { position: 'absolute', top: 60, right: 25, zIndex: 99, shadowColor: '#000', shadowRadius: 10, shadowOpacity: 0.5 },
+    lockedContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, minWidth: 150 },
+    lockedText: { color: '#fff', fontSize: 16 }
 });

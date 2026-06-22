@@ -3,9 +3,10 @@ import CommentsSheet from "@/components/comments-sheet";
 import PostComponent from "@/components/post";
 import { supabase } from "@/lib/supabase";
 import { Host } from "@expo/ui/swift-ui";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { router, Stack } from "expo-router";
 import { SymbolView } from 'expo-symbols';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
    ActivityIndicator,
    RefreshControl,
@@ -20,12 +21,13 @@ export default function HomeScreen() {
    const [loading, setLoading] = useState(true);
    const [refreshing, setRefreshing] = useState(false);
 
+   const commentsRef = useRef<BottomSheetModal>(null); // Referencia única
    const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
    const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
    const handleOpenComments = (postId: string) => {
       setActiveCommentPostId(postId);
-      setIsCommentsOpen(true);
+      commentsRef.current?.present(); // ¡Directo y sin estados de error!
    };
 
    const loadPosts = async (showLoading = true) => {
@@ -130,9 +132,8 @@ export default function HomeScreen() {
          {activeCommentPostId && (
             <Host>
                <CommentsSheet
+                  ref={commentsRef}
                   postId={activeCommentPostId}
-                  isPresented={isCommentsOpen}
-                  setIsPresented={setIsCommentsOpen}
                   postOwnerId={posts.find(p => p.id === activeCommentPostId)?.user_id}
                />
             </Host>

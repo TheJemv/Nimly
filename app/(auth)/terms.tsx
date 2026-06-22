@@ -35,7 +35,7 @@ export default function TermsModal() {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={[styles.lastUpdated, { color: textSec }]}>Last updated: May 2026</Text>
+                <Text style={[styles.lastUpdated, { color: textSec }]}>Last updated: June 2026</Text>
 
                 <View style={[styles.card, { backgroundColor: surface, borderColor: glassBorder }]}>
                     <Text style={[styles.cardText, { color: textSec }]}>
@@ -88,7 +88,8 @@ export default function TermsModal() {
                 <Section title="6. Reporting & Blocking" accent={accent}>
                     <Body color={textSec}>
                         The app provides mechanisms to report objectionable content and block abusive users.
-                        All reports are reviewed by the developer within 24 hours.
+                        Blocking a user immediately removes their content from your feed and restricts further
+                        interaction between both accounts. All reports are reviewed by the developer within 24 hours.
                     </Body>
                 </Section>
 

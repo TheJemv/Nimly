@@ -10,6 +10,12 @@ import { SvgXml } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+interface AvatarConfig {
+   [key: string]: any; // Esto permite que el objeto tenga propiedades dinámicas
+   backgroundColor: string[];
+   seed: string;
+}
+
 const { width } = Dimensions.get("window");
 const getValidOptions = (collection: any, category: string) => {
    try {
@@ -29,7 +35,17 @@ const getDynamicTabs = (collection: any) => {
       'seed', 'flip', 'rotate', 'scale', 'radius', 'backgroundColor',
       'backgroundType', 'backgroundRotation', 'translateX', 'translateY', 'clip'
    ];
-   return ["style", "backgroundColor", ...Object.keys(schema).filter(key => !ignore.includes(key))];
+
+   return ["style", "backgroundColor", ...Object.keys(schema).filter(key => {
+      // 1. Ignorar campos técnicos
+      if (ignore.includes(key)) return false;
+      // 2. Ignorar campos que terminen en "Probability" o "Rotation"
+      if (key.toLowerCase().includes('probability') || key.toLowerCase().includes('rotation')) return false;
+
+      // 3. Solo incluir propiedades que tengan un listado de opciones (enum)
+      const prop = schema[key];
+      return (prop.items && prop.items.enum) || prop.enum;
+   })];
 };
 
 export default function AvatarSelectScreen() {
@@ -39,26 +55,29 @@ export default function AvatarSelectScreen() {
    const [loading, setLoading] = useState(true);
    const [activeStyle, setActiveStyle] = useState(ESTILOS_DICEBEAR[0]);
    const [activeTab, setActiveTab] = useState("style");
-   const [config, setConfig] = useState({
+   const [config, setConfig] = useState<AvatarConfig>({
       backgroundColor: ["DC143C"],
       seed: "user",
    });
 
    const currentTabs = useMemo(() => getDynamicTabs(activeStyle.collection), [activeStyle]);
    const svgString = useMemo(() => {
-      // Verificación de seguridad para evitar el ReferenceError
       if (!config || !config.backgroundColor) return "";
-      const avatar = createAvatar(activeStyle.collection, {
-         ...config,
-         radius: 20,
-      });
+
+      // Agregamos 'as any' a la colección y al config
+      const avatar = createAvatar(activeStyle.collection as any, config as any);
+
       return avatar.toString();
    }, [activeStyle, config]);
 
    const handleStyleChange = (nuevoEstilo: any) => {
       setActiveStyle(nuevoEstilo);
       setActiveTab("style");
-      setConfig(prev => ({ backgroundColor: prev.backgroundColor, seed: "user" }));
+      // Reseteamos totalmente el config, manteniendo solo el fondo
+      setConfig({
+         backgroundColor: config.backgroundColor || ["DC143C"],
+         seed: "user"
+      });
    };
 
    const updateConfig = (category: string, value: string) => {
@@ -69,17 +88,14 @@ export default function AvatarSelectScreen() {
    };
 
    const renderGridItem = ({ item }: { item: any }) => {
-      // Fondo actual para las previews
       const currentBg = config?.backgroundColor?.[0] || "161616";
 
+      // Si es estilo o color, usa la lógica actual
       if (activeTab === "style") {
          const isSelected = activeStyle.id === item.id;
-         const previewSvg = createAvatar(item.collection, { seed: "VIP", backgroundColor: ["transparent"] }).toString();
+         const previewSvg = createAvatar(item.collection as any, { seed: "VIP", backgroundColor: ["transparent"] }).toString();
          return (
-            <TouchableOpacity
-               style={[styles.gridItem, { backgroundColor: `#${currentBg}` }, isSelected && styles.selectedBorder]}
-               onPress={() => handleStyleChange(item)}
-            >
+            <TouchableOpacity style={[styles.gridItem, { backgroundColor: `#${currentBg}` }, isSelected && styles.selectedBorder]} onPress={() => handleStyleChange(item)}>
                <SvgXml xml={previewSvg} width="65" height="65" />
             </TouchableOpacity>
          );
@@ -88,16 +104,17 @@ export default function AvatarSelectScreen() {
       if (activeTab === "backgroundColor") {
          const isSelected = config.backgroundColor[0] === item;
          return (
-            <TouchableOpacity
-               style={[styles.gridItem, { backgroundColor: `#${item}` }, isSelected && { borderColor: '#FFF', borderWidth: 3 }]}
-               onPress={() => updateConfig("backgroundColor", item)}
-            />
+            <TouchableOpacity style={[styles.gridItem, { backgroundColor: `#${item}` }, isSelected && { borderColor: '#FFF', borderWidth: 3 }]} onPress={() => updateConfig("backgroundColor", item)} />
          );
       }
 
-      const isSelected = config[activeTab] && config[activeTab][0] === item;
-      const previewConfig = { ...config, [activeTab]: [item], backgroundColor: ["transparent"] };
-      const previewSvg = createAvatar(activeStyle.collection, previewConfig).toString();
+      // --- AQUÍ ESTÁ EL CAMBIO PARA OTRAS PROPIEDADES ---
+      const currentOptions = config[activeTab] || [];
+      const isSelected = currentOptions[0] === item;
+
+      // Crear configuración para previsualizar sin romper nada
+      const previewConfig = { ...config, [activeTab]: [item] };
+      const previewSvg = createAvatar(activeStyle.collection as any, previewConfig as any).toString();
 
       return (
          <TouchableOpacity
@@ -145,6 +162,13 @@ export default function AvatarSelectScreen() {
    useEffect(() => {
       loadCurrentAvatar();
    }, []);
+
+   useEffect(() => {
+      // Si el tab actual no existe en el nuevo estilo, vuelve a "style"
+      if (!currentTabs.includes(activeTab)) {
+         setActiveTab("style");
+      }
+   }, [currentTabs]);
 
    // Dentro de AvatarSelectScreen...
 

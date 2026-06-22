@@ -1,12 +1,15 @@
 import { createPost } from "@/api/posts";
+import NymlyCamera from "@/components/NymlyCamera";
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 import { createAvatar } from "@dicebear/core";
+
 import { GlassView } from "expo-glass-effect";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
    ActivityIndicator,
@@ -33,6 +36,7 @@ export default function NewPostScreen() {
    const [media, setMedia] = useState<{ uri: string; type: string } | null>(null);
    const [isPosting, setIsPosting] = useState(false);
    const [userProfile, setUserProfile] = useState<any>(null);
+   const [isCameraVisible, setCameraVisible] = useState(false);
 
    const tintColor = getThemeColor("tint");
    const canPost = ((activeTab === 'text' && text.trim().length > 0) || (activeTab === 'media' && media)) && !isPosting;
@@ -183,7 +187,7 @@ export default function NewPostScreen() {
                   <View style={styles.mediaViewWrapper}>
                      {!media ? (
                         <View style={styles.mediaPlaceholderCentered}>
-                           <TouchableOpacity style={styles.mediaOption} onPress={takePhoto}>
+                           <TouchableOpacity style={styles.mediaOption} onPress={() => setCameraVisible(true)}>
                               <SymbolView name="camera.fill" size={28} tintColor={tintColor} />
                            </TouchableOpacity>
                            <TouchableOpacity style={styles.mediaOption} onPress={pickMedia}>
@@ -202,6 +206,17 @@ export default function NewPostScreen() {
                )}
             </ScrollView>
          </KeyboardAvoidingView>
+
+         {/* 👇 NUEVO: cámara in-app reusada */}
+         <NymlyCamera
+            visible={isCameraVisible}
+            onClose={() => setCameraVisible(false)}
+            simpleMode // sin panel de View Once, solo "Use Photo"
+            onSend={(uri) => {
+               setText("");
+               setMedia({ uri, type: 'image' });
+            }}
+         />
       </View>
    );
 }

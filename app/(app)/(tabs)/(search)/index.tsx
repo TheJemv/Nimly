@@ -25,7 +25,7 @@ const UserSearchResult = ({ item }: { item: any }) => {
     const avatarSvg = useMemo(() => {
         if (!item.avatar_config) return null;
         const estilo = ESTILOS_DICEBEAR.find(e => e.id === item.avatar_config.styleId) || ESTILOS_DICEBEAR[0];
-        return createAvatar(estilo.collection, {
+        return createAvatar(estilo.collection as any, {
             ...item.avatar_config.options,
             radius: 50,
         }).toString();

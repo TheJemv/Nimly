@@ -2,7 +2,10 @@ import { chatApi } from "@/api/chat";
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
+
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
+import { prefetchChatMedia } from "@/utils/mediaPrefetch";
+
 import { createAvatar } from "@dicebear/core";
 import { Button, ContextMenu, Host, Image as SwiftImage } from "@expo/ui/swift-ui";
 import { GlassView } from "expo-glass-effect";
@@ -27,6 +30,7 @@ import { SvgXml } from "react-native-svg";
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import NymlyCamera from "@/components/NymlyCamera";
 import { useChatMedia } from "@/hooks/useChatMedia";
+import { cleanChatMessage } from "@/utils/chatUtils";
 
 const PAGE_SIZE = 30;
 
@@ -42,6 +46,7 @@ const MessageContent = memo(({ content, friendPublicKey }: { content: string; fr
    useEffect(() => {
       // 1. FIREWALL: Esperar a que la llave pública de Supabase llegue
       if (!friendPublicKey) {
+         console.log('⏳ [TEXT] Waiting for friendPublicKey...');
          setDecryptedText("🔒 Connecting Vault...");
          return;
       }
@@ -52,15 +57,18 @@ const MessageContent = memo(({ content, friendPublicKey }: { content: string; fr
       let isMounted = true;
       const decrypt = async () => {
          try {
+            console.log('🔓 [TEXT] Starting decryption...');
             const clearText = await vaultCrypto.decryptMessage(content, friendPublicKey);
             if (isMounted) {
                if (!clearText.startsWith("🔒")) {
                   vaultRAMCache[content] = clearText;
+                  console.log('✅ [TEXT] Decryption successful');
                }
                setDecryptedText(clearText);
             }
          } catch (e) {
-            if (isMounted) setDecryptedText("🔒 Error al desencriptar");
+            console.error('❌ [TEXT] Decryption error:', e);
+            if (isMounted) setDecryptedText("🔒 Locked Capsule");
          }
       };
 
@@ -98,11 +106,19 @@ export default function ChatScreen() {
          if (!targetFriendId || targetFriendId === "[id]") return;
          try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+               console.log('❌ [INIT] No authenticated user');
+               return;
+            }
+            console.log('👤 [INIT] Current user:', user.id);
             setCurrentUserId(user.id);
 
             const cId = await chatApi.getOrCreateChat(targetFriendId);
-            if (!cId) return;
+            if (!cId) {
+               console.log('❌ [INIT] Failed to get chat ID');
+               return;
+            }
+            console.log('💬 [INIT] Chat ID:', cId);
             setChatId(cId);
 
             const [msgRes, profRes] = await Promise.all([
@@ -110,34 +126,70 @@ export default function ChatScreen() {
                supabase.from('profiles').select('*').eq('id', targetFriendId).single()
             ]);
 
-            if (profRes.data) setFriendProfile(profRes.data);
+            if (profRes.data) {
+               console.log('👥 [INIT] Friend profile loaded:', {
+                  username: profRes.data.username,
+                  hasPublicKey: !!profRes.data.public_key
+               });
+               setFriendProfile(profRes.data);
+            } else {
+               console.log('❌ [INIT] Friend profile error:', profRes.error);
+            }
 
             channel = supabase.channel(`chat:${cId}`)
                .on('postgres_changes',
                   { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${cId}` },
-                  (p) => { setMessages(prev => [p.new, ...prev]); }
+                  (p) => {
+                     console.log('📨 [REALTIME] New message:', {
+                        type: p.new.type,
+                        contentLength: p.new.content?.length
+                     });
+                     setMessages(prev => [p.new, ...prev]);
+                  }
                )
                .subscribe();
-         } catch (e) { console.error("Chat Init Error:", e); }
+         } catch (e) {
+            console.error("❌ [INIT] Chat Init Error:", e);
+         }
          finally { setLoading(false); }
       };
       init();
       return () => { if (channel) supabase.removeChannel(channel); };
    }, [targetFriendId]);
 
-   const fetchMessages = async (cId: string, offset: number) => {
-      const { data, error } = await supabase
-         .from('messages')
-         .select('*')
-         .eq('chat_id', cId)
-         .order('created_at', { ascending: false })
-         .range(offset, offset + PAGE_SIZE - 1);
+   useEffect(() => {
+      if (!friendProfile?.public_key || messages.length === 0) return;
 
-      if (error) throw error;
-      if (data.length < PAGE_SIZE) setHasMore(false);
-      if (offset === 0) setMessages(data);
-      else setMessages(prev => [...prev, ...data]);
-      return data;
+      const mediaItems = messages
+         .filter(m => m.type === 'image' && m.content && m.content !== 'OPENED_CAPSULE')
+         .map(m => ({ filePath: m.content, friendPublicKey: friendProfile.public_key }));
+
+      if (mediaItems.length > 0) {
+         prefetchChatMedia(mediaItems);
+      }
+   }, [messages, friendProfile?.public_key]);
+
+   const fetchMessages = async (cId: string, offset: number) => {
+      try {
+         const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('chat_id', cId)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + PAGE_SIZE - 1);
+
+         if (error) throw error;
+         console.log('📥 [FETCH] Messages loaded:', data?.length || 0);
+         if (data?.length) {
+            console.log('📋 [FETCH] Message types:', data.map(m => ({ type: m.type, hasContent: !!m.content })));
+         }
+         if (data && data.length < PAGE_SIZE) setHasMore(false);
+         if (offset === 0) setMessages(data || []);
+         else setMessages(prev => [...prev, ...(data || [])]);
+         return data;
+      } catch (e) {
+         console.error('❌ [FETCH] Error:', e);
+      }
    };
 
    const loadMoreMessages = async () => {
@@ -149,28 +201,37 @@ export default function ChatScreen() {
    };
 
    const handleSendText = async () => {
-      if (!newMessage.trim() || !chatId || !currentUserId) return;
+      // 1. Limpiamos el texto inmediatamente
+      const cleanedMessage = cleanChatMessage(newMessage);
 
-      // 3. FIREWALL DE ENVÍO: Bloquear si aún no tenemos la llave del amigo
+      // 2. Validamos usando el texto limpio
+      if (!cleanedMessage || !chatId || !currentUserId) return;
+
       if (!friendProfile?.public_key) {
          alert("Connecting Vault. Please wait a second.");
          return;
       }
 
-      const textToEncrypt = newMessage;
+      // 3. Reiniciamos el input visualmente
       setNewMessage("");
 
       try {
-         const encryptedContent = await vaultCrypto.encryptMessage(textToEncrypt, friendProfile.public_key);
+         console.log('🔐 [SEND] Encrypting text message...');
+         // 4. Encriptamos la variable CLEANEDMESSAGE
+         const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, friendProfile.public_key);
          if (!encryptedContent) throw new Error("Encryption failed");
 
+         console.log('📤 [SEND] Uploading encrypted message...');
          await supabase.from('messages').insert({
             chat_id: chatId,
             sender_id: currentUserId,
             content: encryptedContent,
             type: 'text'
          });
-      } catch (e) { console.error("Vault Send Error:", e); }
+         console.log('✅ [SEND] Text message sent');
+      } catch (e) {
+         console.error("❌ [SEND] Vault Send Error:", e);
+      }
    };
 
    const friendAvatarSvg = useMemo(() => {
@@ -184,9 +245,19 @@ export default function ChatScreen() {
       const mine = item.sender_id === currentUserId;
       const keyToUse = friendProfile?.public_key || "";
 
+      console.log('🔍 [RENDER] Message:', {
+         id: item.id.substring(0, 8),
+         type: item.type,
+         isMine: mine,
+         hasKey: !!keyToUse,
+         contentPreview: item.content?.substring(0, 50),
+         contentLength: item.content?.length
+      });
+
       // PRIORIDAD 1: Si ya fue abierta, mostrar el log de "Cápsula abierta"
       // Esto sobreescribe cualquier intento de renderizar MediaMessageBubble
       if (item.content === 'OPENED_CAPSULE') {
+         console.log('✅ [RENDER] Showing OPENED_CAPSULE state');
          return (
             <View style={[styles.bubble, mine ? styles.myBubble : styles.theirBubble]}>
                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
@@ -200,6 +271,17 @@ export default function ChatScreen() {
       // PRIORIDAD 2: El resto del renderizado normal (Texto o Media)
       const isText = item.type === 'text' || !item.type;
       const isViewOnceSender = item.type === 'image-view-once' && mine;
+
+      if (isText) {
+         console.log('📝 [RENDER] Text message - needs decryption');
+      } else {
+         console.log('🖼️  [RENDER] Media message:', {
+            type: item.type,
+            isViewOnce: item.type === 'image-view-once',
+            isMine: mine,
+            filePathLength: item.content?.length
+         });
+      }
 
       return (
          <View style={[
@@ -234,10 +316,12 @@ export default function ChatScreen() {
                style: "destructive",
                onPress: async () => {
                   try {
+                     console.log('🔥 [BURN] Burning chat history...');
                      await chatApi.burnChatHistory(chatId);
 
                      // Purgamos el estado local de React para vaciar la pantalla al instante
                      setMessages([]);
+                     console.log('✅ [BURN] Chat history burned');
 
                      // Opcional: Si importaste vaultRAMCache, límpialo para matar fantasmas
                      // Object.keys(vaultRAMCache).forEach(key => delete vaultRAMCache[key]);
@@ -319,7 +403,7 @@ export default function ChatScreen() {
                   onPress={() => setCameraVisible(true)}
                >
                   <GlassView style={styles.plusButton}>
-                     <SymbolView name="plus" size={22} tintColor={getThemeColor("tint")} />
+                     <SymbolView name="camera" size={22} tintColor={getThemeColor("tint")} />
                   </GlassView>
                </TouchableOpacity>
 
@@ -336,11 +420,13 @@ export default function ChatScreen() {
                <TouchableOpacity
                   style={styles.sendButton}
                   onPress={handleSendText}
+                  // Bloquea el botón si solo son espacios o saltos
                   disabled={!newMessage.trim()}
                >
                   <SymbolView
                      name="arrow.up.circle.fill"
                      size={48}
+                     // Pinta el botón gris si solo son espacios
                      tintColor={newMessage.trim() ? getThemeColor("tint") : "#333"}
                   />
                </TouchableOpacity>
@@ -354,6 +440,7 @@ export default function ChatScreen() {
             onSend={(uri, type) => {
                // AÑADIMOS EL TERCER PARÁMETRO: LA LLAVE PÚBLICA
                if (friendProfile?.public_key) {
+                  console.log('📸 [CAMERA] Sending image:', type);
                   sendCapturedImage(uri, type, friendProfile.public_key);
                } else {
                   alert("Connecting Vault. Please wait a second.");
@@ -373,8 +460,8 @@ const styles = StyleSheet.create({
    headerSub: { color: '#666', fontSize: 10 },
    bubble: { maxWidth: '80%', padding: 12, borderRadius: 20, marginBottom: 8 },
    bubbleImage: { maxWidth: '80%', padding: 0, borderRadius: 20, marginBottom: 8 },
-   myBubble: { alignSelf: 'flex-end', backgroundColor: getThemeColor("tint"), borderBottomRightRadius: 4 },
-   theirBubble: { alignSelf: 'flex-start', backgroundColor: '#262626', borderBottomLeftRadius: 4 },
+   myBubble: { alignSelf: 'flex-end', backgroundColor: getThemeColor("tint") },
+   theirBubble: { alignSelf: 'flex-start', backgroundColor: '#1C1C1E' },
    messageText: { color: '#fff', fontSize: 16 },
    mediaPlaceholder: { flexDirection: 'row', alignItems: 'center', gap: 6 },
    mediaText: { color: '#aaa', fontSize: 14, fontStyle: 'italic' },

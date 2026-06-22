@@ -10,6 +10,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
+// Cambia tu import de 'expo-router' (si es que tenías uno, si no, agrégalo)
+import { useRouter } from "expo-router";
+
 interface Props {
    post: any;
    onDelete?: () => void;
@@ -17,6 +20,8 @@ interface Props {
 }
 
 export default function PostComponent({ post, onDelete, onCommentPress }: Props) {
+   const router = useRouter();
+
    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
    const [sessionToken, setSessionToken] = useState<string | null>(null);
 
@@ -140,7 +145,11 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
       <View style={styles.cardContainer}>
          <View style={styles.mainCard}>
             <View style={styles.header}>
-               <View style={styles.userInfo}>
+               <TouchableOpacity
+                  style={styles.userInfo}
+                  onPress={() => router.push(`/(app)/user/${post.user_id}`)}
+                  activeOpacity={0.7}
+               >
                   <View style={styles.avatarBorder}>
                      <View style={styles.avatarInner}>
                         {avatarSvg ? <SvgXml xml={avatarSvg} width="100%" height="100%" /> : <View style={styles.avatarPlaceholder} />}
@@ -150,7 +159,7 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                      <Text style={styles.usernameText}>@{username}</Text>
                      <Text style={styles.dateText}>{date}</Text>
                   </View>
-               </View>
+               </TouchableOpacity>
 
                {isOwner ? (
                   <TouchableOpacity onPress={handleDelete} style={styles.moreAction}>

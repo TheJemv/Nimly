@@ -6,6 +6,8 @@ import 'react-native-get-random-values';
 import nacl from 'tweetnacl';
 import { decodeBase64, encodeBase64 } from 'tweetnacl-util';
 
+import crypto, { Buffer } from 'react-native-quick-crypto';
+
 const getSecureRandomWords = (words: number) => {
     const randomBytes = Crypto.getRandomBytes(words * 4);
     const wordArray = [];
@@ -90,21 +92,22 @@ export const vaultCrypto = {
         try {
             if (!friendPublicKey) throw new Error("Missing recipient public key");
 
-            // Obtenemos la llave simétrica compartida mediante ECDH
+            // 1. Obtenemos la llave simétrica
             const sharedMasterKey = await getSharedMasterKey(friendPublicKey);
-            const derivedKey = CryptoJS.SHA256(sharedMasterKey);
+            
+            // 2. Derivamos a 256-bits (32 bytes) para AES-256
+            const derivedKey = crypto.createHash('sha256').update(sharedMasterKey).digest();
 
-            const iv = getSecureRandomWords(128 / 32);
-            const salt = getSecureRandomWords(128 / 32);
+            // 3. Generamos Vectores de Inicialización (16 bytes para AES)
+            const iv = crypto.randomBytes(16);
+            const salt = crypto.randomBytes(16); // Lo mantenemos para respetar tu estructura de datos actual
 
-            const encrypted = CryptoJS.AES.encrypt(plainText, derivedKey, {
-                iv: iv,
-                salt: salt,
-                mode: CryptoJS.mode.CBC,
-                padding: CryptoJS.pad.Pkcs7
-            });
+            // 4. Encriptación a velocidad nativa
+            const cipher = crypto.createCipheriv('aes-256-cbc', derivedKey, iv);
+            let encryptedHex = cipher.update(plainText, 'utf8', 'hex');
+            encryptedHex += cipher.final('hex');
 
-            return salt.toString() + ":" + iv.toString() + ":" + encrypted.ciphertext.toString();
+            return salt.toString('hex') + ":" + iv.toString('hex') + ":" + encryptedHex;
         } catch (e: any) {
             console.error("Encryption Error:", e.message);
             return null;
@@ -114,19 +117,16 @@ export const vaultCrypto = {
     async encryptFile(base64Data: string, friendPublicKey: string): Promise<string | null> {
         try {
             const sharedMasterKey = await getSharedMasterKey(friendPublicKey);
-            const derivedKey = CryptoJS.SHA256(sharedMasterKey);
+            const derivedKey = crypto.createHash('sha256').update(sharedMasterKey).digest();
 
-            const iv = getSecureRandomWords(128 / 32);
-            const salt = getSecureRandomWords(128 / 32);
+            const iv = crypto.randomBytes(16);
+            const salt = crypto.randomBytes(16);
 
-            const encrypted = CryptoJS.AES.encrypt(base64Data, derivedKey, {
-                iv: iv,
-                salt: salt,
-                mode: CryptoJS.mode.CBC,
-                padding: CryptoJS.pad.Pkcs7
-            });
+            const cipher = crypto.createCipheriv('aes-256-cbc', derivedKey, iv);
+            let encryptedHex = cipher.update(base64Data, 'utf8', 'hex');
+            encryptedHex += cipher.final('hex');
 
-            return salt.toString() + ":" + iv.toString() + ":" + encrypted.ciphertext.toString();
+            return salt.toString('hex') + ":" + iv.toString('hex') + ":" + encryptedHex;
         } catch (e: any) {
             return null;
         }
@@ -135,32 +135,26 @@ export const vaultCrypto = {
     async decryptMessage(packet: string, friendPublicKey: string): Promise<string> {
         try {
             const parts = packet.split(':');
-            if (parts.length !== 3) return packet;
+            if (parts.length !== 3) return packet; // Por si es un texto plano por error
 
-            const salt = CryptoJS.enc.Hex.parse(parts[0]);
-            const iv = CryptoJS.enc.Hex.parse(parts[1]);
-            const ciphertext = CryptoJS.enc.Hex.parse(parts[2]);
+            const ivHex = parts[1];
+            const ciphertextHex = parts[2];
 
-            // Derivamos la llave para abrir el candado usando la pública del amigo
+            // 1. Derivamos la misma llave
             const sharedMasterKey = await getSharedMasterKey(friendPublicKey);
-            const derivedKey = CryptoJS.SHA256(sharedMasterKey);
+            const derivedKey = crypto.createHash('sha256').update(sharedMasterKey).digest();
+            
+            // 2. Convertimos el IV hexadecimal a Buffer
+            const ivBuffer = Buffer.from(ivHex, 'hex');
 
-            const cipherParams = CryptoJS.lib.CipherParams.create({
-                ciphertext: ciphertext,
-                salt: salt,
-                iv: iv
-            });
+            // 3. Desencriptación a velocidad nativa
+            const decipher = crypto.createDecipheriv('aes-256-cbc', derivedKey, ivBuffer);
+            let decryptedText = decipher.update(ciphertextHex, 'hex', 'utf8');
+            decryptedText += decipher.final('utf8');
 
-            const bytes = CryptoJS.AES.decrypt(cipherParams as any, derivedKey, {
-                iv: iv,
-                mode: CryptoJS.mode.CBC,
-                padding: CryptoJS.pad.Pkcs7
-            });
+            if (!decryptedText) throw new Error("Malformed data");
 
-            const originalText = bytes.toString(CryptoJS.enc.Utf8);
-            if (!originalText) throw new Error("Malformed data");
-
-            return originalText;
+            return decryptedText;
         } catch (e) {
             return "🔒 Locked Capsule";
         }

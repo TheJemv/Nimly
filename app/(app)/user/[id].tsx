@@ -1,3 +1,4 @@
+import { blocksApi } from '@/api/blocks';
 import { friendsApi } from '@/api/friends';
 import { reportsApi } from '@/api/reports';
 import CommentsSheet from "@/components/comments-sheet";
@@ -34,6 +35,7 @@ export default function UserProfileScreen() {
     const [statusInfo, setStatusInfo] = useState<any>(null);
     const [friendsCount, setFriendsCount] = useState(0);
     const [userPosts, setUserPosts] = useState<any[]>([]);
+    const [blockStatus, setBlockStatus] = useState<{ iBlockedThem: boolean; theyBlockedMe: boolean }>({ iBlockedThem: false, theyBlockedMe: false });
 
     // Estados de carga
     const [loading, setLoading] = useState(true);
@@ -54,6 +56,16 @@ export default function UserProfileScreen() {
         try {
             const { data: profileData } = await supabase.from('profiles').select('*').eq('id', id).single();
             setProfile(profileData);
+
+            const block = await blocksApi.getBlockStatus(id as string);
+            setBlockStatus(block);
+
+            // Si hay bloqueo en cualquier dirección, no cargamos info de amistad/posts
+            if (block.iBlockedThem || block.theyBlockedMe) {
+                setLoading(false);
+                setRefreshing(false);
+                return;
+            }
 
             const status = await friendsApi.getStatus(id as string);
             setStatusInfo(status);
@@ -83,6 +95,7 @@ export default function UserProfileScreen() {
         const channel = supabase.channel(`profile-${id}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friends' }, () => fetchUserData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests' }, () => fetchUserData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users' }, () => fetchUserData())
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
@@ -108,7 +121,60 @@ export default function UserProfileScreen() {
                     onPress: async () => {
                         try {
                             setLoading(true);
-                            await friendsApi.severConnection(id as string); // O severConnection si la renombraste
+                            await friendsApi.severConnection(id as string);
+                            await fetchUserData();
+                        } catch (e) {
+                            Alert.alert("Error", "Action could not be completed.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleBlockUser = () => {
+        Alert.alert(
+            "Block User",
+            `@${profile?.username} will no longer be able to contact you, see your content, or send you connection requests. Their content will be removed from your feed immediately.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await blocksApi.blockUser(id as string);
+                            await fetchUserData();
+                        } catch (e: any) {
+                            if (e.message === "AlreadyBlocked") {
+                                Alert.alert("Note", "You have already blocked this user.");
+                            } else {
+                                Alert.alert("Error", "Action could not be completed.");
+                            }
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleUnblockUser = () => {
+        Alert.alert(
+            "Unblock User",
+            `@${profile?.username} will be able to interact with you again.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Unblock",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await blocksApi.unblockUser(id as string);
                             await fetchUserData();
                         } catch (e) {
                             Alert.alert("Error", "Action could not be completed.");
@@ -173,6 +239,8 @@ export default function UserProfileScreen() {
     const isAccepted = statusInfo?.status === 'ACCEPTED';
     const isPending = statusInfo?.status === 'PENDING';
     const amIReceiver = statusInfo?.isReceiver;
+    const { iBlockedThem, theyBlockedMe } = blockStatus;
+    const isBlockedEitherWay = iBlockedThem || theyBlockedMe;
 
     return (
         <View style={{ flex: 1, backgroundColor: bg }}>
@@ -184,26 +252,51 @@ export default function UserProfileScreen() {
                     headerStyle: { backgroundColor: "#000" },
                     headerTintColor: "#fff",
                     headerTransparent: false,
-                    headerRight: () => isAccepted ? (
+                    headerRight: () => (
                         <Host style={{ width: 32, height: 32 }}>
-                            <ContextMenu>
+                            {/* Agregamos una 'key' única basada en los estados que pueden cambiar.
+                                Esto obliga a React a re-inicializar el ContextMenu cada vez 
+                                que la info de bloqueo o estatus cambie.
+                            */}
+
+                            <ContextMenu key={`${blockStatus.iBlockedThem}-${isAccepted}`}>
                                 <ContextMenu.Items>
-                                    <Button
-                                        systemImage='document.on.document.fill'
-                                        label='Copy Username'
-                                        onPress={handleCopyUsername}
-                                    />
-                                    <Button
-                                        systemImage='person.badge.shield.exclamationmark.fill'
-                                        label='Report User'
-                                        onPress={handleReportUser}
-                                    />
-                                    <Button
-                                        systemImage='person.fill.badge.minus'
-                                        label='Sever Connection'
-                                        role='destructive'
-                                        onPress={handleSeverConnection}
-                                    />
+                                    {isAccepted && (
+                                        <Button
+                                            systemImage='document.on.document.fill'
+                                            label='Copy Username'
+                                            onPress={handleCopyUsername}
+                                        />
+                                    )}
+                                    {!iBlockedThem && (
+                                        <Button
+                                            systemImage='person.badge.shield.exclamationmark.fill'
+                                            label='Report User'
+                                            onPress={handleReportUser}
+                                        />
+                                    )}
+                                    {isAccepted && (
+                                        <Button
+                                            systemImage='person.fill.badge.minus'
+                                            label='Sever Connection'
+                                            role='destructive'
+                                            onPress={handleSeverConnection}
+                                        />
+                                    )}
+                                    {iBlockedThem ? (
+                                        <Button
+                                            systemImage='lock.open.fill'
+                                            label='Unblock User'
+                                            onPress={handleUnblockUser}
+                                        />
+                                    ) : (
+                                        <Button
+                                            systemImage='hand.raised.fill'
+                                            label='Block User'
+                                            role='destructive'
+                                            onPress={handleBlockUser}
+                                        />
+                                    )}
                                 </ContextMenu.Items>
 
                                 <ContextMenu.Trigger>
@@ -211,90 +304,114 @@ export default function UserProfileScreen() {
                                 </ContextMenu.Trigger>
                             </ContextMenu>
                         </Host>
-                    ) : undefined,
+                    ),
                 }}
             />
 
-            <ScrollView
-                contentInsetAdjustmentBehavior="automatic"
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={() => { setRefreshing(true); fetchUserData(); }}
-                        tintColor={accent}
-                    />
-                }
-            >
-                {/* PERFIL INFO */}
-                <View style={styles.headerSection}>
-                    <View style={styles.topRow}>
-                        <View style={[styles.avatarWrapper, { borderColor: isAccepted ? '#4ade80' : glassBorder }]}>
-                            {userAvatarSvg ? <SvgXml xml={userAvatarSvg} width="100" height="100" /> : <View style={styles.placeholder} />}
-                        </View>
-
-                        {isAccepted && (
-                            <View style={styles.statsRow}>
-                                <View style={styles.statItem}>
-                                    <SymbolView name='person.2.fill' size={20} tintColor="#fff" />
-                                    <ThemedText style={styles.statNumber}>{friendsCount}</ThemedText>
-                                    <ThemedText style={styles.statLabel}>Friends</ThemedText>
-                                </View>
-                                <View style={styles.statItem}>
-                                    <SymbolView name='doc.text.fill' size={20} tintColor="#fff" />
-                                    <ThemedText style={styles.statNumber}>{userPosts.length}</ThemedText>
-                                    <ThemedText style={styles.statLabel}>Posts</ThemedText>
-                                </View>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={styles.bioSection}>
-                        <ThemedText style={styles.bioText}>
-                            {profile?.description || "Profile data encrypted."}
-                        </ThemedText>
-                    </View>
+            {theyBlockedMe ? (
+                <View style={styles.blockedArea}>
+                    <Ionicons name="ban" size={48} color="#ff3b30" />
+                    <ThemedText style={styles.blockedTitle}>Unavailable</ThemedText>
+                    <ThemedText style={styles.blockedSubtitle}>
+                        This profile is not available.
+                    </ThemedText>
                 </View>
+            ) : iBlockedThem ? (
+                <View style={styles.blockedArea}>
+                    <Ionicons name="hand-left" size={48} color={accent} />
+                    <ThemedText style={styles.blockedTitle}>You blocked @{profile?.username}</ThemedText>
+                    <ThemedText style={styles.blockedSubtitle}>
+                        You won't see their content and they can't contact you.
+                    </ThemedText>
+                    <TouchableOpacity
+                        style={[styles.connectBtn, { backgroundColor: surface, borderWidth: 1, borderColor: glassBorder, marginTop: 20 }]}
+                        onPress={handleUnblockUser}
+                    >
+                        <Text style={[styles.btnText, { color: '#fff' }]}>UNBLOCK</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <ScrollView
+                    contentInsetAdjustmentBehavior="automatic"
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={() => { setRefreshing(true); fetchUserData(); }}
+                            tintColor={accent}
+                        />
+                    }
+                >
+                    {/* PERFIL INFO */}
+                    <View style={styles.headerSection}>
+                        <View style={styles.topRow}>
+                            <View style={[styles.avatarWrapper, { borderColor: isAccepted ? '#4ade80' : glassBorder }]}>
+                                {userAvatarSvg ? <SvgXml xml={userAvatarSvg} width="100" height="100" /> : <View style={styles.placeholder} />}
+                            </View>
 
-                {/* LOGICA DE ACCESO (VAULT) */}
-                {!isAccepted ? (
-                    <View style={styles.lockedArea}>
-                        <View style={[styles.lockedCard, { backgroundColor: surface, borderColor: isPending ? '#fbbf24' : accent }]}>
-                            <Ionicons
-                                name={isPending ? "timer-outline" : "lock-closed"}
-                                size={40}
-                                color={isPending ? '#fbbf24' : accent}
-                            />
-                            <ThemedText style={styles.lockedTitle}>
-                                {isPending ? (amIReceiver ? "Action Required" : "Pending Approval") : "Vault Locked"}
+                            {isAccepted && (
+                                <View style={styles.statsRow}>
+                                    <View style={styles.statItem}>
+                                        <SymbolView name='person.2.fill' size={20} tintColor="#fff" />
+                                        <ThemedText style={styles.statNumber}>{friendsCount}</ThemedText>
+                                        <ThemedText style={styles.statLabel}>Friends</ThemedText>
+                                    </View>
+                                    <View style={styles.statItem}>
+                                        <SymbolView name='doc.text.fill' size={20} tintColor="#fff" />
+                                        <ThemedText style={styles.statNumber}>{userPosts.length}</ThemedText>
+                                        <ThemedText style={styles.statLabel}>Posts</ThemedText>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.bioSection}>
+                            <ThemedText style={styles.bioText}>
+                                {profile?.description || "Profile data encrypted."}
                             </ThemedText>
-                            <TouchableOpacity
-                                style={[
-                                    styles.connectBtn,
-                                    { backgroundColor: amIReceiver ? '#4ade80' : (isPending ? 'rgba(255,255,255,0.1)' : accent) }
-                                ]}
-                                onPress={handleConnectAction}
-                                disabled={(isPending && !amIReceiver) || sending}
-                            >
-                                {sending ? <ActivityIndicator color="#fff" /> :
-                                    <Text style={styles.btnText}>
-                                        {isPending ? (amIReceiver ? "ESTABLISH ACCESS" : "REQUEST SENT") : "CONNECT TO VAULT"}
-                                    </Text>
-                                }
-                            </TouchableOpacity>
                         </View>
                     </View>
-                ) : (
-                    <View style={styles.feed}>
-                        {userPosts.map(post => (
-                            <PostComponent
-                                key={post.id}
-                                post={post}
-                                onCommentPress={() => handleOpenComments(post.id)}
-                            />
-                        ))}
-                    </View>
-                )}
-            </ScrollView>
+
+                    {/* LOGICA DE ACCESO (VAULT) */}
+                    {!isAccepted ? (
+                        <View style={styles.lockedArea}>
+                            <View style={[styles.lockedCard, { backgroundColor: surface, borderColor: isPending ? '#fbbf24' : accent }]}>
+                                <Ionicons
+                                    name={isPending ? "timer-outline" : "lock-closed"}
+                                    size={40}
+                                    color={isPending ? '#fbbf24' : accent}
+                                />
+                                <ThemedText style={styles.lockedTitle}>
+                                    {isPending ? (amIReceiver ? "Action Required" : "Pending Approval") : "Vault Locked"}
+                                </ThemedText>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.connectBtn,
+                                        { backgroundColor: amIReceiver ? '#4ade80' : (isPending ? 'rgba(255,255,255,0.1)' : accent) }
+                                    ]}
+                                    onPress={handleConnectAction}
+                                    disabled={(isPending && !amIReceiver) || sending}
+                                >
+                                    {sending ? <ActivityIndicator color="#fff" /> :
+                                        <Text style={styles.btnText}>
+                                            {isPending ? (amIReceiver ? "ESTABLISH ACCESS" : "REQUEST SENT") : "CONNECT TO VAULT"}
+                                        </Text>
+                                    }
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.feed}>
+                            {userPosts.map(post => (
+                                <PostComponent
+                                    key={post.id}
+                                    post={post}
+                                    onCommentPress={() => handleOpenComments(post.id)}
+                                />
+                            ))}
+                        </View>
+                    )}
+                </ScrollView>
+            )}
 
             <CommentsSheet
                 ref={bottomSheetModalRef}
@@ -322,5 +439,8 @@ const styles = StyleSheet.create({
     connectBtn: { width: '100%', paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
     btnText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 1 },
     feed: { paddingHorizontal: 16, gap: 16, paddingBottom: 60 },
-    placeholder: { flex: 1, backgroundColor: '#1C1C1E' }
+    placeholder: { flex: 1, backgroundColor: '#1C1C1E' },
+    blockedArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+    blockedTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginTop: 16, textAlign: 'center' },
+    blockedSubtitle: { fontSize: 14, color: '#8E8E93', marginTop: 8, textAlign: 'center', lineHeight: 20 },
 });

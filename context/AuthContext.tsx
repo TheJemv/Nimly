@@ -101,50 +101,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         let securitySubscription: any = null;
+        let isMounted = true;
+
+        const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+            return Promise.race([
+                promise,
+                new Promise<T>((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth operation timed out')), ms)
+                ),
+            ]);
+        };
 
         const checkSession = async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            setSession(currentSession);
+            try {
+                const { data: { session: currentSession } } = await withTimeout(
+                    supabase.auth.getSession(),
+                    8000
+                );
+                if (!isMounted) return;
+                setSession(currentSession);
 
-            if (currentSession) {
-                await setupVaultIdentity(currentSession);
-                securitySubscription = await setupSecuritySync(currentSession.user.id);
+                if (currentSession) {
+                    // Nunca dejamos que esto bloquee el loading screen
+                    try {
+                        await withTimeout(setupVaultIdentity(currentSession), 8000);
+                    } catch (e) {
+                        console.error("Vault identity setup failed (non-blocking):", e);
+                    }
+
+                    try {
+                        securitySubscription = await withTimeout(
+                            setupSecuritySync(currentSession.user.id),
+                            8000
+                        );
+                    } catch (e) {
+                        console.error("Security sync setup failed (non-blocking):", e);
+                    }
+                }
+            } catch (e) {
+                console.error("Session check failed:", e);
+                if (isMounted) setSession(null);
+            } finally {
+                if (isMounted) setIsLoading(false); // 👈 SIEMPRE se ejecuta, pase lo que pase
             }
-
-            setIsLoading(false);
         };
 
         checkSession();
 
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-            setSession(currentSession);
+            try {
+                setSession(currentSession);
 
-            if (currentSession) {
-                await setupVaultIdentity(currentSession);
-                if (!securitySubscription) {
-                    securitySubscription = await setupSecuritySync(currentSession.user.id);
+                if (currentSession) {
+                    try {
+                        await withTimeout(setupVaultIdentity(currentSession), 8000);
+                    } catch (e) {
+                        console.error("Vault identity setup failed (non-blocking):", e);
+                    }
+
+                    if (!securitySubscription) {
+                        try {
+                            securitySubscription = await withTimeout(
+                                setupSecuritySync(currentSession.user.id),
+                                8000
+                            );
+                        } catch (e) {
+                            console.error("Security sync setup failed (non-blocking):", e);
+                        }
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    console.log("Vault: User signed out. Purging ALL local security keys...");
+
+                    await SecureStore.deleteItemAsync('nymly_vault_seed');
+                    await SecureStore.deleteItemAsync('nymly_private_key');
+                    await SecureStore.deleteItemAsync('nymly_user_id');
+
+                    if (securitySubscription) {
+                        supabase.removeChannel(securitySubscription);
+                        securitySubscription = null;
+                    }
+
+                    console.log("Vault: Rebooting system to clear RAM...");
+                    purgeVaultRAM();
                 }
-            } else if (event === 'SIGNED_OUT') {
-                console.log("Vault: User signed out. Purging ALL local security keys...");
-
-                // DESTRUCCIÓN TOTAL DE LA BÓVEDA AL CERRAR SESIÓN
-                await SecureStore.deleteItemAsync('nymly_vault_seed');
-                await SecureStore.deleteItemAsync('nymly_private_key');
-                await SecureStore.deleteItemAsync('nymly_user_id'); // Borramos la etiqueta
-
-                if (securitySubscription) {
-                    supabase.removeChannel(securitySubscription);
-                    securitySubscription = null;
-                }
-
-                console.log("Vault: Rebooting system to clear RAM...");
-                purgeVaultRAM();
+            } catch (e) {
+                console.error("Auth state change handler failed:", e);
+            } finally {
+                if (isMounted) setIsLoading(false); // 👈 SIEMPRE se ejecuta aquí también
             }
-
-            setIsLoading(false);
         });
 
         return () => {
+            isMounted = false;
             authListener.subscription.unsubscribe();
             if (securitySubscription) supabase.removeChannel(securitySubscription);
         };

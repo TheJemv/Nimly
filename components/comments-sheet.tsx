@@ -1,18 +1,16 @@
 import { createComment, getComments } from '@/api/comments';
-import NymlySheet from '@/components/nymly-sheet';
+import NymlySheet from '@/components/nymly-sheet'; // Tu wrapper personalizado
 import { ESTILOS_DICEBEAR } from '@/constants/dicebear';
 import { getThemeColor } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
 import { createAvatar } from '@dicebear/core';
 import { BottomSheetFlatList, BottomSheetFooter, BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { SymbolView } from 'expo-symbols';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
-// 1. COMPONENTE FOOTER AISLADO (FUERA DEL COMPONENTE PRINCIPAL)
-// Al estar fuera, su referencia es ESTABLE y no se re-monta al escribir.
+// Componente Footer estable (fuera del componente principal)
 const CommentInputFooter = ({ postId, onCommentPosted, accentColor, insets, ...props }: any) => {
     const [text, setText] = useState("");
     const [isPosting, setIsPosting] = useState(false);
@@ -23,10 +21,8 @@ const CommentInputFooter = ({ postId, onCommentPosted, accentColor, insets, ...p
         try {
             const comment = await createComment(postId, text.trim());
             onCommentPosted(comment);
-            setText(""); // Limpiamos el input local
-            // No cerramos el teclado para permitir múltiples comentarios
+            setText("");
         } catch (error) {
-            console.error(error);
             Alert.alert("Error", "No se pudo publicar el comentario");
         } finally {
             setIsPosting(false);
@@ -45,16 +41,9 @@ const CommentInputFooter = ({ postId, onCommentPosted, accentColor, insets, ...p
                         onChangeText={setText}
                         multiline
                     />
-                    <TouchableOpacity
-                        style={[styles.sendBtn, !text.trim() && { opacity: 0.5 }]}
-                        onPress={handleSend}
-                        disabled={!text.trim() || isPosting}
-                    >
-                        {isPosting ? (
-                            <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                            <SymbolView name="arrow.up.circle.fill" size={48} tintColor={text.trim() ? getThemeColor("tint") : "#333"} />
-                        )}
+                    <TouchableOpacity style={[styles.sendBtn, !text.trim() && { opacity: 0.5 }]} onPress={handleSend} disabled={!text.trim() || isPosting}>
+                        {isPosting ? <ActivityIndicator size="small" color="#FFF" /> :
+                            <SymbolView name="arrow.up.circle.fill" size={48} tintColor={text.trim() ? getThemeColor("tint") : "#333"} />}
                     </TouchableOpacity>
                 </View>
             </View>
@@ -62,60 +51,36 @@ const CommentInputFooter = ({ postId, onCommentPosted, accentColor, insets, ...p
     );
 };
 
-export default function CommentsSheet({ postId, isPresented, setIsPresented, postOwnerId }: Props) {
-    const sheetRef = useRef<BottomSheetModal>(null);
+interface Props {
+    postId: string | null;
+    postOwnerId: string;
+}
+
+// AQUÍ LA CLAVE: forwardRef permite que el padre controle el modal
+const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId, postOwnerId }, ref) => {
     const [comments, setComments] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const accentColor = getThemeColor("tint");
     const insets = useSafeAreaInsets();
 
-    useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
-    }, []);
+    const loadComments = useCallback(async (refresh = false) => {
+        if (!postId) return;
+        const data = await getComments(postId, 0);
+        setComments(refresh ? data : data);
+    }, [postId]);
 
     useEffect(() => {
-        if (isPresented) {
-            sheetRef.current?.present();
-            loadComments(0, true);
-        } else {
-            sheetRef.current?.dismiss();
-        }
-    }, [isPresented]);
+        if (postId) loadComments(true);
+    }, [postId, loadComments]);
 
-    const loadComments = async (page: number, refresh = false) => {
-        setLoading(true);
-        try {
-            const data = await getComments(postId, page);
-            setComments(refresh ? data : prev => [...prev, ...data]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // 2. ESTA FUNCIÓN ES LA CLAVE: No tiene dependencias de estado de texto
-    const renderFooter = useCallback(
-        (props: any) => (
-            <CommentInputFooter
-                {...props}
-                postId={postId}
-                insets={insets}
-                accentColor={accentColor}
-                onCommentPosted={(newComment: any) => {
-                    setComments(prev => [newComment, ...prev]);
-                }}
-            />
-        ),
-        [postId, insets, accentColor] // Solo se recrea si cambia el post, no si escribes
-    );
+    const renderFooter = useCallback((props: any) => (
+        <CommentInputFooter {...props} postId={postId} insets={insets} accentColor={accentColor}
+            onCommentPosted={(newComment: any) => setComments(prev => [newComment, ...prev])} />
+    ), [postId, insets, accentColor]);
 
     const renderComment = useCallback(({ item }: { item: any }) => {
-        const avatarSvg = (() => {
-            const config = item.user?.avatar_config;
-            if (!config) return null;
-            const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-            return createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString();
-        })();
+        const config = item.user?.avatar_config;
+        const estilo = config ? ESTILOS_DICEBEAR.find(e => e.id === config.styleId) : ESTILOS_DICEBEAR[0];
+        const avatarSvg = config ? createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString() : null;
 
         return (
             <View style={styles.commentRow}>
@@ -131,28 +96,20 @@ export default function CommentsSheet({ postId, isPresented, setIsPresented, pos
     }, []);
 
     return (
-        <NymlySheet
-            ref={sheetRef}
-            snapPoints={['65%', '100%']}
-            onChange={(index) => { if (index === -1) setIsPresented(false); }}
-            footerComponent={renderFooter}
-        >
+        <NymlySheet ref={ref} snapPoints={['65%', '100%']} footerComponent={renderFooter}>
             <View style={styles.sheetContainer}>
-                <View style={styles.headerContainer}>
-                    <Text style={styles.sheetTitle}>Comments</Text>
-                </View>
+                <View style={styles.headerContainer}><Text style={styles.sheetTitle}>Comments</Text></View>
                 <BottomSheetFlatList
                     data={comments}
                     keyExtractor={(item) => item.id}
                     renderItem={renderComment}
                     contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="interactive"
                 />
             </View>
         </NymlySheet>
     );
-}
+});
+
 
 const styles = StyleSheet.create({
     sheetContainer: { flex: 1, backgroundColor: '#050505' },
@@ -188,3 +145,5 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     }
 });
+
+export default CommentsSheet;
