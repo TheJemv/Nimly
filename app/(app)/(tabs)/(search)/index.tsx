@@ -1,3 +1,4 @@
+import BackgroundGlow from "@/components/background-glow";
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -9,7 +10,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
-    Image,
     Platform,
     StyleSheet,
     Text,
@@ -102,7 +102,7 @@ export default function SearchScreen() {
 
     return (
         <View style={styles.container}>
-            <Image source={require("@/assets/images/bg-glow-teal.png")} style={styles.bgGlow} />
+            <BackgroundGlow />
 
             <View style={styles.headerContainer}>
                 <Text style={styles.headerTitle}>Discover</Text>
@@ -116,6 +116,8 @@ export default function SearchScreen() {
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             autoCapitalize="none"
+                            autoCorrect={false}       // Desactiva el autocorrector de palabras en iOS/Android
+                            spellCheck={false}        // Quita la línea roja que marca "errores" ortográficos
                             selectionColor={accent}
                         />
                     </View>
@@ -145,8 +147,7 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    bgGlow: { ...StyleSheet.absoluteFillObject, opacity: 0.2 },
+    container: { flex: 1, backgroundColor: '#0000' },
     headerContainer: {
         paddingTop: Platform.OS === 'ios' ? 70 : 50,
         paddingHorizontal: 20,

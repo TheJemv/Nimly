@@ -178,5 +178,24 @@ export const chatApi = {
             console.error("Failed to burn chat history:", error);
             throw error;
         }
-    }
+    },
+
+    // Agrega esto dentro del objeto chatApi en tu archivo
+    async markAsRead(chatId: string, senderId: string) {
+        if (!chatId || !senderId) return null;
+        try {
+            const { data, error } = await supabase
+                .from('messages')
+                .update({ is_read: true })
+                .eq('chat_id', chatId)
+                .eq('sender_id', senderId)
+                .eq('is_read', false);
+
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("❌ [API_READ] Error en la bóveda al marcar lectura:", error);
+            return { success: false, error };
+        }
+    },
 };

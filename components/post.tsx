@@ -147,7 +147,13 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
             <View style={styles.header}>
                <TouchableOpacity
                   style={styles.userInfo}
-                  onPress={() => router.push(`/(app)/user/${post.user_id}`)}
+                  onPress={() => {
+                     if (currentUserId && post.user_id === currentUserId) {
+                        router.push("/(app)/(tabs)/(profile)"); // 👈 Cambia esto por tu ruta de perfil personal si es diferente
+                     } else {
+                        router.push(`/(app)/user/${post.user_id}`);
+                     }
+                  }}
                   activeOpacity={0.7}
                >
                   <View style={styles.avatarBorder}>

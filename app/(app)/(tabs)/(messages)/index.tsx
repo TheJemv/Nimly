@@ -42,23 +42,22 @@ const ChatAvatar = ({ config }: { config: any }) => {
 };
 
 // --- COMPONENTE EXTRAÍDO Y BLINDADO ---
-const LastMessageContent = memo(({ content, friendPublicKey, isMine, type }: { content: string, friendPublicKey: string, isMine: boolean, type?: string }) => {
-  // Manejo de cápsulas multimedia
-  if (type === 'image' || type === 'image-view-once') {
-    return (
-      <Text style={[styles.lastMessage, isMine && { color: '#bbb' }]} numberOfLines={1}>
-        {isMine ? 'You: ' : ''}📷 Multimedia Capsule
-      </Text>
-    );
-  }
+const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUnread }: { content: string, friendPublicKey: string, isMine: boolean, type?: string, hasUnread: boolean }) => {
+  // 1. Hook de estilo (Siempre se ejecuta primero)
+  const messageStyle = useMemo(() => {
+    if (hasUnread) return styles.lastMessageUnread;
+    if (isMine) return styles.lastMessageMine;
+    return styles.lastMessageRead;
+  }, [hasUnread, isMine]);
 
-  // Lectura desde RAM Cache para velocidad extrema
+  // 2. Hook de estado (Siempre se ejecuta en el mismo orden)
   const initialText = vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")
     ? vaultRAMCache[content]
     : "🔒 Decrypting...";
 
   const [decryptedText, setDecryptedText] = useState(initialText);
 
+  // 3. Hook de efecto (Siempre se ejecuta en el mismo orden)
   useEffect(() => {
     if (!friendPublicKey) {
       setDecryptedText("🔒 Syncing Vault...");
@@ -70,7 +69,6 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type }: { c
     let isMounted = true;
     const decrypt = async () => {
       try {
-        // AHORA SÍ PASAMOS LA LLAVE PÚBLICA
         const clearText = await vaultCrypto.decryptMessage(content, friendPublicKey);
         if (isMounted) {
           if (!clearText.startsWith("🔒")) {
@@ -86,8 +84,27 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type }: { c
     return () => { isMounted = false; };
   }, [content, friendPublicKey]);
 
+  // ✅ 4. LOS CONDICIONALES VAN HASTA ABAJO (DESPUÉS DE TODOS LOS HOOKS)
+  const normalizedType = type ? type.toLowerCase() : '';
+  const isMediaContent =
+    normalizedType === 'image' ||
+    normalizedType === 'image-view-once' ||
+    normalizedType === 'video' ||
+    content?.startsWith('http') ||
+    content?.includes('storage') ||
+    content?.includes('/');
+
+  if (isMediaContent) {
+    return (
+      <Text style={messageStyle} numberOfLines={1}>
+        {isMine ? 'You: ' : ''}📷 Multimedia Capsule
+      </Text>
+    );
+  }
+
+  // 5. Retorno por defecto para texto normal
   return (
-    <Text style={[styles.lastMessage, isMine && { color: '#bbb' }]} numberOfLines={1}>
+    <Text style={messageStyle} numberOfLines={1}>
       {isMine ? 'You: ' : ''}{decryptedText}
     </Text>
   );
@@ -102,11 +119,23 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     fetchChats();
+
+    // Escuchamos TODOS los eventos (*): INSERTS, UPDATES y DELETES
     const channel = supabase
       .channel('list_updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchChats(false))
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages' },
+        () => {
+          console.log('🔄 [REALTIME] Cambio detectado en mensajes, actualizando lista...');
+          fetchChats(false); // Recarga la lista en segundo plano sin animaciones molestas
+        }
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchChats = async (showLoading = true) => {
@@ -123,17 +152,26 @@ export default function MessagesScreen() {
             chats (
                 id,
                 created_at,
-                messages (content, created_at, sender_id, type) 
+                messages (content, created_at, sender_id, type, is_read) 
             ),
             profiles:user_id (id, username, avatar_config, public_key) 
-        `) // <-- AGREGAMOS TYPE Y PUBLIC_KEY A LA CONSULTA
+        `)
         .neq('user_id', user.id);
 
       if (error) throw error;
 
       const sorted = (data || []).sort((a: any, b: any) => {
-        const dateA = a.chats?.messages?.[0]?.created_at || a.chats?.created_at;
-        const dateB = b.chats?.messages?.[0]?.created_at || b.chats?.created_at;
+        const aMessages = a.chats?.messages || [];
+        const bMessages = b.chats?.messages || [];
+
+        // Tomamos el último mensaje (el más reciente) de cada chat
+        const lastMsgA = aMessages[aMessages.length - 1];
+        const lastMsgB = bMessages[bMessages.length - 1];
+
+        // Si no hay mensajes, usamos la fecha de creación del chat como respaldo
+        const dateA = lastMsgA ? lastMsgA.created_at : a.chats?.created_at;
+        const dateB = lastMsgB ? lastMsgB.created_at : b.chats?.created_at;
+
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
       setChats(sorted);
@@ -148,6 +186,10 @@ export default function MessagesScreen() {
     const lastMsg = messages[messages.length - 1];
     const isMine = lastMsg?.sender_id === myId;
 
+    // Calcular la cantidad de mensajes sin leer enviados por el amigo
+    const unreadCount = messages.filter((m: any) => m.sender_id !== myId && m.is_read === false).length;
+    const hasUnread = unreadCount > 0;
+
     return (
       <TouchableOpacity
         style={styles.chatCard}
@@ -160,23 +202,30 @@ export default function MessagesScreen() {
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.username}>@{item.profiles?.username}</Text>
+            <Text style={[styles.username, hasUnread ? styles.usernameUnread : styles.usernameRead]}>
+              @{item.profiles?.username}
+            </Text>
             <View style={styles.timeWrapper}>
-              <Text style={styles.timeText}>{lastMsg ? formatTime(lastMsg.created_at) : ''}</Text>
+              <Text style={[styles.timeText, hasUnread && { color: '#fff', fontWeight: '500' }]}>
+                {lastMsg ? formatTime(lastMsg.created_at) : ''}
+              </Text>
               <SymbolView name="chevron.right" size={10} tintColor="#333" />
             </View>
           </View>
 
-          {lastMsg ? (
-            <LastMessageContent
-              content={lastMsg.content}
-              friendPublicKey={item.profiles?.public_key} // <-- LE PASAMOS LA LLAVE AQUÍ
-              isMine={isMine}
-              type={lastMsg.type} // <-- LE PASAMOS EL TIPO PARA LAS FOTOS
-            />
-          ) : (
-            <Text style={styles.lastMessage}>No messages yet</Text>
-          )}
+          <View style={styles.chatBodyRow}>
+            {lastMsg ? (
+              <LastMessageContent
+                content={lastMsg.content}
+                friendPublicKey={item.profiles?.public_key}
+                isMine={isMine}
+                type={lastMsg.type}
+                hasUnread={hasUnread}
+              />
+            ) : (
+              <Text style={styles.lastMessage}>No messages yet</Text>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -220,10 +269,26 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 56, height: 56, backgroundColor: '#111' },
   chatInfo: { flex: 1, marginLeft: 14, borderBottomWidth: 0.2, borderBottomColor: '#222', paddingBottom: 12 },
   chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  username: { fontSize: 16, fontWeight: '600', color: '#fff' },
+
+  username: { fontSize: 16 },
+  usernameRead: { fontWeight: '600', color: '#8E8E93' },
+  usernameUnread: { fontWeight: '700', color: '#FFFFFF' },
+
   timeWrapper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   timeText: { fontSize: 13, color: '#666' },
-  lastMessage: { fontSize: 14, color: '#888', lineHeight: 18 },
+
+  chatBodyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8
+  },
+
+  lastMessage: { fontSize: 14, lineHeight: 18, flex: 1 },
+  lastMessageRead: { color: '#666666' },
+  lastMessageMine: { color: '#888888' },
+  lastMessageUnread: { color: '#E5E5EA', fontWeight: '600' },
+
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { alignItems: 'center', marginTop: 100 },
   emptyText: { color: '#444', fontSize: 15 },

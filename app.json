@@ -40,7 +40,9 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-video",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

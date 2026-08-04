@@ -1,6 +1,7 @@
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -18,6 +19,7 @@ export default function RegisterScreen() {
     const router = useRouter();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -67,7 +69,7 @@ export default function RegisterScreen() {
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: bg }}
         >
             <View style={styles.content}>
                 <View style={styles.header}>
@@ -97,19 +99,27 @@ export default function RegisterScreen() {
 
                     <View style={styles.inputGroup}>
                         <Text style={[styles.label, { color: accent }]}>PASSWORD</Text>
-                        <TextInput
-                            style={[styles.input, {
-                                backgroundColor: surface,
-                                color: textMain,
-                                borderColor: glassBorder
-                            }]}
-                            placeholder="Min. 6 characters"
-                            placeholderTextColor={textSec}
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                            selectionColor={getThemeColor('tint')}
-                        />
+
+                        {/* Contenedor que agrupa el botón izquierdo y el TextInput */}
+                        <View style={[styles.inputWrapper, { backgroundColor: surface, borderColor: glassBorder }]}>
+                            <TextInput
+                                style={[styles.inputInner, { color: textMain }]}
+                                placeholder="Min. 6 characters"
+                                placeholderTextColor={textSec}
+                                secureTextEntry={!showPassword}
+                                value={password}
+                                onChangeText={setPassword}
+                                selectionColor={getThemeColor('tint')}
+                            />
+
+                            <TouchableOpacity
+                                style={styles.eyeButton}
+                                onPress={() => setShowPassword(!showPassword)}
+                                activeOpacity={0.7}
+                            >
+                                <SymbolView size={24} name={showPassword ? "eye.slash" : "eye"} tintColor={"#fff"} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* ——— TERMS CHECKBOX ——— */}
@@ -218,6 +228,31 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         fontSize: 16,
     },
+
+    // ——— INPUT WRAPPER CON BOTÓN A LA IZQUIERDA ———
+    inputWrapper: {
+        height: 55,
+        borderRadius: 8,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingLeft: 12,
+    },
+    eyeButton: {
+        paddingRight: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    eyeIcon: {
+        fontSize: 18,
+    },
+    inputInner: {
+        flex: 1,
+        height: '100%',
+        paddingRight: 15,
+        fontSize: 16,
+    },
+
     // ——— TERMS ———
     termsRow: {
         flexDirection: 'row',

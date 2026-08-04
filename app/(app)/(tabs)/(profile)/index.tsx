@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     statItem: { alignItems: "center" },
     statText: { fontSize: 12, fontWeight: "600", marginTop: 4, color: '#fff' },
     bioText: { marginTop: 20, fontSize: 15, color: "#8A8A8A" },
-    myFeed: { paddingBottom: 100, paddingHorizontal: 16 },
+    myFeed: { paddingBottom: 100, paddingHorizontal: 0 },
     emptyContainer: { alignItems: 'center', marginTop: 50, gap: 10 },
     emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 14 }
 });

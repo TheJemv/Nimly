@@ -6,7 +6,7 @@ import { useState } from 'react';
 export function useChatMedia(chatId: string, currentUserId: string) {
     const [isUploading, setIsUploading] = useState(false);
 
-    const sendCapturedImage = async (imageUri: string, type: 'image' | 'image-view-once', friendPublicKey: string) => {
+    const sendCapturedImage = async (imageUri: string, type: 'image' | 'video' | 'image-view-once', friendPublicKey: string) => {
         if (!chatId || !currentUserId || !friendPublicKey) {
             console.error("Missing required data for E2EE media upload");
             return;
@@ -42,7 +42,7 @@ export function useChatMedia(chatId: string, currentUserId: string) {
                     chat_id: chatId,
                     sender_id: currentUserId,
                     content: fileName,
-                    type: type
+                    type: type // 'image', 'video' o 'image-view-once'
                 })
                 .select()
                 .single();

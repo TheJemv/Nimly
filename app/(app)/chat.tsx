@@ -17,26 +17,30 @@ import {
    Alert,
    FlatList,
    KeyboardAvoidingView,
+   LayoutAnimation,
    Platform,
    StyleSheet,
    Text,
    TextInput,
    TouchableOpacity,
-   View,
+   UIManager,
+   View
 } from "react-native";
 import { SvgXml } from "react-native-svg";
 
-// Importamos el hook de medios y tu nueva cámara personalizada
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import NymlyCamera from "@/components/NymlyCamera";
 import { useChatMedia } from "@/hooks/useChatMedia";
 import { cleanChatMessage } from "@/utils/chatUtils";
 
+// Habilitar LayoutAnimation en Android por si acaso, aunque sea solo iOS
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+   UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const PAGE_SIZE = 30;
 
-
 const MessageContent = memo(({ content, friendPublicKey }: { content: string; friendPublicKey: string | undefined }) => {
-   // Si está en caché y no es un error, lo usamos directamente.
    const initialText = vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")
       ? vaultRAMCache[content]
       : "🔒 Decrypting...";
@@ -44,30 +48,24 @@ const MessageContent = memo(({ content, friendPublicKey }: { content: string; fr
    const [decryptedText, setDecryptedText] = useState(initialText);
 
    useEffect(() => {
-      // 1. FIREWALL: Esperar a que la llave pública de Supabase llegue
       if (!friendPublicKey) {
-         console.log('⏳ [TEXT] Waiting for friendPublicKey...');
          setDecryptedText("🔒 Connecting Vault...");
          return;
       }
 
       if (vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")) return;
 
-      // 2. FIREWALL: No re-desencriptar si ya fue exitoso
       let isMounted = true;
       const decrypt = async () => {
          try {
-            console.log('🔓 [TEXT] Starting decryption...');
             const clearText = await vaultCrypto.decryptMessage(content, friendPublicKey);
             if (isMounted) {
                if (!clearText.startsWith("🔒")) {
                   vaultRAMCache[content] = clearText;
-                  console.log('✅ [TEXT] Decryption successful');
                }
                setDecryptedText(clearText);
             }
          } catch (e) {
-            console.error('❌ [TEXT] Decryption error:', e);
             if (isMounted) setDecryptedText("🔒 Locked Capsule");
          }
       };
@@ -79,7 +77,6 @@ const MessageContent = memo(({ content, friendPublicKey }: { content: string; fr
    return <Text style={styles.messageText}>{decryptedText}</Text>;
 });
 
-// --- PANTALLA PRINCIPAL ---
 export default function ChatScreen() {
    const { id: targetFriendId } = useLocalSearchParams<{ id: string }>();
    const router = useRouter();
@@ -93,12 +90,25 @@ export default function ChatScreen() {
    const [hasMore, setHasMore] = useState(true);
    const [friendProfile, setFriendProfile] = useState<any>(null);
    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
-   // Estado para controlar la cámara in-app
    const [isCameraVisible, setCameraVisible] = useState(false);
 
-   // Hook de Multimedia (Envío de fotos/View Once)
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
+
+   // Función para marcar como leídos los mensajes que nos envió nuestro amigo
+   const markMessagesAsRead = useCallback(async (cId: string) => {
+      if (!targetFriendId) return;
+      // Invocación directa a la infraestructura del chatApi
+      await chatApi.markAsRead(cId, targetFriendId);
+   }, [targetFriendId]);
+
+   // Calculamos el ID del último mensaje que mi amigo leyó (enviado por mí)
+   const lastReadMessageId = useMemo(() => {
+      if (!currentUserId) return null;
+      // Al estar invertida la lista, el primero que cumpla la condición desde el principio ([0] hacia arriba)
+      // es técnicamente el más reciente de forma cronológica en base al orden devuelto por la base de datos.
+      const lastRead = messages.find(m => m.sender_id === currentUserId && m.is_read === true);
+      return lastRead ? lastRead.id : null;
+   }, [messages, currentUserId]);
 
    useEffect(() => {
       let channel: any;
@@ -106,20 +116,15 @@ export default function ChatScreen() {
          if (!targetFriendId || targetFriendId === "[id]") return;
          try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-               console.log('❌ [INIT] No authenticated user');
-               return;
-            }
-            console.log('👤 [INIT] Current user:', user.id);
+            if (!user) return;
             setCurrentUserId(user.id);
 
             const cId = await chatApi.getOrCreateChat(targetFriendId);
-            if (!cId) {
-               console.log('❌ [INIT] Failed to get chat ID');
-               return;
-            }
-            console.log('💬 [INIT] Chat ID:', cId);
+            if (!cId) return;
             setChatId(cId);
+
+            // 1. Antes de traerlos o justo al iniciar, marcamos lo que tenemos pendiente de leer
+            await markMessagesAsRead(cId);
 
             const [msgRes, profRes] = await Promise.all([
                fetchMessages(cId, 0),
@@ -127,35 +132,41 @@ export default function ChatScreen() {
             ]);
 
             if (profRes.data) {
-               console.log('👥 [INIT] Friend profile loaded:', {
-                  username: profRes.data.username,
-                  hasPublicKey: !!profRes.data.public_key
-               });
                setFriendProfile(profRes.data);
-            } else {
-               console.log('❌ [INIT] Friend profile error:', profRes.error);
             }
 
+            // Realtime configurado para escuchar INSERTS y UPDATES (cuando cambien a is_read = true)
             channel = supabase.channel(`chat:${cId}`)
                .on('postgres_changes',
-                  { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${cId}` },
+                  { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${cId}` },
                   (p) => {
-                     console.log('📨 [REALTIME] New message:', {
-                        type: p.new.type,
-                        contentLength: p.new.content?.length
-                     });
-                     setMessages(prev => [p.new, ...prev]);
+                     // Configurar animación nativa limpia para el cambio de UI
+                     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+                     if (p.eventType === 'INSERT') {
+                        // Si el mensaje entrante es de mi amigo y estoy dentro del chat, lo marco leído de inmediato
+                        if (p.new.sender_id === targetFriendId) {
+                           markMessagesAsRead(cId);
+                           p.new.is_read = true;
+                        }
+                        setMessages(prev => [p.new, ...prev]);
+                     }
+                     else if (p.eventType === 'UPDATE') {
+                        // Si se actualizó el estado de lectura de un mensaje, reemplazamos el mensaje local
+                        setMessages(prev => prev.map(m => m.id === p.new.id ? p.new : m));
+                     }
                   }
                )
                .subscribe();
          } catch (e) {
             console.error("❌ [INIT] Chat Init Error:", e);
+         } finally {
+            setLoading(false);
          }
-         finally { setLoading(false); }
       };
       init();
       return () => { if (channel) supabase.removeChannel(channel); };
-   }, [targetFriendId]);
+   }, [targetFriendId, markMessagesAsRead]);
 
    useEffect(() => {
       if (!friendProfile?.public_key || messages.length === 0) return;
@@ -179,10 +190,6 @@ export default function ChatScreen() {
             .range(offset, offset + PAGE_SIZE - 1);
 
          if (error) throw error;
-         console.log('📥 [FETCH] Messages loaded:', data?.length || 0);
-         if (data?.length) {
-            console.log('📋 [FETCH] Message types:', data.map(m => ({ type: m.type, hasContent: !!m.content })));
-         }
          if (data && data.length < PAGE_SIZE) setHasMore(false);
          if (offset === 0) setMessages(data || []);
          else setMessages(prev => [...prev, ...(data || [])]);
@@ -201,34 +208,26 @@ export default function ChatScreen() {
    };
 
    const handleSendText = async () => {
-      // 1. Limpiamos el texto inmediatamente
       const cleanedMessage = cleanChatMessage(newMessage);
-
-      // 2. Validamos usando el texto limpio
       if (!cleanedMessage || !chatId || !currentUserId) return;
-
       if (!friendProfile?.public_key) {
          alert("Connecting Vault. Please wait a second.");
          return;
       }
 
-      // 3. Reiniciamos el input visualmente
       setNewMessage("");
 
       try {
-         console.log('🔐 [SEND] Encrypting text message...');
-         // 4. Encriptamos la variable CLEANEDMESSAGE
          const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, friendProfile.public_key);
          if (!encryptedContent) throw new Error("Encryption failed");
 
-         console.log('📤 [SEND] Uploading encrypted message...');
          await supabase.from('messages').insert({
             chat_id: chatId,
             sender_id: currentUserId,
             content: encryptedContent,
-            type: 'text'
+            type: 'text',
+            is_read: false // Mensaje nuevo nace sin leer
          });
-         console.log('✅ [SEND] Text message sent');
       } catch (e) {
          console.error("❌ [SEND] Vault Send Error:", e);
       }
@@ -244,65 +243,56 @@ export default function ChatScreen() {
    const renderItem = useCallback(({ item }: { item: any }) => {
       const mine = item.sender_id === currentUserId;
       const keyToUse = friendProfile?.public_key || "";
+      const showReadReceipt = item.id === lastReadMessageId; // ¿Es este el último mensaje leído por el amigo?
 
-      console.log('🔍 [RENDER] Message:', {
-         id: item.id.substring(0, 8),
-         type: item.type,
-         isMine: mine,
-         hasKey: !!keyToUse,
-         contentPreview: item.content?.substring(0, 50),
-         contentLength: item.content?.length
-      });
-
-      // PRIORIDAD 1: Si ya fue abierta, mostrar el log de "Cápsula abierta"
-      // Esto sobreescribe cualquier intento de renderizar MediaMessageBubble
       if (item.content === 'OPENED_CAPSULE') {
-         console.log('✅ [RENDER] Showing OPENED_CAPSULE state');
          return (
-            <View style={[styles.bubble, mine ? styles.myBubble : styles.theirBubble]}>
-               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-                  <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
-                  <Text style={{ color: '#888', fontStyle: 'italic', fontSize: 14 }}>Opened Capsule</Text>
+            <View style={styles.rowContainer}>
+               <View style={[styles.bubble, mine ? styles.myBubble : styles.theirBubble]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+                     <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
+                     <Text style={{ color: '#888', fontStyle: 'italic', fontSize: 14 }}>Opened Capsule</Text>
+                  </View>
                </View>
+               {showReadReceipt && friendAvatarSvg && (
+                  <View style={styles.readReceiptContainer}>
+                     <SvgXml xml={friendAvatarSvg} width="16" height="16" />
+                  </View>
+               )}
             </View>
          );
       }
 
-      // PRIORIDAD 2: El resto del renderizado normal (Texto o Media)
       const isText = item.type === 'text' || !item.type;
       const isViewOnceSender = item.type === 'image-view-once' && mine;
 
-      if (isText) {
-         console.log('📝 [RENDER] Text message - needs decryption');
-      } else {
-         console.log('🖼️  [RENDER] Media message:', {
-            type: item.type,
-            isViewOnce: item.type === 'image-view-once',
-            isMine: mine,
-            filePathLength: item.content?.length
-         });
-      }
-
       return (
-         <View style={[
-            (isText || isViewOnceSender) ? styles.bubble : styles.bubbleImage,
-            mine ? styles.myBubble : styles.theirBubble
-         ]}>
-            {isText ? (
-               <MessageContent content={item.content} friendPublicKey={keyToUse} />
-            ) : (
-               <MediaMessageBubble
-                  filePath={item.content}
-                  friendPublicKey={keyToUse}
-                  isViewOnce={item.type === 'image-view-once'}
-                  isMine={mine}
-               />
+         <View style={styles.rowContainer}>
+            <View style={[
+               (isText || isViewOnceSender) ? styles.bubble : styles.bubbleImage,
+               mine ? styles.myBubble : styles.theirBubble
+            ]}>
+               {isText ? (
+                  <MessageContent content={item.content} friendPublicKey={keyToUse} />
+               ) : (
+                  <MediaMessageBubble
+                     filePath={item.content}
+                     friendPublicKey={keyToUse}
+                     isViewOnce={item.type === 'image-view-once'}
+                     isMine={mine}
+                  />
+               )}
+            </View>
+            {/* Si es el último leído, renderizamos el indicador alineado de forma absoluta a la derecha de la fila */}
+            {showReadReceipt && friendAvatarSvg && (
+               <View style={styles.readReceiptContainer}>
+                  <SvgXml xml={friendAvatarSvg} width="16" height="16" />
+               </View>
             )}
          </View>
       );
-   }, [currentUserId, friendProfile]);
+   }, [currentUserId, friendProfile, lastReadMessageId, friendAvatarSvg]);
 
-   // --- RUTINA NUCLEAR: Borrar historial ---
    const handleBurnHistory = () => {
       if (!chatId) return;
 
@@ -316,16 +306,8 @@ export default function ChatScreen() {
                style: "destructive",
                onPress: async () => {
                   try {
-                     console.log('🔥 [BURN] Burning chat history...');
                      await chatApi.burnChatHistory(chatId);
-
-                     // Purgamos el estado local de React para vaciar la pantalla al instante
                      setMessages([]);
-                     console.log('✅ [BURN] Chat history burned');
-
-                     // Opcional: Si importaste vaultRAMCache, límpialo para matar fantasmas
-                     // Object.keys(vaultRAMCache).forEach(key => delete vaultRAMCache[key]);
-
                   } catch (e) {
                      alert("Failed to burn history.");
                   }
@@ -397,11 +379,7 @@ export default function ChatScreen() {
             )}
 
             <View style={styles.inputBar}>
-               {/* BOTÓN DE CÁMARA (Lanza la UI estilo Instagram) */}
-               <TouchableOpacity
-                  style={styles.plusHost}
-                  onPress={() => setCameraVisible(true)}
-               >
+               <TouchableOpacity style={styles.plusHost} onPress={() => setCameraVisible(true)}>
                   <GlassView style={styles.plusButton}>
                      <SymbolView name="camera" size={22} tintColor={getThemeColor("tint")} />
                   </GlassView>
@@ -420,28 +398,25 @@ export default function ChatScreen() {
                <TouchableOpacity
                   style={styles.sendButton}
                   onPress={handleSendText}
-                  // Bloquea el botón si solo son espacios o saltos
                   disabled={!newMessage.trim()}
                >
                   <SymbolView
                      name="arrow.up.circle.fill"
                      size={48}
-                     // Pinta el botón gris si solo son espacios
                      tintColor={newMessage.trim() ? getThemeColor("tint") : "#333"}
                   />
                </TouchableOpacity>
             </View>
          </KeyboardAvoidingView>
 
-         {/* --- CÁMARA IN-APP (MODAL) --- */}
          <NymlyCamera
             visible={isCameraVisible}
             onClose={() => setCameraVisible(false)}
-            onSend={(uri, type) => {
-               // AÑADIMOS EL TERCER PARÁMETRO: LA LLAVE PÚBLICA
+            onSend={(uri, type, option) => {
                if (friendProfile?.public_key) {
-                  console.log('📸 [CAMERA] Sending image:', type);
-                  sendCapturedImage(uri, type, friendProfile.public_key);
+                  // Si eligió view-once, usamos esa opción; si no, el tipo regular ('image' o 'video')
+                  const finalType = option || type;
+                  sendCapturedImage(uri, finalType, friendProfile.public_key);
                } else {
                   alert("Connecting Vault. Please wait a second.");
                }
@@ -458,13 +433,30 @@ const styles = StyleSheet.create({
    headerAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#111', overflow: 'hidden' },
    headerName: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
    headerSub: { color: '#666', fontSize: 10 },
-   bubble: { maxWidth: '80%', padding: 12, borderRadius: 20, marginBottom: 8 },
-   bubbleImage: { maxWidth: '80%', padding: 0, borderRadius: 20, marginBottom: 8 },
+
+   // Contenedor por cada fila de mensaje para alinear el indicador
+   rowContainer: {
+      width: '100%',
+      marginBottom: 14,          // Espaciado balanceado para alojar el avatar flotante sin colisiones
+      position: 'relative',
+   },
+   bubble: { maxWidth: '80%', padding: 12, borderRadius: 20 },
+   bubbleImage: { maxWidth: '80%', padding: 0, borderRadius: 20 },
    myBubble: { alignSelf: 'flex-end', backgroundColor: getThemeColor("tint") },
    theirBubble: { alignSelf: 'flex-start', backgroundColor: '#1C1C1E' },
    messageText: { color: '#fff', fontSize: 16 },
-   mediaPlaceholder: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-   mediaText: { color: '#aaa', fontSize: 14, fontStyle: 'italic' },
+
+   // Mini avatar indicador de visto (estilo quiet luxury - Posicionamiento Absoluto Extremo Derecho)
+   readReceiptContainer: {
+      position: 'absolute',
+      right: 0,                   // Alineado de forma fija al borde derecho de la pantalla
+      bottom: -12,                // Lo baja ligeramente de la base de la burbuja para un efecto flotante limpio
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      overflow: 'hidden',
+      backgroundColor: '#000',    // Fondo negro sólido para ocultar bordes de la lista de forma estética
+   },
 
    inputBar: {
       flexDirection: 'row',

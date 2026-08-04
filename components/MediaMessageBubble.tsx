@@ -23,8 +23,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     }, [filePath, isViewOnce]);
 
     const downloadAndDecrypt = async (triggerFullScreen = true) => {
-        if (wasConsumed || isLocked) return;
-
+        if (wasConsumed || isLocked || isLoading) return;
         if (vaultRAMCache[filePath] && vaultRAMCache[filePath] !== 'LOCKED_CAPSULE') {
             setImageUri(vaultRAMCache[filePath]);
             if (triggerFullScreen) setIsFullScreen(true);
@@ -37,12 +36,8 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         }
 
         try {
-            // 1. Activamos el estado de carga
             setIsLoading(true);
-
-            // 2. TRUCO DE ORO: Pausa de 50ms para que React Native alcance a dibujar el ActivityIndicator en la pantalla
-            await new Promise(resolve => setTimeout(resolve, 50));
-
+            await new Promise(resolve => setTimeout(resolve, 80));
             const { data: urlData, error: urlError } = await supabase.storage
                 .from('chat-media')
                 .createSignedUrl(filePath, 60);
@@ -54,10 +49,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
 
             const response = await fetch(urlData.signedUrl);
             const encryptedText = await response.text();
-
-            // 3. Otra pequeña pausa antes del golpe de procesamiento AES
             await new Promise(resolve => setTimeout(resolve, 50));
-
             const base64Data = await vaultCrypto.decryptMessage(encryptedText.trim(), friendPublicKey);
 
             if (base64Data.startsWith("🔒")) {
@@ -70,12 +62,13 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             const finalUri = `data:image/jpeg;base64,${base64Data}`;
             vaultRAMCache[filePath] = finalUri;
             setImageUri(finalUri);
-            setIsLoading(false);
 
             if (triggerFullScreen) {
                 setIsFullScreen(true);
             }
         } catch (e) {
+            console.error("Error descifrando multimedia:", e);
+        } finally {
             setIsLoading(false);
         }
     };
@@ -123,7 +116,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                 <TouchableOpacity
                     onPress={() => downloadAndDecrypt(true)}
                     style={styles.standardImageContainer}
-                    disabled={isLoading} // Evita que le den tap 20 veces mientras carga
+                    disabled={isLoading}
                 >
                     {imageUri ? (
                         <Image source={{ uri: imageUri }} style={styles.imageMini} />
@@ -137,15 +130,20 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                                     </Text>
                                 </>
                             ) : (
-                                // Muestra un ícono si no está cargando y aún no hay imagen
                                 <SymbolView name="photo.fill" size={30} tintColor="#666" />
                             )}
                         </View>
                     )}
                 </TouchableOpacity>
 
+                {/* 👇 MODAL AGREGADO PARA QUE LA IMAGEN NORMAL SÍ SE VEA EN PANTALLA COMPLETA */}
                 <Modal visible={isFullScreen} transparent={false} animationType="fade">
-                    {/* ... tu código de Modal se queda igual ... */}
+                    <View style={styles.fullScreenContainer}>
+                        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsFullScreen(false)}>
+                            <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
+                        </TouchableOpacity>
+                        {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="contain" />}
+                    </View>
                 </Modal>
             </>
         );
