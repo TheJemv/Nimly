@@ -119,8 +119,6 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     fetchChats();
-
-    // Escuchamos TODOS los eventos (*): INSERTS, UPDATES y DELETES
     const channel = supabase
       .channel('list_updates')
       .on(
@@ -237,7 +235,7 @@ export default function MessagesScreen() {
         headerTitle: "Messages",
         headerLargeTitle: true,
         headerTransparent: true,
-        headerLargeTitleStyle: { color: '#fff' },
+        headerLargeTitleStyle: { color: getThemeColor("text") },
         headerRight: () => (
           <TouchableOpacity onPress={() => router.push("/(app)/(tabs)/(messages)/friends")} >
             <SymbolView name="plus" size={24} tintColor={getThemeColor('tint')} />

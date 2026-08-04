@@ -1,7 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import { decode } from 'base64-arraybuffer';
-import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system/legacy';
 
 export const chatApi = {
     async getOrCreateChat(targetId: string) {
@@ -49,7 +46,7 @@ export const chatApi = {
 
         const { error } = await supabase
             .from('messages')
-            .insert([{ chat_id: chatId, sender_id: user.id, content }]);
+            .insert([{ chat_id: chatId, sender_id: user.id, content, type: 'text' }]);
 
         if (error) throw error;
     },
@@ -65,72 +62,12 @@ export const chatApi = {
         return data || [];
     },
 
-    async sendViewOncePhoto(chatId: string, imageUri: string) {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("No session");
-
-            // 1. Generar Llave AES efímera para esta foto
-            const encryptionKey = await Crypto.digestStringAsync(
-                Crypto.CryptoDigestAlgorithm.SHA256,
-                `nymly-secret-${Date.now()}-${Math.random()}`
-            );
-
-            // 2. Leer archivo en base64 (Método Legacy)
-            const base64 = await FileSystem.readAsStringAsync(imageUri, {
-                encoding: 'base64',
-            });
-
-            const ext = imageUri.split('.').pop() || 'jpg';
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.enc`;
-            const filePath = `${chatId}/${fileName}`;
-
-            // 3. Subir al bucket 'messages_media'
-            const { data: uploadData, error: upError } = await supabase.storage
-                .from('messages_media')
-                .upload(filePath, decode(base64), {
-                    contentType: 'application/octet-stream', // Subimos como binario encriptado
-                    upsert: false
-                });
-
-            if (upError) throw upError;
-
-            // 4. Crear el mensaje base
-            const { data: msg, error: msgError } = await supabase
-                .from('messages')
-                .insert({
-                    chat_id: chatId,
-                    sender_id: user.id,
-                    type: 'media',
-                    content: '🔒 View-once vault entry'
-                })
-                .select()
-                .single();
-
-            if (msgError) throw msgError;
-
-            // 5. Vincular media y llave
-            await supabase.from('messages_media').insert({
-                message_id: msg.id,
-                file_path: uploadData.path,
-                encryption_key: encryptionKey,
-                is_view_once: true
-            });
-
-            return { success: true, messageId: msg.id };
-
-        } catch (error) {
-            console.error("Vault Media Error:", error);
-            throw error;
-        }
-    },
-
     /**
-     * PURGE: Elimina físicamente la foto y el mensaje de la bóveda.
+     * PURGE: Elimina físicamente el archivo .vault de la bóveda y el mensaje de la base de datos.
      */
     async burnMedia(messageId: string, filePath: string) {
         try {
-            await supabase.storage.from('messages_media').remove([filePath]);
+            await supabase.storage.from('chat-media').remove([filePath]);
             await supabase.from('messages').delete().eq('id', messageId);
         } catch (error) {
             console.error("Failed to burn media:", error);
@@ -138,39 +75,57 @@ export const chatApi = {
     },
 
     /**
-     * BURN HISTORY: Elimina todos los mensajes y archivos de un chat específico,
-     * pero mantiene el chat abierto.
+     * BURN HISTORY: Elimina todos los mensajes y archivos .vault de un chat específico,
+     * manteniendo la sala de chat abierta.
+     */
+/**
+     * BURN HISTORY: Elimina todos los mensajes y archivos .vault de un chat específico.
      */
     async burnChatHistory(chatId: string) {
         try {
-            // 1. Obtener todos los mensajes para saber cuáles son fotos
-            const { data: messages } = await supabase
+            // 1. Obtener todos los mensajes para identificar cuáles son multimedia
+            const { data: messages, error: fetchError } = await supabase
                 .from('messages')
                 .select('id, content, type')
                 .eq('chat_id', chatId);
 
+            if (fetchError) throw fetchError;
             if (!messages || messages.length === 0) return { success: true };
 
-            // 2. Filtrar los que son imágenes para borrar sus archivos físicos del Storage
+            // 2. Filtrar y borrar archivos físicos del Storage
             const mediaFiles = messages
-                .filter(m => m.type === 'image' || m.type === 'image-view-once')
-                .map(m => m.content); // En content guardamos la ruta: "chat_id/123.vault"
+                .filter(m => m.type === 'image' || m.type === 'video' || m.type === 'image-view-once')
+                .map(m => m.content);
 
             if (mediaFiles.length > 0) {
                 console.log(`Vault: Burning ${mediaFiles.length} physical files...`);
-                await supabase.storage.from('chat-media').remove(mediaFiles);
+                const { error: storageError } = await supabase.storage.from('chat-media').remove(mediaFiles);
+                if (storageError) console.error("⚠️ Aviso: Algunos archivos no se borraron del storage:", storageError);
             }
 
-            // 3. Extraer los IDs para destruir dependencias
             const messageIds = messages.map(m => m.id);
 
-            // 4. Borrar los metadatos de las fotos (para evitar error de Foreign Key)
-            await supabase.from('messages_media').delete().in('message_id', messageIds);
+            // 3. Destruir metadatos (Revisión estricta de errores)
+            const { error: mediaError } = await supabase
+                .from('messages_media')
+                .delete()
+                .in('message_id', messageIds);
 
-            // 5. Destrucción final: Borrar los mensajes de la tabla principal
-            const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
+            if (mediaError) {
+                console.error("❌ Error DB al borrar messages_media (¿Restricción de llave foránea?):", mediaError);
+                throw mediaError;
+            }
 
-            if (error) throw error;
+            // 4. Destrucción final de los textos (Revisión estricta de errores)
+            const { error: msgError } = await supabase
+                .from('messages')
+                .delete()
+                .eq('chat_id', chatId);
+
+            if (msgError) {
+                console.error("❌ Error DB al borrar messages (¡Probablemente RLS!):", msgError);
+                throw msgError;
+            }
 
             console.log("Vault: Chat history completely burned.");
             return { success: true };
@@ -180,7 +135,6 @@ export const chatApi = {
         }
     },
 
-    // Agrega esto dentro del objeto chatApi en tu archivo
     async markAsRead(chatId: string, senderId: string) {
         if (!chatId || !senderId) return null;
         try {

@@ -1,197 +1,225 @@
 import { storiesApi, Story } from "@/api/stories";
-import { StoryGroup, ViewerProfile } from "@/components/StoriesDaily";
 import { supabase } from "@/lib/supabase";
-import { useCallback, useEffect, useState } from "react";
-import { Image } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
+
+export interface StoryGroup {
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    avatar_config?: any;
+    is_me: boolean;
+    stories: {
+        id: string;
+        media_url: string;
+        media_type: "image" | "video";
+        created_at: string;
+        is_seen_by_me: boolean;
+        is_view_once: boolean;
+        views_count?: number;
+        viewers?: any[];
+        likes?: any[];
+        is_liked_by_me: boolean; // 👈 agregar esto
+    }[];
+}
 
 export function useStoriesFeed() {
-  const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
-  const [loadingStories, setLoadingStories] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
+    const [loadingStories, setLoadingStories] = useState(true);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const loadStories = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoadingStories(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUserId(user.id);
+    const channelRef = useRef<any>(null);
 
-      const rawStories = (await storiesApi.getActiveFeed()) as Story[];
-      const groupsMap: { [key: string]: StoryGroup } = {};
+    const formatStoriesToGroups = (rawStories: Story[], userId: string | null): StoryGroup[] => {
+        const groupsMap: { [key: string]: StoryGroup } = {};
 
-      // Obtener mi perfil
-      const myProfileResponse = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url, avatar_config")
-        .eq("id", user.id)
-        .single();
+        // 🔄 INVERTIMOS EL ORDEN: De más vieja a más nueva para que los aros y el visor fluyan correctamente
+        const sortedRaw = [...rawStories].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-      const myProfile = myProfileResponse.data;
+        sortedRaw.forEach((story) => {
+            const profile = story.profiles;
+            if (!profile) return;
 
-      // Inicializar mi grupo siempre presente
-      groupsMap[user.id] = {
-        user_id: user.id,
-        username: "Tu historia",
-        avatar_url: myProfile?.avatar_url || null,
-        avatar_config: myProfile?.avatar_config || null,
-        is_me: true,
-        stories: [],
-      };
+            const uId = story.user_id;
+            const isMe = uId === userId;
 
-      (rawStories || []).forEach((s: any) => {
-        const uId = s.user_id;
-        const isMe = uId === user.id;
+            if (!groupsMap[uId]) {
+                groupsMap[uId] = {
+                    user_id: uId,
+                    username: profile.username || "User",
+                    avatar_url: profile.avatar_url,
+                    avatar_config: profile.avatar_config,
+                    is_me: isMe,
+                    stories: [],
+                };
+            }
 
-        if (!groupsMap[uId]) {
-          groupsMap[uId] = {
-            user_id: uId,
-            username: isMe ? "Tu historia" : s.profiles?.username || "Usuario",
-            avatar_url: s.profiles?.avatar_url || null,
-            avatar_config: s.profiles?.avatar_config || null,
-            is_me: isMe,
-            stories: [],
-          };
-        }
+            const views = story.story_views || [];
+            const likes = story.story_likes || [];
+            const likedUserIds = new Set(likes.map((l: any) => l.user_id));
 
-        const isSeenByMe = isMe
-          ? true
-          : (s.story_views || []).some((v: any) => v.viewer_id === user.id);
+            const isSeenByMe = isMe || views.some((v) => v.viewer_id === userId);
 
-        const isLikedByMe = (s.story_likes || []).some((l: any) => l.user_id === user.id);
-        const likesSet = new Set((s.story_likes || []).map((l: any) => l.user_id));
+            // 🔗 Cruzamos viewers con likes para saber quién de los que vieron también dio like
+            const viewersWithLikeInfo = views.map((v: any) => ({
+                ...v,
+                has_liked: likedUserIds.has(v.viewer_id),
+            }));
 
-        const viewersList: ViewerProfile[] = (s.story_views || []).map((v: any) => ({
-          user_id: v.viewer_id,
-          username: v.profiles?.username || "Usuario",
-          avatar_url: v.profiles?.avatar_url || null,
-          avatar_config: v.profiles?.avatar_config || null,
-          has_liked: likesSet.has(v.viewer_id),
-          viewed_at: v.viewed_at,
-        }));
 
-        // 🚀 PRELOAD INSTANTÁNEO EN MEMORIA DE LA IMAGEN (ESPECIALMENTE MI HISTORIA)
-        if (s.media_type !== "video" && s.media_url) {
-          Image.prefetch(s.media_url);
-        }
-
-        groupsMap[uId].stories.push({
-          id: s.id,
-          media_url: s.media_url,
-          media_type: s.media_type,
-          created_at: s.created_at,
-          is_seen_by_me: isSeenByMe,
-          is_liked_by_me: isLikedByMe,
-          is_view_once: s.is_view_once,
-          views_count: s.story_views ? s.story_views.length : 0,
-          viewers: viewersList,
+            groupsMap[uId].stories.push({
+                id: story.id,
+                media_url: story.media_url,
+                media_type: story.media_type,
+                created_at: story.created_at,
+                is_seen_by_me: isSeenByMe,
+                is_view_once: story.is_view_once,
+                views_count: views.length,
+                viewers: viewersWithLikeInfo,   // 👈 ahora sí trae has_liked
+                likes,
+                is_liked_by_me: (story as any).is_liked_by_me || false,
+            });
         });
-      });
 
-      Object.values(groupsMap).forEach((group) => {
-        group.stories.sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-      });
-
-      setStoryGroups(Object.values(groupsMap));
-    } catch (error) {
-      console.error("Error al cargar historias:", error);
-    } finally {
-      setLoadingStories(false);
-    }
-  }, []);
-
-const handleStorySeen = useCallback((storyId: string, userId: string) => {
-  setStoryGroups((prev) =>
-    prev.map((group) => {
-      if (group.user_id === userId) {
-        const updatedStories = group.stories.map((s) =>
-          s.id === storyId ? { ...s, is_seen_by_me: true } : s
-        );
-
-        return {
-          ...group,
-          stories: updatedStories,
-        };
-      }
-      return group;
-    })
-  );
-}, []);
-
-  const handleStoryLiked = useCallback(
-    (storyId: string, userId: string, newLikedState: boolean) => {
-      setStoryGroups((prev) =>
-        prev.map((group) => {
-          if (group.user_id === userId) {
-            return {
-              ...group,
-              stories: group.stories.map((s) =>
-                s.id === storyId ? { ...s, is_liked_by_me: newLikedState } : s
-              ),
-            };
-          }
-          return group;
-        })
-      );
-    },
-    []
-  );
-
-  const handleSendStory = useCallback(
-    async (uri: string, mediaType: "image" | "video") => {
-      try {
-        await storiesApi.createStory(uri, mediaType);
-        await loadStories(false);
-      } catch (err) {
-        console.error("Error al publicar historia:", err);
-      }
-    },
-    [loadStories]
-  );
-
-  useEffect(() => {
-    loadStories();
-
-    const channel = supabase
-      .channel("public:stories_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "stories" },
-        () => loadStories(false)
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+        return Object.values(groupsMap);
     };
-  }, [loadStories]);
 
-  const handleStoryDeleted = useCallback((storyId: string, userId: string) => {
-    setStoryGroups((prev) =>
-      prev
-        .map((group) => {
-          if (group.user_id === userId) {
-            const filteredStories = group.stories.filter((s) => s.id !== storyId);
-            return {
-              ...group,
-              stories: filteredStories,
-            };
-          }
-          return group;
-        })
-        .filter((group) => group.stories.length > 0) // Si ya no quedan historias, oculta el grupo del feed
-    );
-  }, []);
+    const reloadStories = useCallback(async (showLoading = true) => {
+        try {
+            if (showLoading) setLoadingStories(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            setCurrentUserId(user.id);
 
-  return {
-    storyGroups,
-    loadingStories,
-    currentUserId,
-    reloadStories: loadStories,
-    handleStorySeen,
-    handleStoryLiked,
-    handleSendStory,
-    handleStoryDeleted,
-  };
+            const rawStories = await storiesApi.getActiveFeed();
+            const groups = formatStoriesToGroups(rawStories as Story[], user.id);
+            setStoryGroups(groups);
+        } catch (error) {
+            console.error("Error cargando historias:", error);
+        } finally {
+            if (showLoading) setLoadingStories(false);
+        }
+    }, []);
+
+    // 📡 REALTIME ROBUSTO PARA INSERT, UPDATE Y DELETE
+    useEffect(() => {
+        let isMounted = true;
+
+        const initRealtime = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !isMounted) return;
+            setCurrentUserId(user.id);
+
+            await reloadStories(true);
+
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+            }
+
+            const uniqueChannelName = `stories_feed_v2_${user.id}-${Date.now()}`;
+
+            const channel = supabase.channel(uniqueChannelName)
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'stories' },
+                    (payload) => {
+                        console.log('📡 Evento realtime en stories:', payload); // 👈
+                        if (isMounted) reloadStories(false);
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'story_views' },
+                    (payload) => {
+                        console.log('📡 Evento realtime en story_views:', payload); // 👈
+                        if (isMounted) reloadStories(false);
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'story_likes' },
+                    (payload) => {
+                        console.log('📡 Evento realtime en story_likes:', payload); // 👈
+                        if (isMounted) reloadStories(false);
+                    }
+                )
+                .subscribe((status, err) => {
+                    console.log('🔌 Estado del canal de historias:', status, err); // 👈
+                });
+
+            channelRef.current = channel;
+        };
+
+        initRealtime();
+
+        return () => {
+            isMounted = false;
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+            }
+        };
+    }, [reloadStories]);
+
+    const handleStorySeen = async (storyId: string) => {
+        try {
+            await storiesApi.markAsSeen(storyId);
+            setStoryGroups(prev =>
+                prev.map(group => ({
+                    ...group,
+                    stories: group.stories.map(s =>
+                        s.id === storyId ? { ...s, is_seen_by_me: true } : s
+                    )
+                }))
+            );
+        } catch (e) {
+            console.error("Error al marcar historia como vista:", e);
+        }
+    };
+
+    const handleStoryLiked = async (storyId: string, reaction: string = '❤️') => {
+        try {
+            await storiesApi.toggleLike(storyId, reaction);
+            reloadStories(false);
+        } catch (e) {
+            console.error("Error al dar like a la historia:", e);
+        }
+    };
+
+    const handleSendStory = async (uri: string, mediaType: "image" | "video") => {
+        try {
+            // 1. Subimos la historia a la base de datos
+            await storiesApi.createStory(uri, mediaType, false);
+            // 2. Forzamos la recarga inmediata con firmas de URL para que el aro rojo aparezca al instante sin requerir refresh manual
+            await reloadStories(false);
+        } catch (error) {
+            console.error("Error publicando historia:", error);
+            Alert.alert("Error", "No se pudo publicar la historia.");
+        }
+    };
+
+    const handleStoryDeleted = async (storyId: string) => {
+        try {
+            await storiesApi.deleteStory(storyId);
+            setStoryGroups(prev =>
+                prev.map(group => ({
+                    ...group,
+                    stories: group.stories.filter(s => s.id !== storyId)
+                })).filter(group => group.stories.length > 0 || group.is_me)
+            );
+        } catch (error) {
+            console.error("Error eliminando historia:", error);
+            Alert.alert("Error", "No se pudo eliminar la historia.");
+        }
+    };
+
+    return {
+        storyGroups,
+        loadingStories,
+        currentUserId,
+        reloadStories,
+        handleStorySeen,
+        handleStoryLiked,
+        handleSendStory,
+        handleStoryDeleted,
+    };
 }

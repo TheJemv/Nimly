@@ -9,6 +9,7 @@ interface UseStoryTimerProps {
   onNext: () => void;
   isEnabled: boolean;
   isViewsSheetOpen: boolean;
+  onMarkAsSeen?: () => void; // 👈 1. Añadimos la función callback para marcar como visto
 }
 
 export function useStoryTimer({
@@ -17,6 +18,7 @@ export function useStoryTimer({
   onNext,
   isEnabled,
   isViewsSheetOpen,
+  onMarkAsSeen, // 👈 2. Lo recibimos aquí
 }: UseStoryTimerProps) {
   const [isMediaLoading, setIsMediaLoading] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
@@ -67,6 +69,12 @@ export function useStoryTimer({
   // Callback ejecutado SOLO cuando la imagen o video terminó de cargar
   const handleMediaReady = useCallback(() => {
     setIsMediaLoading(false);
+
+    // 👈 3. ¡PUM! Aquí marcamos como visto justo cuando el medio carga y está listo
+    if (onMarkAsSeen) {
+      onMarkAsSeen();
+    }
+
     if (isViewsSheetOpen || !isEnabled) return;
 
     if (isVideo && videoPlayer) {
@@ -77,7 +85,7 @@ export function useStoryTimer({
     } else {
       startProgressAnimation(0, DEFAULT_IMAGE_DURATION);
     }
-  }, [isEnabled, isVideo, isViewsSheetOpen, startProgressAnimation, videoPlayer]);
+  }, [isEnabled, isVideo, isViewsSheetOpen, onMarkAsSeen, startProgressAnimation, videoPlayer]);
 
   // Manejar cuando se presiona la pantalla para pausar
   const handlePressIn = useCallback(() => {

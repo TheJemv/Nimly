@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export interface Story {
   id: string;
@@ -18,22 +19,32 @@ export interface Story {
 }
 
 export const storiesApi = {
-  /**
-   * 1. Sube el archivo multimedia al Storage privado y crea el registro en PostgreSQL.
-   */
   async createStory(localUri: string, mediaType: 'image' | 'video', isViewOnce: boolean = false) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("No authenticated session found");
+
+    let fileUri = localUri;
+
+    if (mediaType === 'image') {
+      try {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          localUri,
+          [{ resize: { width: 1080 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        fileUri = manipResult.uri;
+      } catch (err) {
+        console.warn("No se pudo comprimir la imagen, usando original:", err);
+      }
+    }
 
     const fileExt = mediaType === 'video' ? 'mp4' : 'jpg';
     const filePath = `${user.id}/${Date.now()}.${fileExt}`;
     const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
 
-    // A. Convertir la URI local de React Native a ArrayBuffer (evita que el archivo quede corrupto/negro)
-    const response = await fetch(localUri);
+    const response = await fetch(fileUri);
     const arrayBuffer = await response.arrayBuffer();
 
-    // B. Subir el archivo al bucket privado 'stories'
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('stories')
       .upload(filePath, arrayBuffer, {
@@ -43,7 +54,6 @@ export const storiesApi = {
 
     if (uploadError) throw uploadError;
 
-    // C. Insertar registro en la tabla stories
     const { data: storyData, error: storyError } = await supabase
       .from('stories')
       .insert([{
@@ -59,9 +69,6 @@ export const storiesApi = {
     return storyData;
   },
 
-  /**
-   * 2. Obtiene el feed de historias e incluye URLs Firmadas para el visor.
-   */
   async getActiveFeed() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
@@ -82,7 +89,6 @@ export const storiesApi = {
 
     if (error) throw error;
 
-    // Firmar URLs
     const storiesWithSignedUrls = await Promise.all(
       (data as any[]).map(async (story) => {
         try {
@@ -90,9 +96,14 @@ export const storiesApi = {
             .from('stories')
             .createSignedUrl(story.media_url, 3600);
 
+          // 🔍 AQUÍ ESTÁ LA CLAVE: Verificamos si el usuario actual ya le dio like
+          const likesList = story.story_likes || [];
+          const isLikedByMe = likesList.some((l: any) => l.user_id === user.id);
+
           return {
             ...story,
             media_url: signedData?.signedUrl || story.media_url,
+            is_liked_by_me: isLikedByMe, // 👈 Inyectamos el booleano exacto
           };
         } catch {
           return story;
@@ -103,9 +114,6 @@ export const storiesApi = {
     return storiesWithSignedUrls;
   },
 
-  /**
-   * 3. Registra vista de una historia.
-   */
   async markAsViewed(storyId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
@@ -118,52 +126,60 @@ export const storiesApi = {
     return true;
   },
 
-  /**
-   * 4. Alterna Like/Reacción.
-   */
-    async toggleLike(storyId: string, reaction: string = '❤️') {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+  // 💖 TOGGLE LIKE CORREGIDO Y BLINDADO
+  async toggleLike(storyId: string, reaction: string = '❤️') {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
 
-        // 1. Consultar si ya existe el like
-        const { data: existingLike } = await supabase
-            .from('story_likes')
-            .select('id')
-            .eq('story_id', storyId)
-            .eq('user_id', user.id)
-            .maybeSingle();
+    // 1. Validar si ya existe el like usando las columnas reales de la tabla
+    const { data: existingLike, error: fetchError } = await supabase
+        .from('story_likes')
+        .select('story_id, user_id')
+        .eq('story_id', storyId)
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-        if (existingLike) {
-            // 2. Si ya existe, lo eliminamos (Quitar me gusta)
-            const { error } = await supabase
+    if (fetchError) {
+        console.error("Error buscando like previo:", fetchError);
+        throw fetchError;
+    }
+
+    if (existingLike) {
+        // 2. Si ya existe, lo borramos (Unlike)
+        const { error: deleteError } = await supabase
             .from('story_likes')
             .delete()
             .eq('story_id', storyId)
             .eq('user_id', user.id);
 
-            if (error) throw error;
-            return { action: 'unliked' };
-        } else {
-            // 3. Si no existe, usamos UPSERT con ignoreDuplicates para prevenir el error 23505
-            const { error } = await supabase
-            .from('story_likes')
-            .upsert(
-                {
-                story_id: storyId,
-                user_id: user.id,
-                reaction: reaction,
-                },
-                { onConflict: 'story_id, user_id', ignoreDuplicates: true }
-            );
+        if (deleteError) {
+            console.error("Error al quitar like:", deleteError);
+            throw deleteError;
+        }
+        return { action: 'unliked' };
+} else {
+    // 3. Si no existe, lo insertamos (Like)
+    const { error: insertError } = await supabase
+        .from('story_likes')
+        .insert({
+            story_id: storyId,
+            user_id: user.id,
+            reaction: reaction,
+        });
 
-            if (error) throw error;
+    if (insertError) {
+        // 🛡️ Si otra llamada concurrente ya insertó el mismo like (condición de carrera),
+        // no es un error real: el resultado final deseado (like existente) ya se cumplió.
+        if (insertError.code === '23505') {
             return { action: 'liked' };
         }
-    },
+        console.error("Error al insertar like:", insertError);
+        throw insertError;
+    }
+    return { action: 'liked' };
+}
+  },
 
-  /**
-   * 5. Obtiene el Archivo Personal.
-   */
   async getMyArchive() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
@@ -180,7 +196,6 @@ export const storiesApi = {
 
     if (error) throw error;
 
-    // Firmar URLs para el archivo
     const archiveWithSignedUrls = await Promise.all(
       (data || []).map(async (story) => {
         try {
@@ -200,36 +215,37 @@ export const storiesApi = {
 
     return archiveWithSignedUrls;
   },
+
   async markAsSeen(storyId: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  // Insertar la vista ignorando si ya la había visto previamente
-  const { error } = await supabase
-    .from('story_views')
-    .upsert(
-      {
-        story_id: storyId,
-        viewer_id: user.id,
-      },
-      { onConflict: 'story_id, viewer_id', ignoreDuplicates: true }
-    );
+    const { error } = await supabase
+      .from('story_views')
+      .upsert(
+        {
+          story_id: storyId,
+          viewer_id: user.id,
+        },
+        { onConflict: 'story_id, viewer_id', ignoreDuplicates: true }
+      );
 
-  if (error) {
-    console.warn("Error registrando vista de historia:", error);
-  }
-},
-async deleteStory(storyId: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+    if (error) {
+      console.warn("Error registrando vista de historia:", error);
+    }
+  },
 
-  const { error } = await supabase
-    .from('stories')
-    .delete()
-    .eq('id', storyId)
-    .eq('user_id', user.id); // Seguridad para asegurar que es tuya
+  async deleteStory(storyId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  if (error) throw error;
-  return true;
-},
+    const { error } = await supabase
+      .from('stories')
+      .delete()
+      .eq('id', storyId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return true;
+  },
 };

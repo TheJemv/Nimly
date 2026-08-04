@@ -8,6 +8,8 @@ import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, Touchabl
 const { width, height } = Dimensions.get('window');
 
 export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine }: { filePath: string, friendPublicKey: string, isViewOnce: boolean, isMine: boolean }) {
+    const cachedValid = vaultRAMCache[filePath] && vaultRAMCache[filePath].startsWith('data:image');
+
     const [imageUri, setImageUri] = useState<string | null>(vaultRAMCache[filePath] || null);
     const [isLoading, setIsLoading] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
@@ -15,61 +17,73 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
 
-    // AUTO-DESCARGA PARA FOTOS NORMALES (solo si no vino ya del prefetch)
+    // AUTO-DESCARGA SEGURA PARA FOTOS NORMALES
     useEffect(() => {
-        if (!isViewOnce && !imageUri && !isLocked && filePath) {
-            downloadAndDecrypt(false);
-        }
+        let isMounted = true;
+
+        const autoLoad = async () => {
+            if (!isViewOnce && (!imageUri || cachedValid) && !isLocked && filePath && !isLoading) {
+                await downloadAndDecrypt(false, isMounted);
+            }
+        };
+
+        autoLoad();
+
+        return () => {
+            isMounted = false;
+        };
     }, [filePath, isViewOnce]);
 
-    const downloadAndDecrypt = async (triggerFullScreen = true) => {
+    const downloadAndDecrypt = async (triggerFullScreen = true, isMounted = true) => {
         if (wasConsumed || isLocked || isLoading) return;
-        if (vaultRAMCache[filePath] && vaultRAMCache[filePath] !== 'LOCKED_CAPSULE') {
-            setImageUri(vaultRAMCache[filePath]);
-            if (triggerFullScreen) setIsFullScreen(true);
-            return;
-        }
 
-        if (imageUri && imageUri !== 'LOCKED_CAPSULE') {
-            if (triggerFullScreen) setIsFullScreen(true);
+        // Verificar caché en RAM de nuevo
+        if (vaultRAMCache[filePath] && vaultRAMCache[filePath] !== 'LOCKED_CAPSULE') {
+            if (isMounted) {
+                setImageUri(vaultRAMCache[filePath]);
+                if (triggerFullScreen) setIsFullScreen(true);
+            }
             return;
         }
 
         try {
-            setIsLoading(true);
-            await new Promise(resolve => setTimeout(resolve, 80));
+            if (isMounted) setIsLoading(true);
+
             const { data: urlData, error: urlError } = await supabase.storage
                 .from('chat-media')
                 .createSignedUrl(filePath, 60);
 
             if (urlError || !urlData?.signedUrl) {
-                setIsLoading(false);
-                return;
+                throw new Error("No se pudo generar la URL firmada");
             }
 
             const response = await fetch(urlData.signedUrl);
             const encryptedText = await response.text();
-            await new Promise(resolve => setTimeout(resolve, 50));
+
             const base64Data = await vaultCrypto.decryptMessage(encryptedText.trim(), friendPublicKey);
 
             if (base64Data.startsWith("🔒")) {
                 vaultRAMCache[filePath] = 'LOCKED_CAPSULE';
-                setIsLocked(true);
-                setIsLoading(false);
+                if (isMounted) {
+                    setIsLocked(true);
+                    setIsLoading(false);
+                }
                 return;
             }
 
             const finalUri = `data:image/jpeg;base64,${base64Data}`;
             vaultRAMCache[filePath] = finalUri;
-            setImageUri(finalUri);
 
-            if (triggerFullScreen) {
-                setIsFullScreen(true);
+            if (isMounted) {
+                setImageUri(finalUri);
+                if (triggerFullScreen) {
+                    setIsFullScreen(true);
+                }
             }
         } catch (e) {
             console.error("Error descifrando multimedia:", e);
         } finally {
-            setIsLoading(false);
+            if (isMounted) setIsLoading(false);
         }
     };
 
@@ -114,29 +128,37 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         return (
             <>
                 <TouchableOpacity
-                    onPress={() => downloadAndDecrypt(true)}
+                    onPress={() => {
+                        if (imageUri) {
+                            setIsFullScreen(true);
+                        } else {
+                            downloadAndDecrypt(true);
+                        }
+                    }}
                     style={styles.standardImageContainer}
                     disabled={isLoading}
                 >
                     {imageUri ? (
-                        <Image source={{ uri: imageUri }} style={styles.imageMini} />
+                        <Image source={{ uri: imageUri }} style={styles.imageMini} resizeMode="cover" />
                     ) : (
                         <View style={styles.placeholder}>
                             {isLoading ? (
                                 <>
-                                    <ActivityIndicator color={getThemeColor('tint')} size="large" />
-                                    <Text style={{ color: '#aaa', marginTop: 10, fontSize: 12, fontWeight: '500' }}>
-                                        Decrypting secure image...
+                                    <ActivityIndicator color={getThemeColor('tint')} size="small" />
+                                    <Text style={{ color: '#aaa', marginTop: 6, fontSize: 11, fontWeight: '500' }}>
+                                        Unlocking...
                                     </Text>
                                 </>
                             ) : (
-                                <SymbolView name="photo.fill" size={30} tintColor="#666" />
+                                <TouchableOpacity onPress={() => downloadAndDecrypt(false)} style={styles.retryTouch}>
+                                    <SymbolView name="arrow.clockwise" size={24} tintColor="#aaa" />
+                                    <Text style={{ color: '#aaa', marginTop: 4, fontSize: 10 }}>Tap to Load</Text>
+                                </TouchableOpacity>
                             )}
                         </View>
                     )}
                 </TouchableOpacity>
 
-                {/* 👇 MODAL AGREGADO PARA QUE LA IMAGEN NORMAL SÍ SE VEA EN PANTALLA COMPLETA */}
                 <Modal visible={isFullScreen} transparent={false} animationType="fade">
                     <View style={styles.fullScreenContainer}>
                         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsFullScreen(false)}>
@@ -193,6 +215,7 @@ const styles = StyleSheet.create({
     standardImageContainer: { width: 200, height: 250, borderRadius: 15, overflow: 'hidden', backgroundColor: '#1c1c1e' },
     imageMini: { width: '100%', height: '100%' },
     placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    retryTouch: { justifyContent: 'center', alignItems: 'center' },
     senderVO: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     senderVOText: { color: '#fff', fontSize: 14, opacity: 0.8 },
     receiverVOContainer: {

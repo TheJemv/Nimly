@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: 20,
     },
-    headerTitle: { fontSize: 34, fontWeight: '800', color: '#FFF', letterSpacing: -1, marginBottom: 15 },
+    headerTitle: { fontSize: 34, fontWeight: '800', color: getThemeColor("text"), letterSpacing: -1, marginBottom: 15 },
     searchBarGlass: { height: 44, borderRadius: 12, overflow: 'hidden' },
     searchInner: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
     input: { flex: 1, marginLeft: 8, fontSize: 17, color: '#FFF' },

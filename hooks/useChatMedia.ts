@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto } from '@/utils/crypto';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator'; // 👈 1. Importa esto
 import { useState } from 'react';
 
 export function useChatMedia(chatId: string, currentUserId: string) {
@@ -15,27 +16,44 @@ export function useChatMedia(chatId: string, currentUserId: string) {
         try {
             setIsUploading(true);
 
-            // 1. Convertir a Base64 puro
-            const base64 = await FileSystem.readAsStringAsync(imageUri, {
+            let fileUri = imageUri;
+
+            // 👈 2. COMPRESIÓN PREVIA (Solo si es imagen): Reduce drásticamente el peso del Base64 resultante
+// 2. COMPRESIÓN PREVIA AGRESIVA (Estándar WhatsApp/Telegram)
+            if (type === 'image' || type === 'image-view-once') {
+                try {
+                    const manipResult = await ImageManipulator.manipulateAsync(
+                        imageUri,
+                        [{ resize: { width: 800 } }], // 👈 Bajamos de 1080 a 800 (suficiente para verse perfecto en móvil)
+                        { compress: 0.4, format: ImageManipulator.SaveFormat.JPEG } // 👈 Bajamos de 0.7 a 0.4
+                    );
+                    fileUri = manipResult.uri;
+                } catch (manipError) {
+                    console.warn("No se pudo comprimir la imagen para E2EE, usando original:", manipError);
+                }
+            }
+
+            // 3. Convertir la imagen (ya comprimida) a Base64 puro
+            const base64 = await FileSystem.readAsStringAsync(fileUri, {
                 encoding: 'base64',
             });
 
-            // 2. Cifrado True E2EE
+            // 4. Cifrado True E2EE (Aquí se cifra el archivo comprimido)
             const encryptedText = await vaultCrypto.encryptMessage(base64, friendPublicKey);
             if (!encryptedText) throw new Error("Encryption failed");
 
-            // 3. SUBIDA DIRECTA Y LIMPIA (Sin FormData)
+            // 5. SUBIDA DIRECTA Y LIMPIA A SUPABASE
             const fileName = `${chatId}/${Date.now()}.vault`;
             const { error: storageError } = await supabase.storage
                 .from('chat-media')
                 .upload(fileName, encryptedText, {
-                    contentType: 'text/plain;charset=UTF-8', // Le decimos a Supabase que es texto puro
+                    contentType: 'text/plain;charset=UTF-8', // Sigue siendo texto cifrado seguro
                     upsert: false
                 });
 
             if (storageError) throw storageError;
 
-            // 4. Insertar en la tabla de mensajes
+            // 6. Insertar en la tabla de mensajes
             const { data: msgData, error: msgError } = await supabase
                 .from('messages')
                 .insert({
@@ -49,7 +67,7 @@ export function useChatMedia(chatId: string, currentUserId: string) {
 
             if (msgError) throw msgError;
 
-            // 5. Insertar los metadatos
+            // 7. Insertar los metadatos
             await supabase.from('messages_media').insert({
                 message_id: msgData.id,
                 file_path: fileName,
@@ -58,7 +76,7 @@ export function useChatMedia(chatId: string, currentUserId: string) {
                 is_viewed: false
             });
 
-            console.log(`Vault: ${type} E2EE sent perfectly without boundaries.`);
+            console.log(`Vault: ${type} E2EE sent perfectly and lightweight.`);
         } catch (e) {
             console.error("Media Service Error:", e);
         } finally {

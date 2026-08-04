@@ -38,11 +38,11 @@ export default function NotificationsScreen() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // Actualizamos todas las notificaciones no leídas del usuario
             const { error } = await supabase
                 .from('notifications')
                 .update({ is_read: true })
                 .eq('user_id', user.id)
+                .neq('type', 'message')
                 .eq('is_read', false);
 
             if (error) throw error;
@@ -64,6 +64,7 @@ export default function NotificationsScreen() {
                 .from('notifications')
                 .select('*, actor:profiles!actor_id(username, avatar_config)')
                 .eq('user_id', user.id)
+                .neq('type', 'message')
                 .order('created_at', { ascending: false })
                 .range(from, to);
 
@@ -72,13 +73,9 @@ export default function NotificationsScreen() {
             const newNotifs = data || [];
 
             if (isRefresh) {
-                // Al refrescar o cargar por primera vez, marcamos todo como leído localmente
-                // para que el punto rojo desaparezca de inmediato en la UI
                 const readNotifs = newNotifs.map(n => ({ ...n, is_read: true }));
                 setNotifications(readNotifs);
                 setHasMore(newNotifs.length === PAGE_SIZE);
-
-                // Disparamos la actualización en la base de datos
                 markAllAsSeen();
             } else {
                 setNotifications(prev => {
@@ -97,36 +94,51 @@ export default function NotificationsScreen() {
         }
     };
 
-    // 3. REALTIME (Corregido para evitar el error de suscripción)
+    // 3. REALTIME (Corregido con ID único para evitar choques de caché)
     useEffect(() => {
         fetchNotifications(0, true);
 
+        let isMounted = true;
+
         const initRealtime = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user || !isMounted) return;
 
-            if (channelRef.current) supabase.removeChannel(channelRef.current);
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+            }
 
-            const channelName = `notifs_v3_${user.id}`; // Cambiamos nombre para forzar limpieza
+            // 🛡️ TRUCO: Nombre de canal único con timestamp para evitar colisiones en memoria
+            const uniqueChannelName = `notifs_v4_${user.id}-${Date.now()}`;
 
-            const channel = supabase.channel(channelName)
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'notifications',
-                    filter: `user_id=eq.${user.id}`
-                }, async (payload) => {
-                    const { data: actor } = await supabase
-                        .from('profiles')
-                        .select('username, avatar_config')
-                        .eq('id', payload.new.actor_id)
-                        .single();
+            const channel = supabase.channel(uniqueChannelName)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    async (payload) => {
+                        if (payload.new.type === 'message') return;
 
-                    // Las notificaciones nuevas que lleguen por tiempo real
-                    // las dejamos como is_read: false para que el usuario las vea
-                    setNotifications(prev => [{ ...payload.new, actor }, ...prev]);
-                })
-                .subscribe();
+                        const { data: actor } = await supabase
+                            .from('profiles')
+                            .select('username, avatar_config')
+                            .eq('id', payload.new.actor_id)
+                            .single();
+
+                        if (isMounted) {
+                            setNotifications(prev => [{ ...payload.new, actor }, ...prev]);
+                        }
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Canal de notificaciones conectado:", uniqueChannelName);
+                    }
+                });
 
             channelRef.current = channel;
         };
@@ -134,7 +146,10 @@ export default function NotificationsScreen() {
         initRealtime();
 
         return () => {
-            if (channelRef.current) supabase.removeChannel(channelRef.current);
+            isMounted = false;
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+            }
         };
     }, []);
 
@@ -195,7 +210,6 @@ export default function NotificationsScreen() {
                     <Text style={styles.time}>{time}</Text>
                 </View>
 
-                {/* El punto de "no leído" solo aparecerá para las que lleguen mientras estás en la pantalla */}
                 {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: tintColor }]} />}
             </TouchableOpacity>
         );

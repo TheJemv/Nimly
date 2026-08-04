@@ -171,11 +171,15 @@ export const toggleLike = async (postId: string) => {
         .maybeSingle();
 
     if (!existing) {
-        await supabase.from('likes').insert({
+        // Si no existe, lo agregamos (Dar Like)
+        const { error } = await supabase.from('likes').insert({
             post_id: postId,
             user_id: user.id
         });
+        if (error) throw error;
     } else {
-        //  await supabase.from('likes').delete().eq('id', existing.id);
+        // Si ya existe, lo eliminamos (Quitar Like) 👇
+        const { error } = await supabase.from('likes').delete().eq('id', existing.id);
+        if (error) throw error;
     }
 };

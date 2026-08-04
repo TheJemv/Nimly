@@ -22,7 +22,7 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { UserAvatar } from "./UserAvatar";
+import UserAvatar from "./UserAvatar";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -51,7 +51,6 @@ export default function StoryViewerModal({
 
     const [currentUserIdx, setCurrentUserIdx] = useState(0);
     const [currentStoryIdx, setCurrentStoryIdx] = useState(0);
-    const [isLiked, setIsLiked] = useState(false);
     const [localStories, setLocalStories] = useState<Story[]>([]);
 
     const [isViewsSheetOpen, setIsViewsSheetOpen] = useState(false);
@@ -61,14 +60,22 @@ export default function StoryViewerModal({
 
     // Sincronizar historias locales cuando cambia el grupo o usuario
     useEffect(() => {
-        if (currentGroup) {
-            setLocalStories(currentGroup.stories || []);
-        }
+        if (currentGroup) setLocalStories(currentGroup.stories || []);
     }, [currentUserIdx, storyGroups]);
 
     // Historia actual basada en el estado local inmediato
     const currentStory = localStories[currentStoryIdx] || currentGroup?.stories[currentStoryIdx];
     const isVideo = currentStory?.media_type === "video";
+
+    // 🔍 Verificamos si el usuario actual ya le dio like a esta historia de su lista de likes
+    const isLiked = useMemo(() => {
+        if (!currentStory || !currentGroup) return false;
+        // Buscamos si el usuario actual está en los likes de la historia
+        const likes = (currentStory as any).likes || [];
+        // O si tiene una propiedad directa
+        if (currentStory.is_liked_by_me !== undefined) return currentStory.is_liked_by_me;
+        return false;
+    }, [currentStory]);
 
     const videoPlayer = useVideoPlayer(
         isVideo ? currentStory?.media_url : null,
@@ -112,19 +119,15 @@ export default function StoryViewerModal({
         const targetUserId = currentGroup.user_id;
 
         try {
-            // 1. Borrar en Supabase
             await storiesApi.deleteStory(storyIdToDelete);
 
-            // 2. Notificar al padre para que limpie su estado global
             if (onStoryDeleted) {
                 onStoryDeleted(storyIdToDelete, targetUserId);
             }
 
-            // 3. Modificación limpia y local inmediata
             const remainingStories = localStories.filter((s) => s.id !== storyIdToDelete);
 
             if (remainingStories.length === 0) {
-                // Si ya no quedan historias de este usuario
                 if (currentUserIdx < storyGroups.length - 1) {
                     setCurrentUserIdx((prev) => prev + 1);
                     setCurrentStoryIdx(0);
@@ -165,6 +168,14 @@ export default function StoryViewerModal({
         onNext: handleNextStory,
         isEnabled: visible,
         isViewsSheetOpen,
+        onMarkAsSeen: () => {
+            if (currentStory && !currentStory.is_seen_by_me && !currentGroup.is_me) {
+                if (onStorySeen) {
+                    onStorySeen(currentStory.id, currentGroup.user_id);
+                }
+                storiesApi.markAsSeen(currentStory.id);
+            }
+        }
     });
 
     const sortedViewers = useMemo(() => {
@@ -191,17 +202,7 @@ export default function StoryViewerModal({
 
     useEffect(() => {
         if (!visible || !currentStory || !currentGroup) return;
-
         resetTimer();
-
-        if (!currentStory.is_seen_by_me && !currentGroup.is_me) {
-            if (onStorySeen) {
-                onStorySeen(currentStory.id, currentGroup.user_id);
-            }
-            storiesApi.markAsSeen(currentStory.id);
-        }
-
-        setIsLiked(currentStory.is_liked_by_me || false);
         setIsViewsSheetOpen(false);
         sheetAnim.setValue(SCREEN_HEIGHT);
     }, [currentUserIdx, currentStoryIdx, visible]);
@@ -246,28 +247,50 @@ export default function StoryViewerModal({
         onClose();
     };
 
+    const isLikingRef = useRef(false);
     const toggleLike = async () => {
-        if (!currentStory) return;
+        if (!currentStory || !currentGroup) return;
+        if (isLikingRef.current) return; // 👈 ya hay un toggle en curso, ignorar
+        isLikingRef.current = true;
 
-        const nextState = !isLiked;
-        setIsLiked(nextState);
+        const currentLikedState = (currentStory as any).is_liked_by_me || false;
+        const nextState = !currentLikedState;
 
-        if (onStoryLiked && currentGroup) {
+        setLocalStories(prev =>
+            prev.map(s =>
+                s.id === currentStory.id ? { ...s, is_liked_by_me: nextState } : s
+            )
+        );
+
+        if (onStoryLiked) {
             onStoryLiked(currentStory.id, currentGroup.user_id, nextState);
         }
 
         try {
-            await storiesApi.toggleLike(currentStory.id, "❤️");
+            const res = await storiesApi.toggleLike(currentStory.id, "❤️");
+            if (res && res.action) {
+                const confirmedLiked = res.action === 'liked';
+                setLocalStories(prev =>
+                    prev.map(s =>
+                        s.id === currentStory.id ? { ...s, is_liked_by_me: confirmedLiked } : s
+                    )
+                );
+            }
         } catch (err) {
             console.warn("Error enviando reaccion:", err);
-            setIsLiked(!nextState);
-            if (onStoryLiked && currentGroup) {
-                onStoryLiked(currentStory.id, currentGroup.user_id, !nextState);
-            }
+            setLocalStories(prev =>
+                prev.map(s =>
+                    s.id === currentStory.id ? { ...s, is_liked_by_me: currentLikedState } : s
+                )
+            );
+        } finally {
+            isLikingRef.current = false; // 👈 libera el guard pase lo que pase
         }
     };
 
     if (!visible || !currentGroup || !currentStory) return null;
+
+    const currentLikedStatus = (currentStory as any).is_liked_by_me || false;
 
     return (
         <Modal
@@ -396,8 +419,8 @@ export default function StoryViewerModal({
                                     activeOpacity={0.8}
                                 >
                                     <SymbolView
-                                        name={isLiked ? "heart.fill" : "heart"}
-                                        tintColor={isLiked ? getThemeColor("tint") : "#636366"}
+                                        name={currentLikedStatus ? "heart.fill" : "heart"}
+                                        tintColor={currentLikedStatus ? getThemeColor("tint") : "#636366"}
                                         size={22}
                                     />
                                 </TouchableOpacity>
@@ -442,29 +465,32 @@ export default function StoryViewerModal({
 
                             <FlatList
                                 data={sortedViewers}
-                                keyExtractor={(item) => item.user_id}
+                                keyExtractor={(item, index) => item.viewer_id || item.user_id ? `${item.viewer_id || item.user_id}-${index}` : `viewer-${index}`}
                                 contentContainerStyle={styles.listContent}
-                                renderItem={({ item }) => (
-                                    <View style={styles.viewerRow}>
-                                        <View style={styles.viewerLeft}>
-                                            <View style={styles.viewerAvatar}>
-                                                <UserAvatar
-                                                    avatar_url={item.avatar_url}
-                                                    avatar_config={item.avatar_config}
-                                                />
-                                            </View>
-                                            <Text style={styles.viewerUsername}>@{item.username}</Text>
-                                        </View>
+                                renderItem={({ item }) => {
+                                    const viewerProfile = item.profiles || item;
 
-                                        {item.has_liked && (
-                                            <SymbolView
-                                                name="heart.fill"
-                                                size={18}
-                                                tintColor={getThemeColor("tint")}
-                                            />
-                                        )}
-                                    </View>
-                                )}
+                                    return (
+                                        <View style={styles.viewerRow}>
+                                            <View style={styles.viewerLeft}>
+                                                <View style={styles.viewerAvatar}>
+                                                    <UserAvatar
+                                                        avatar_url={viewerProfile.avatar_url}
+                                                        avatar_config={viewerProfile.avatar_config}
+                                                        size={40}
+                                                    />
+                                                </View>
+                                                <Text style={styles.viewerUsername}>
+                                                    @{viewerProfile.username || item.username || "user"}
+                                                </Text>
+                                            </View>
+
+                                            {item.has_liked && (
+                                                <SymbolView name="heart.fill" size={18} tintColor={getThemeColor("tint")} />
+                                            )}
+                                        </View>
+                                    );
+                                }}
                                 ListEmptyComponent={
                                     <View style={styles.emptyContainer}>
                                         <SymbolView

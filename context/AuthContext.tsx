@@ -21,38 +21,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // --- LÓGICA DE SEGURIDAD: SESIÓN ÚNICA (THE HIGHLANDER RULE) ---
     const setupSecuritySync = async (userId: string) => {
-        const myDeviceId = `${Device.deviceName}-${Device.modelId}-${Device.osInternalBuildId}`;
-        await supabase
-            .from('profiles')
-            .update({ current_device_id: myDeviceId })
-            .eq('id', userId);
+        try {
+            const myDeviceId = `${Device.deviceName}-${Device.modelId}-${Device.osInternalBuildId}`;
+            await supabase
+                .from('profiles')
+                .update({ current_device_id: myDeviceId })
+                .eq('id', userId);
 
-        const channelName = `security_check_${userId}`;
-        await supabase.removeChannel(supabase.channel(channelName));
+            const channelName = `security_check_${userId}`;
+            await supabase.removeChannel(supabase.channel(channelName));
 
-        const securityChannel = supabase
-            .channel(channelName)
-            .on('postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'profiles',
-                    filter: `id=eq.${userId}`
-                },
-                (payload) => {
-                    const latestDeviceId = payload.new.current_device_id;
-                    if (latestDeviceId && latestDeviceId !== myDeviceId) {
-                        handleRemoteLogout();
+            const securityChannel = supabase
+                .channel(channelName)
+                .on('postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'profiles',
+                        filter: `id=eq.${userId}`
+                    },
+                    (payload) => {
+                        const latestDeviceId = payload.new.current_device_id;
+                        if (latestDeviceId && latestDeviceId !== myDeviceId) {
+                            handleRemoteLogout();
+                        }
                     }
-                }
-            )
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log("Vault Security: Monitoring concurrent sessions...");
-                }
-            });
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Vault Security: Monitoring concurrent sessions...");
+                    }
+                });
 
-        return securityChannel;
+            return securityChannel;
+        } catch (e) {
+            console.error("Security sync failed silently:", e);
+            return null;
+        }
     };
 
     const handleRemoteLogout = async () => {
@@ -78,20 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (storedOwnerId && storedOwnerId !== currentUserId) {
                 console.log("Vault: Account switch detected. Destroying foreign keys...");
                 await SecureStore.deleteItemAsync('nymly_private_key');
-                existingPrivateKey = null; // Forzamos la recreación
+                existingPrivateKey = null;
             }
 
-            // 3. Si no hay llave (o la acabamos de destruir), creamos una nueva
+            // 3. Si no hay llave, creamos una nueva
             if (!existingPrivateKey) {
                 console.log("Vault: Missing identity for this user. Generating True E2EE...");
-                await SecureStore.deleteItemAsync('nymly_vault_seed'); // Limpiamos legacy
+                await SecureStore.deleteItemAsync('nymly_vault_seed');
                 await vaultIdentity.generateIdentity();
-
-                // Le ponemos la "etiqueta con nombre" a la nueva llave
                 await SecureStore.setItemAsync('nymly_user_id', currentUserId);
             } else {
                 console.log("Vault: True E2EE Local identity confirmed for current user.");
-                // Por si acaso venimos de una versión vieja que no tenía el ID guardado
                 await SecureStore.setItemAsync('nymly_user_id', currentUserId);
             }
         } catch (error) {
@@ -114,60 +116,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const checkSession = async () => {
             try {
+                // ÚLTIMA BARRERA DE TIMEOUT: Solo para la red de Supabase Auth
                 const { data: { session: currentSession } } = await withTimeout(
                     supabase.auth.getSession(),
-                    8000
+                    10000 // 10 segundos holgados para evitar falsos positivos
                 );
+
                 if (!isMounted) return;
                 setSession(currentSession);
+                setIsLoading(false); // 👈 Desbloqueamos la UI de inmediato
 
+                // Las tareas pesadas de SecureStore y Realtime corren en background sin bloquear
                 if (currentSession) {
-                    // Nunca dejamos que esto bloquee el loading screen
-                    try {
-                        await withTimeout(setupVaultIdentity(currentSession), 8000);
-                    } catch (e) {
-                        console.error("Vault identity setup failed (non-blocking):", e);
-                    }
-
-                    try {
-                        securitySubscription = await withTimeout(
-                            setupSecuritySync(currentSession.user.id),
-                            8000
-                        );
-                    } catch (e) {
-                        console.error("Security sync setup failed (non-blocking):", e);
-                    }
+                    setupVaultIdentity(currentSession);
+                    securitySubscription = await setupSecuritySync(currentSession.user.id);
                 }
             } catch (e) {
                 console.error("Session check failed:", e);
-                if (isMounted) setSession(null);
-            } finally {
-                if (isMounted) setIsLoading(false); // 👈 SIEMPRE se ejecuta, pase lo que pase
+                if (isMounted) {
+                    setSession(null);
+                    setIsLoading(false);
+                }
             }
         };
 
         checkSession();
 
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+            if (!isMounted) return;
             try {
                 setSession(currentSession);
 
                 if (currentSession) {
-                    try {
-                        await withTimeout(setupVaultIdentity(currentSession), 8000);
-                    } catch (e) {
-                        console.error("Vault identity setup failed (non-blocking):", e);
-                    }
+                    setupVaultIdentity(currentSession);
 
                     if (!securitySubscription) {
-                        try {
-                            securitySubscription = await withTimeout(
-                                setupSecuritySync(currentSession.user.id),
-                                8000
-                            );
-                        } catch (e) {
-                            console.error("Security sync setup failed (non-blocking):", e);
-                        }
+                        securitySubscription = await setupSecuritySync(currentSession.user.id);
                     }
                 } else if (event === 'SIGNED_OUT') {
                     console.log("Vault: User signed out. Purging ALL local security keys...");
@@ -187,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (e) {
                 console.error("Auth state change handler failed:", e);
             } finally {
-                if (isMounted) setIsLoading(false); // 👈 SIEMPRE se ejecuta aquí también
+                if (isMounted) setIsLoading(false);
             }
         });
 

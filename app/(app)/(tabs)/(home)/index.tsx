@@ -73,8 +73,7 @@ export default function HomeScreen() {
                headerTitle: "Nimly",
                headerTitleAlign: "left",
                headerStyle: { backgroundColor: "transparent" },
-               headerTintColor: "#fff",
-               headerTitleStyle: { color: "#fff", fontWeight: "700", fontSize: 22 },
+               headerTitleStyle: { color: getThemeColor("text"), fontWeight: "700", fontSize: 22 },
                headerLeft: () => (
                   <TouchableOpacity onPress={() => router.push("/(app)/new-post")}>
                      <SymbolView name="plus" size={24} tintColor="#fff" />

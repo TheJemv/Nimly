@@ -1,7 +1,8 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { Colors } from "@/constants/theme";
+import { supabase } from "@/lib/supabase";
 import { createAvatar } from "@dicebear/core";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Image,
     ScrollView,
@@ -19,7 +20,7 @@ export interface StoryGroup {
     user_id: string;
     username: string;
     avatar_url: string | null;
-    avatar_config?: any; // 👈 Agregamos el avatar_config
+    avatar_config?: any;
     is_me: boolean;
     stories: {
         id: string;
@@ -37,10 +38,11 @@ interface StoriesDailyProps {
     storyGroups: StoryGroup[];
     currentUserId: string | null;
     onStorySeen: (storyId: string, userId: string) => void;
+    onStoryLiked?: (storyId: string, userId: string, newLikedState: boolean) => void; // 👈
+    onStoryDeleted?: (storyId: string, userId: string) => void; // 👈
     onSendStory: (uri: string, mediaType: "image" | "video") => Promise<void>;
 }
 
-// 🎨 COMPONENTE HELPER PARA RENDERIZAR EL AVATAR UNIFICADO
 function StoryAvatar({ group }: { group: StoryGroup }) {
     const avatarSvg = useMemo(() => {
         const config = group.avatar_config;
@@ -76,20 +78,61 @@ function StoryAvatar({ group }: { group: StoryGroup }) {
 
 export default function StoriesDaily({
     storyGroups,
+    currentUserId,
     onStorySeen,
+    onStoryLiked,      // 👈
+    onStoryDeleted,    // 👈
     onSendStory,
 }: StoriesDailyProps) {
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [myProfileConfig, setMyProfileConfig] = useState<any>(null);
+
+    // 🔍 Consultamos el perfil del propio usuario para inyectar su avatar_config en "Tu historia"
+    useEffect(() => {
+        const fetchMyProfile = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase
+                .from('profiles')
+                .select('avatar_config, avatar_url')
+                .eq('id', user.id)
+                .single();
+            if (data) {
+                setMyProfileConfig(data);
+            }
+        };
+        fetchMyProfile();
+    }, []);
 
     const sortedStories = useMemo(() => {
         if (selectedUserId !== null) {
             return storyGroups;
         }
 
-        const myGroup = storyGroups.find((item) => item.is_me);
+        let myGroup = storyGroups.find((item) => item.is_me || item.user_id === currentUserId);
+
+        if (myGroup) {
+            myGroup = {
+                ...myGroup,
+                username: "Tu historia",
+                is_me: true,
+                avatar_config: myGroup.avatar_config || myProfileConfig?.avatar_config,
+                avatar_url: myGroup.avatar_url || myProfileConfig?.avatar_url,
+            };
+        } else {
+            myGroup = {
+                user_id: currentUserId || "me",
+                username: "Tu historia",
+                avatar_url: myProfileConfig?.avatar_url || null,
+                avatar_config: myProfileConfig?.avatar_config || null,
+                is_me: true,
+                stories: []
+            };
+        }
+
         const friendsGroups = storyGroups.filter(
-            (item) => !item.is_me && item.stories.length > 0
+            (item) => !item.is_me && item.user_id !== currentUserId && item.stories.length > 0
         );
 
         const getLatestStoryTime = (group: StoryGroup) => {
@@ -111,8 +154,8 @@ export default function StoriesDaily({
             return getLatestStoryTime(b) - getLatestStoryTime(a);
         });
 
-        return myGroup ? [myGroup, ...friendsGroups] : friendsGroups;
-    }, [storyGroups, selectedUserId]);
+        return [myGroup, ...friendsGroups];
+    }, [storyGroups, selectedUserId, currentUserId, myProfileConfig]);
 
     const handleAvatarPress = (group: StoryGroup) => {
         if (group.is_me && group.stories.length === 0) {
@@ -152,7 +195,6 @@ export default function StoriesDaily({
                         >
                             <View style={[styles.avatarRing, ringStyle]}>
                                 <View style={styles.avatarInner}>
-                                    {/* RENDERIZADO DEL AVATAR CON DICEBEAR O IMAGE */}
                                     <StoryAvatar group={group} />
                                 </View>
 
@@ -182,6 +224,8 @@ export default function StoriesDaily({
                     storyGroups={sortedStories}
                     onClose={() => setSelectedUserId(null)}
                     onStorySeen={onStorySeen}
+                    onStoryLiked={onStoryLiked}     // 👈
+                    onStoryDeleted={onStoryDeleted} // 👈
                 />
             )}
 
