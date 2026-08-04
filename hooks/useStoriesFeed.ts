@@ -1,5 +1,6 @@
 import { storiesApi, Story } from "@/api/stories";
 import { supabase } from "@/lib/supabase";
+import { ViewerProfile } from "@/types/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 
@@ -61,9 +62,14 @@ export function useStoriesFeed() {
             const isSeenByMe = isMe || views.some((v) => v.viewer_id === userId);
 
             // 🔗 Cruzamos viewers con likes para saber quién de los que vieron también dio like
-            const viewersWithLikeInfo = views.map((v: any) => ({
-                ...v,
+            const viewersWithLikeInfo: ViewerProfile[] = views.map((v: any) => ({
+                user_id: v.viewer_id,
+                username: v.profiles?.username || "user",
+                avatar_url: v.profiles?.avatar_url || null,
+                avatar_config: v.profiles?.avatar_config,
                 has_liked: likedUserIds.has(v.viewer_id),
+                reaction: likes.find((l: any) => l.user_id === v.viewer_id)?.reaction,
+                viewed_at: v.viewed_at,
             }));
 
 

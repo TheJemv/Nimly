@@ -19,7 +19,6 @@ export function useChatMedia(chatId: string, currentUserId: string) {
             let fileUri = imageUri;
 
             // 👈 2. COMPRESIÓN PREVIA (Solo si es imagen): Reduce drásticamente el peso del Base64 resultante
-// 2. COMPRESIÓN PREVIA AGRESIVA (Estándar WhatsApp/Telegram)
             if (type === 'image' || type === 'image-view-once') {
                 try {
                     const manipResult = await ImageManipulator.manipulateAsync(

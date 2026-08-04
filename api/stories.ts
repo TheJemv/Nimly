@@ -157,27 +157,27 @@ export const storiesApi = {
             throw deleteError;
         }
         return { action: 'unliked' };
-} else {
-    // 3. Si no existe, lo insertamos (Like)
-    const { error: insertError } = await supabase
-        .from('story_likes')
-        .insert({
-            story_id: storyId,
-            user_id: user.id,
-            reaction: reaction,
-        });
+    } else {
+        // 3. Si no existe, lo insertamos (Like)
+        const { error: insertError } = await supabase
+            .from('story_likes')
+            .insert({
+                story_id: storyId,
+                user_id: user.id,
+                reaction: reaction,
+            });
 
-    if (insertError) {
-        // 🛡️ Si otra llamada concurrente ya insertó el mismo like (condición de carrera),
-        // no es un error real: el resultado final deseado (like existente) ya se cumplió.
-        if (insertError.code === '23505') {
-            return { action: 'liked' };
+        if (insertError) {
+            // 🛡️ Si otra llamada concurrente ya insertó el mismo like (condición de carrera),
+            // no es un error real: el resultado final deseado (like existente) ya se cumplió.
+            if (insertError.code === '23505') {
+                return { action: 'liked' };
+            }
+            console.error("Error al insertar like:", insertError);
+            throw insertError;
         }
-        console.error("Error al insertar like:", insertError);
-        throw insertError;
+        return { action: 'liked' };
     }
-    return { action: 'liked' };
-}
   },
 
   async getMyArchive() {

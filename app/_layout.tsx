@@ -17,7 +17,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 function RootLayoutNav() {
-    const { isLoading, user } = useAuth(); // Extraemos 'user' para mayor control en la validación
+    const { isLoading } = useAuth(); // Extraemos 'user' para mayor control en la validación
     const router = useRouter();
     const bg = getThemeColor('background');
     const accent = getThemeColor('tint');

@@ -1,13 +1,13 @@
 import { ThemedText } from '@/components/themed-text';
 import { getThemeColor } from '@/constants/theme';
 import { BottomSheetBackdrop, BottomSheetModal } from '@gorhom/bottom-sheet';
-import { SymbolView } from 'expo-symbols';
+import { SFSymbol, SymbolView } from 'expo-symbols';
 import React, { forwardRef, useCallback } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface Option {
     label: string;
-    icon: string;
+    icon: SFSymbol;
     onPress: () => void;
     isDestructive?: boolean;
 }

@@ -80,7 +80,7 @@ const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId, postOwnerId
     const renderComment = useCallback(({ item }: { item: any }) => {
         const config = item.user?.avatar_config;
         const estilo = config ? ESTILOS_DICEBEAR.find(e => e.id === config.styleId) : ESTILOS_DICEBEAR[0];
-        const avatarSvg = config ? createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString() : null;
+        const avatarSvg = config ? createAvatar(estilo.collection as any, { ...config.options, radius: 50 }).toString() : null;
 
         return (
             <View style={styles.commentRow}>

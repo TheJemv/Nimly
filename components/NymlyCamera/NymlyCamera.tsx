@@ -19,7 +19,8 @@ import { runOnJS } from 'react-native-reanimated';
 
 import PermissionRequest from '@/components/PermissionRequest';
 import { getThemeColor } from '@/constants/theme';
-import CameraModeSelector, { CameraCaptureMode } from './CameraModeSelector';
+import CameraModeSelector, { CameraCaptureMode } from '../CameraModeSelector/CameraModeSelector';
+import { styles } from './NimlyCamera.styles';
 
 interface CapturedMedia {
     uri: string;
@@ -334,91 +335,3 @@ export default function NymlyCamera({
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    camera: { flex: 1, justifyContent: 'flex-end' },
-    fullCamera: { position: 'absolute', top: 0, width: '100%', height: '100%' },
-    closeBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10 },
-    zoomBadge: {
-        position: 'absolute',
-        alignSelf: 'center',
-        bottom: 200,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-        zIndex: 10,
-    },
-    zoomText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    bottomControls: {
-        paddingBottom: 45,
-        paddingTop: 15,
-        backgroundColor: 'rgba(0,0,0,0.35)',
-    },
-    shutterRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-    },
-    shutterOuter: {
-        width: 76,
-        height: 76,
-        borderRadius: 38,
-        borderWidth: 4,
-        borderColor: '#fff',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    shutterOuterVideo: { borderColor: '#DC143C' },
-    shutterOuterRecording: { borderColor: '#FF3B30' },
-    shutterInner: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: '#fff',
-    },
-    shutterInnerVideo: { backgroundColor: '#DC143C' },
-    shutterInnerRecording: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        backgroundColor: '#FF3B30',
-    },
-    sideBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-    previewContainer: { flex: 1, backgroundColor: '#000' },
-    previewMedia: { flex: 1, width: '100%', height: '100%' },
-    decisionPanel: {
-        position: 'absolute',
-        bottom: 40,
-        left: 20,
-        right: 20,
-        flexDirection: 'row',
-        borderRadius: 25,
-        overflow: 'hidden',
-    },
-    decisionBtn: { flex: 1, paddingVertical: 18, alignItems: 'center', gap: 8 },
-    decisionText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-    separator: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 15 },
-    simplePanel: {
-        position: 'absolute',
-        bottom: 40,
-        left: 20,
-        right: 20,
-        borderRadius: 25,
-        overflow: 'hidden',
-    },
-    simpleBtn: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 18,
-        gap: 10,
-    },
-});

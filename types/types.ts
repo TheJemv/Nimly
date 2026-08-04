@@ -92,3 +92,34 @@ export interface Message {
     // Quién envió el mensaje
     sender?: User;
 }
+
+export interface ViewerProfile {
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    avatar_config?: any;
+    has_liked?: boolean;
+    reaction?: string;
+    viewed_at?: string;
+}
+
+export interface Story {
+    id: string;
+    media_url: string;
+    media_type?: "image" | "video";
+    created_at: string;
+    is_seen_by_me?: boolean;
+    is_liked_by_me?: boolean;
+    views_count?: number;
+    is_view_once?: boolean;
+    viewers?: ViewerProfile[];
+}
+
+export interface StoryGroup {
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    avatar_config?: any;
+    is_me: boolean;
+    stories: Story[];
+}
