@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- Logo / Banner -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d0d0d,100:1a1a2e&height=200&section=header&text=Nimly&fontSize=80&fontColor=ffffff&fontAlignY=38&desc=Say%20anything.%20Be%20no%20one.&descAlignY=60&descSize=20&descColor=aaaaaa" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,100:DC143C&height=220&section=header&text=Nimly&fontSize=80&fontColor=F2E8D8&fontAlignY=38&desc=Say%20anything.%20Be%20no%20one.&descAlignY=60&descSize=20&descColor=8A8A8A" width="100%" />
 
 <br/>
 
@@ -115,6 +115,6 @@ MIT License — © 2026 TheJemv
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:1a1a2e,100:0d0d0d&height=120&section=footer" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:DC143C,100:000000&height=120&section=footer" width="100%" />
 
 </div>
