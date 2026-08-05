@@ -23,8 +23,7 @@
         "NSCameraUsageDescription": "Needed to capture secure photos for the vault.",
         "NSMicrophoneUsageDescription": "Needed for video recording within the vault.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "buildNumber": "10"
+      }
     },
     "plugins": [
       "expo-router",
