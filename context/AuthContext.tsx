@@ -8,7 +8,7 @@ import { useRouter, useSegments } from 'expo-router';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-const AuthContext = createContext<{ session: Session | null; isLoading: boolean }>({
+export const AuthContext = createContext<{ session: Session | null; isLoading: boolean }>({
     session: null,
     isLoading: true
 });

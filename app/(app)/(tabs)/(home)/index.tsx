@@ -1,7 +1,7 @@
 import { getFriendsPosts } from "@/api/posts";
 import BackgroundGlow from "@/components/background-glow";
-import CommentsSheet from "@/components/comments-sheet";
-import PostComponent from "@/components/post";
+import CommentsSheet from "@/components/CommentsSheet";
+import PostComponent from "@/components/PostComponent";
 import StoriesDaily from "@/components/StoriesDaily";
 import { getThemeColor } from "@/constants/theme";
 import { useStoriesFeed } from "@/hooks/useStoriesFeed";

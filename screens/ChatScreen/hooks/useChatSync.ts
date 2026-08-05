@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState } from "react";
 
 const PAGE_SIZE = 30;
-
 export function useChatSync(targetFriendId: string | undefined) {
     const [chatId, setChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<any[]>([]);
@@ -19,7 +18,6 @@ export function useChatSync(targetFriendId: string | undefined) {
         await chatApi.markAsRead(cId, targetFriendId);
     }, [targetFriendId]);
 
-    // 1. Inicialización de datos y chat
     useEffect(() => {
         let isMounted = true;
         const init = async () => {
@@ -53,7 +51,6 @@ export function useChatSync(targetFriendId: string | undefined) {
         return () => { isMounted = false; };
     }, [targetFriendId, markMessagesAsRead]);
 
-    // Función interna para paginación
     const fetchMessages = async (cId: string, offset: number) => {
         try {
             const { data, error } = await supabase
@@ -73,10 +70,8 @@ export function useChatSync(targetFriendId: string | undefined) {
         }
     };
 
-    // 2. Realtime exclusivo
     useEffect(() => {
         if (!chatId) return;
-
         const uniqueChannelId = `chat:${chatId}-${Date.now()}`;
         const channel = supabase.channel(uniqueChannelId)
             .on(

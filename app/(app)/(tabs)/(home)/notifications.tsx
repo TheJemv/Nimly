@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { formatRelativeTime } from '@/utils/dateFormatter';
 import { createAvatar } from '@dicebear/core';
 import { Stack } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { SFSymbol, SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -168,7 +168,7 @@ export default function NotificationsScreen() {
             const config = item.actor?.avatar_config;
             if (!config) return null;
             const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-            return createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString();
+            return createAvatar(estilo.collection as any, { ...config.options, radius: 50 }).toString();
         })();
 
         const ui = (() => {
@@ -199,7 +199,7 @@ export default function NotificationsScreen() {
                         {avatarSvg ? <SvgXml xml={avatarSvg} width="100%" height="100%" /> : <View style={styles.avatarPlaceholder} />}
                     </View>
                     <View style={[styles.typeBadge, { backgroundColor: ui.color }]}>
-                        <SymbolView name={ui.icon} size={10} tintColor="#FFF" />
+                        <SymbolView name={ui.icon as SFSymbol} size={10} tintColor="#FFF" />
                     </View>
                 </View>
 

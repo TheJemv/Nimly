@@ -1,17 +1,16 @@
 import { friendsApi } from "@/api/friends";
-import CommentsSheet from "@/components/comments-sheet"; // Asegúrate de que el nombre coincida
-import PostComponent from "@/components/post";
+import CommentsSheet from "@/components/CommentsSheet";
+import PostComponent from "@/components/PostComponent";
 import { ThemedText } from "@/components/themed-text";
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
+import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
-import { createAvatar } from "@dicebear/core";
-import { Host } from "@expo/ui/swift-ui"; // Necesario para el Sheet
+import { Host } from "@expo/ui/swift-ui";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
-import { SvgXml } from "react-native-svg";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -21,9 +20,8 @@ export default function ProfileScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Lógica para el Sheet de comentarios
+    const commentsRef = useRef<BottomSheetModal>(null);
     const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
-    const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
     const accent = getThemeColor('tint');
 
@@ -33,7 +31,7 @@ export default function ProfileScreen() {
 
     const handleOpenComments = (postId: string) => {
         setActiveCommentPostId(postId);
-        setIsCommentsOpen(true);
+        commentsRef.current?.present();
     };
 
     const loadProfileData = async (showLoading = true) => {
@@ -84,17 +82,6 @@ export default function ProfileScreen() {
         loadProfileData(false);
     };
 
-    const userAvatarSvg = useMemo(() => {
-        if (!profile?.avatar_config) return null;
-        const config = profile.avatar_config;
-        const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-        return createAvatar(estilo.collection, {
-            ...config.options,
-            radius: 100,
-            scale: 80,
-        }).toString();
-    }, [profile]);
-
     if (loading && !refreshing) {
         return (
             <View style={styles.center}>
@@ -131,11 +118,11 @@ export default function ProfileScreen() {
                 <View style={styles.topContainerMain}>
                     <View style={styles.topContainer}>
                         <TouchableOpacity onPress={openAvatarSelect} style={styles.avatarContainer}>
-                            {userAvatarSvg ? (
-                                <SvgXml xml={userAvatarSvg} width="88" height="88" />
-                            ) : (
-                                <View style={styles.avatarPlaceholder} />
-                            )}
+                            <UserAvatar
+                                avatar_url={profile?.avatar_url}
+                                avatar_config={profile?.avatar_config}
+                                size={88}
+                            />
                         </TouchableOpacity>
 
                         <View style={styles.statsRow}>
@@ -160,14 +147,12 @@ export default function ProfileScreen() {
                     </ThemedText>
                 </View>
 
-                {/* FEED DE MIS PROPIOS POSTS */}
                 <View style={styles.myFeed}>
                     {myPosts.map((post) => (
                         <PostComponent
                             post={post}
                             key={post.id}
                             onDelete={() => loadProfileData(false)}
-                            // AHORA SÍ: Pasamos la acción para abrir comentarios
                             onCommentPress={() => handleOpenComments(post.id)}
                         />
                     ))}
@@ -181,13 +166,11 @@ export default function ProfileScreen() {
                 </View>
             </ScrollView>
 
-            {/* EL NYMLYSHEET (COMMENTS) */}
             {activeCommentPostId && (
                 <Host>
                     <CommentsSheet
+                        ref={commentsRef}
                         postId={activeCommentPostId}
-                        isPresented={isCommentsOpen}
-                        setIsPresented={setIsCommentsOpen}
                         postOwnerId={profile?.id}
                     />
                 </Host>
@@ -208,11 +191,10 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.1)',
         backgroundColor: '#161616'
     },
-    avatarPlaceholder: { width: 88, height: 88, backgroundColor: '#222' },
     statsRow: { flex: 1, flexDirection: "row", justifyContent: "space-around" },
     statItem: { alignItems: "center" },
     statText: { fontSize: 12, fontWeight: "600", marginTop: 4, color: '#fff' },
-    bioText: { marginTop: 20, fontSize: 15, color: "#8A8A8A" },
+    bioText: { marginTop: 20, fontSize: 15, color: "#fff" },
     myFeed: { paddingBottom: 100, paddingHorizontal: 0 },
     emptyContainer: { alignItems: 'center', marginTop: 50, gap: 10 },
     emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 14 }

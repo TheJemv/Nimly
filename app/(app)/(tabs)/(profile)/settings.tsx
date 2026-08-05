@@ -167,7 +167,7 @@ export default function SettingsScreen() {
                                 <SymbolView name="trash.fill" size={18} tintColor="#FF453A" />
                             </View>
                             <ThemedText style={[styles.menuText, { color: '#FF453A' }]}>Delete Account</ThemedText>
-                            <SymbolView name="chevron.right" size={14} tintColor="#FF453A" opacity={0.5} />
+                            <SymbolView name="chevron.right" size={14} tintColor="#FF453A" />
                         </TouchableOpacity>
                     </View>
 

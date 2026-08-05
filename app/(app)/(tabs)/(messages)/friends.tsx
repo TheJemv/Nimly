@@ -1,11 +1,10 @@
 import { friendsApi } from "@/api/friends";
 import { ThemedText } from "@/components/themed-text";
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
+import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
-import { createAvatar } from "@dicebear/core";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -14,21 +13,6 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { SvgXml } from "react-native-svg";
-
-const FriendAvatar = ({ config }: { config: any }) => {
-    const svg = useMemo(() => {
-        if (!config) return null;
-        const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-        return createAvatar(estilo.collection, {
-            ...config.options,
-            radius: 100,
-        }).toString();
-    }, [config]);
-
-    if (!svg) return <View style={styles.avatarPlaceholder} />;
-    return <SvgXml xml={svg} width="40" height="40" />;
-};
 
 export default function NewChatModal() {
     const router = useRouter();
@@ -43,11 +27,7 @@ export default function NewChatModal() {
 
     const fetchFriendsForChat = async () => {
         try {
-            // 1. Traemos la lista de amigos
             const allFriends = await friendsApi.getFriendsList(0, 50);
-
-            // 2. (Opcional) Aquí podrías filtrar si ya existe un chat con ellos
-            // Por ahora mostramos todos para que puedas probar la navegación
             setFriends(allFriends);
             setFilteredFriends(allFriends);
         } catch (error) {
@@ -57,7 +37,6 @@ export default function NewChatModal() {
         }
     };
 
-    // Lógica de búsqueda
     const handleSearch = (text: string) => {
         setSearch(text);
         if (text) {
@@ -71,11 +50,7 @@ export default function NewChatModal() {
     };
 
     const startChat = async (friendId: string) => {
-        // 1. Primero cerramos el modal actual
         router.back();
-
-        // 2. Usamos un pequeño delay (mínimo) para que el modal empiece a bajar
-        // y no bloquee la transición visual del push
         setTimeout(() => {
             router.push({
                 pathname: "/chat",
@@ -114,7 +89,7 @@ export default function NewChatModal() {
                 <FlatList
                     data={filteredFriends}
                     keyExtractor={(item) => item.id}
-                    contentInsetAdjustmentBehavior="automatic" // Esto es clave para el Large Title + SearchBar
+                    contentInsetAdjustmentBehavior="automatic"
                     contentContainerStyle={{ paddingTop: Platform.OS === 'android' ? 100 : 0 }}
                     ListEmptyComponent={
                         <View style={styles.empty}>
@@ -127,7 +102,11 @@ export default function NewChatModal() {
                             onPress={() => startChat(item.id)}
                         >
                             <View style={styles.avatarWrapper}>
-                                <FriendAvatar config={item.avatar_config} />
+                                <UserAvatar
+                                    avatar_url={item.avatar_url}
+                                    avatar_config={item.avatar_config}
+                                    size={40}
+                                />
                             </View>
                             <View style={styles.info}>
                                 <ThemedText style={styles.username}>@{item.username}</ThemedText>
@@ -160,7 +139,6 @@ const styles = StyleSheet.create({
         overflow: "hidden",
         backgroundColor: "#161616",
     },
-    avatarPlaceholder: { width: 40, height: 40, backgroundColor: "#222" },
     info: { marginLeft: 12, flex: 1 },
     username: { fontSize: 16, fontWeight: "600", color: "#fff" },
     status: { fontSize: 13, color: "#666" },

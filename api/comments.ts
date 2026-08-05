@@ -5,17 +5,15 @@ const COMMENTS_PER_PAGE = 15;
 export const getComments = async (postId: string, page: number = 0) => {
     const from = page * COMMENTS_PER_PAGE;
     const to = from + COMMENTS_PER_PAGE - 1;
-
     const { data, error } = await supabase
         .from('comments')
         .select(`
             id, content, created_at, user_id,
-            user:profiles (username, avatar_config)
+            user:profiles (username, avatar_url, avatar_config)
         `)
         .eq('post_id', postId)
-        .order('created_at', { ascending: false }) // Los más recientes arriba
+        .order('created_at', { ascending: false })
         .range(from, to);
-
     if (error) throw error;
     return data;
 };
@@ -23,7 +21,6 @@ export const getComments = async (postId: string, page: number = 0) => {
 export const createComment = async (postId: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Debes iniciar sesión para comentar");
-
     const { data, error } = await supabase
         .from('comments')
         .insert({
@@ -33,10 +30,9 @@ export const createComment = async (postId: string, content: string) => {
         })
         .select(`
             id, content, created_at, user_id,
-            user:profiles (username, avatar_config)
+            user:profiles (username, avatar_url, avatar_config)
         `)
-        .single(); // Devolvemos el comentario recién creado para agregarlo a la lista
-
+        .single();
     if (error) throw error;
     return data;
 };
@@ -46,7 +42,6 @@ export const deleteComment = async (commentId: string) => {
         .from('comments')
         .delete()
         .eq('id', commentId);
-
     if (error) throw error;
     return true;
 };

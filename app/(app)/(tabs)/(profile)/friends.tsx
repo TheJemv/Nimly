@@ -1,11 +1,10 @@
 import { friendsApi } from "@/api/friends";
 import { ThemedText } from "@/components/themed-text";
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
+import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
-import { createAvatar } from "@dicebear/core";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -14,23 +13,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { SvgXml } from "react-native-svg";
 
 const PAGE_SIZE = 20;
-
-const FriendAvatar = ({ config }: { config: any }) => {
-    const svg = useMemo(() => {
-        if (!config) return null;
-        const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-        return createAvatar(estilo.collection, {
-            ...config.options,
-            radius: 100,
-        }).toString();
-    }, [config]);
-
-    if (!svg) return <View style={styles.avatarPlaceholder} />;
-    return <SvgXml xml={svg} width="48" height="48" />;
-};
 
 export default function FriendsScreen() {
     const router = useRouter();
@@ -51,7 +35,6 @@ export default function FriendsScreen() {
                 setFriends(prev => [...prev, ...newFriends]);
             }
 
-            // Si recibimos menos de los solicitados, ya no hay más
             if (newFriends.length < PAGE_SIZE) {
                 setHasMore(false);
             } else {
@@ -124,7 +107,7 @@ export default function FriendsScreen() {
                         onPress={() => router.push(`/(app)/user/${item.id}`)}
                     >
                         <View style={styles.avatarWrapper}>
-                            <FriendAvatar config={item.avatar_config} />
+                            <UserAvatar avatar_url={item.avatar_url} avatar_config={item.avatar_config} size={48} />
                         </View>
                         <View style={styles.info}>
                             <ThemedText style={styles.username}>@{item.username}</ThemedText>
@@ -157,7 +140,6 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#333",
     },
-    avatarPlaceholder: { width: 48, height: 48, backgroundColor: "#222" },
     info: { marginLeft: 12, flex: 1 },
     username: { fontSize: 16, fontWeight: "bold", color: "#fff" },
     status: { fontSize: 13, color: "#666", marginTop: 2 },
