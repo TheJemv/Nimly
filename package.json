@@ -69,7 +69,6 @@
     "expo-updates": "~55.0.26",
     "expo-video": "~55.0.19",
     "expo-web-browser": "~55.0.18",
-    "nativewind": "5.0.0-preview.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.10",

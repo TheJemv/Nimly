@@ -2,8 +2,6 @@
 import * as Notifications from 'expo-notifications';
 import 'react-native-get-random-values';
 
-import "../global.css"; // O la ruta de tu global.css
-
 import { getThemeColor } from "@/constants/theme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { supabase } from '@/lib/supabase'; // Importamos supabase para el chequeo de red
