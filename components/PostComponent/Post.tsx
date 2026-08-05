@@ -1,13 +1,11 @@
 
 import React from 'react';
-import { ActionSheetIOS, Alert, Platform, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
-import { deletePost } from "@/api/posts";
-import { reportsApi } from "@/api/reports";
 import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 
@@ -40,69 +38,12 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
         //  Information
         username,
         isOwner,
-        sessionToken
-    } = usePost(post)
+        sessionToken,
 
-
-    const handleDelete = () => {
-        const performDelete = async () => {
-            try {
-                await deletePost(post.id, isMedia ? post.content : null);
-                if (onDelete) onDelete();
-            } catch (e) {
-                Alert.alert("Error", "No se pudo eliminar");
-            }
-        };
-
-        if (Platform.OS === 'ios') {
-            ActionSheetIOS.showActionSheetWithOptions(
-                {
-                    options: ['Cancelar', 'Eliminar'],
-                    destructiveButtonIndex: 1,
-                    cancelButtonIndex: 0,
-                    title: '¿Eliminar publicación?',
-                },
-                (index) => { if (index === 1) performDelete(); }
-            );
-        } else {
-            Alert.alert("Eliminar", "¿Borrar este post?", [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Eliminar", style: "destructive", onPress: performDelete }
-            ]);
-        }
-    };
-
-    const handleReportPost = (postId: string) => {
-        Alert.alert(
-            "Report Entry", // Título
-            "Are you sure you want to flag this content? Our security protocols will review it shortly.", // Mensaje
-            [{
-                text: "Cancel",
-                style: "cancel", // Estilo estándar de cancelación
-            },
-            {
-                text: "Report",
-                style: "destructive", // Este es el truco para que salga en ROJO en iOS
-                onPress: async () => {
-                    try {
-                        await reportsApi.submitReport({
-                            targetPostId: postId,
-                            reason: 'inappropriate_content' // O el motivo que prefieras
-                        });
-
-                        Alert.alert("Success", "Report filed. Access to this content may be restricted soon.");
-                    } catch (error: any) {
-                        if (error.message === "AlreadyReported") {
-                            Alert.alert("Note", "You have already flagged this post.");
-                        } else {
-                            Alert.alert("Error", "The secure report could not be sent.");
-                        }
-                    }
-                },
-            }],
-            { cancelable: true }
-        );
-    };
+        //  Actions
+        handleDelete,
+        handleReportPost
+    } = usePost(post, onDelete)
 
     return (
         <View style={styles.cardContainer}>
