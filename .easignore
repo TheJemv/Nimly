@@ -1,0 +1,23 @@
+# Documentación y metadata del repo — irrelevante para compilar la app
+.github/
+.gitignore
+
+docs/
+README.md
+Makefile
+
+# Supabase CLI — solo config local de desarrollo, no se usa en runtime del cliente
+supabase/
+
+# Datos mock sin uso real (candidato a borrar del repo directamente, ver abajo)
+data/
+
+# Node y control de versiones — EAS ya los excluye por defecto, pero por claridad
+node_modules/
+.git/
+
+# Archivos de entorno que no deben subirse (usa EAS env vars, no .env físicos)
+.env
+.env.local
+
+database/
