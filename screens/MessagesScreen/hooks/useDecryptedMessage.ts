@@ -14,7 +14,11 @@ export function useDecryptedMessage(content: string, friendPublicKey?: string) {
             return;
         }
 
-        if (vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")) return;
+        const cached = vaultRAMCache[content];
+        if (cached && !cached.startsWith("🔒")) {
+            setDecryptedText(cached); // 👈 antes solo hacía "return", ahora sí actualiza
+            return;
+        }
 
         let isMounted = true;
         const decrypt = async () => {

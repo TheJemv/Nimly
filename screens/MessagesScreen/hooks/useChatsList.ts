@@ -25,7 +25,8 @@ export function useChatsList() {
                     ),
                     profiles:user_id (id, username, avatar_config, avatar_url, public_key)
                 `)
-                .neq('user_id', user.id);
+                .neq('user_id', user.id)
+                .order('created_at', { foreignTable: 'chats.messages', ascending: true });
 
             if (error) throw error;
 

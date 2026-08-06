@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nimly",
     "slug": "Nimly",
-    "version": "1.1.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nimly",
@@ -22,7 +22,7 @@
         "NSPhotoLibraryUsageDescription": "Needed to upload photos to your vault.",
         "NSCameraUsageDescription": "Needed to capture secure photos for the vault.",
         "NSMicrophoneUsageDescription": "Needed for video recording within the vault.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": true
       }
     },
     "plugins": [

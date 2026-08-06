@@ -62,12 +62,9 @@ function RootLayoutNav() {
             lastNotificationResponse.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER
         ) {
             const data = lastNotificationResponse.notification.request.content.data;
-
             if (data?.table === 'messages' && data?.senderId) {
                 router.push({
-                    pathname: `/(app)/chat`, params: {
-                        id: data.senderId as any
-                    }
+                    pathname: `/(app)/(tabs)/(messages)`
                 });
             }
             else if (data?.table === 'notifications') {

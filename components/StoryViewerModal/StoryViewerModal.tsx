@@ -229,6 +229,7 @@ export default function StoryViewerModal({
                                     <UserAvatar
                                         avatar_url={currentGroup.avatar_url}
                                         avatar_config={currentGroup.avatar_config}
+                                        size={28}
                                     />
                                 </View>
                                 <View style={styles.userTextContainer}>

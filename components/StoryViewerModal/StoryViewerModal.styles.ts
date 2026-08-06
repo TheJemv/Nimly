@@ -64,6 +64,10 @@ export const styles = StyleSheet.create({
         borderColor: Colors.dark.tint,
         backgroundColor: Colors.dark.surface,
         overflow: "hidden",
+
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center"
     },
     avatarImg: { width: "100%", height: "100%" },
     headerUsername: {
