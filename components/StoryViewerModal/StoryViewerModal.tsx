@@ -13,8 +13,10 @@ import {
     Image,
     KeyboardAvoidingView,
     Modal,
+    PanResponder,
     Platform,
     Pressable,
+    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
@@ -138,7 +140,6 @@ export default function StoryViewerModal({
         });
     }, [currentStory]);
 
-    // Reiniciar timer y sheet de espectadores al cambiar de historia/usuario
     useEffect(() => {
         if (!visible || !currentStory || !currentGroup) return;
         resetTimer();
@@ -167,6 +168,49 @@ export default function StoryViewerModal({
     const reportedStoryIdsRef = useRef<Set<string>>(new Set());
     const isReportingRef = useRef(false);
 
+    // --- ANIMACIÓN PARA DESLIZAR Y CERRAR ---
+    const panY = useRef(new Animated.Value(0)).current;
+
+    const isViewsSheetOpenRef = useRef(isViewsSheetOpen);
+    useEffect(() => {
+        isViewsSheetOpenRef.current = isViewsSheetOpen;
+    }, [isViewsSheetOpen]);
+
+    useEffect(() => {
+        if (visible) {
+            panY.setValue(0);
+        }
+    }, [visible]);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onMoveShouldSetPanResponder: (e, gestureState) => {
+                if (isViewsSheetOpenRef.current) return false;
+                return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 15;
+            },
+            onPanResponderMove: Animated.event(
+                [null, { dy: panY }],
+                { useNativeDriver: false }
+            ),
+            onPanResponderRelease: (e, gestureState) => {
+                if (gestureState.dy > 120) {
+                    Animated.timing(panY, {
+                        toValue: 1000,
+                        duration: 150,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        handleClose();
+                    });
+                } else {
+                    Animated.spring(panY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                    }).start();
+                }
+            },
+        })
+    ).current;
+
     const handleReport = () => {
         if (!currentStory || !currentGroup) return;
         if (reportedStoryIdsRef.current.has(currentStory.id)) return;
@@ -187,7 +231,7 @@ export default function StoryViewerModal({
                     style: "destructive",
                     onPress: async () => {
                         if (isReportingRef.current) return;
-                        if (reportedStoryIdsRef.current.has(currentStory.id)) return; // 👈 doble check aquí también
+                        if (reportedStoryIdsRef.current.has(currentStory.id)) return;
                         isReportingRef.current = true;
                         setIsReporting(true);
 
@@ -205,10 +249,9 @@ export default function StoryViewerModal({
                             })
                         } catch (e: any) {
                             if (e.message === "AlreadyReported") {
-                                reportedStoryIdsRef.current.add(currentStory.id); // 👈 también aquí
+                                reportedStoryIdsRef.current.add(currentStory.id);
                                 Alert.alert("Note", "You have already reported this story.");
                             } else {
-                                // Solo en error real de red/servidor SÍ permitimos reintentar
                                 Alert.alert("Error", "Failed to report the story. Please try again later.");
                             }
                         } finally {
@@ -228,7 +271,6 @@ export default function StoryViewerModal({
     const {
         replyTextStory,
         loadingReplyStory,
-
         setReplyTextStory,
         handleReplyStory,
     } = useReplyStory(currentGroup, currentStory.id)
@@ -237,13 +279,18 @@ export default function StoryViewerModal({
         <Modal
             visible={visible}
             animationType="fade"
-            transparent={false}
+            transparent={true}
             onRequestClose={handleClose}
             statusBarTranslucent
         >
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-            <View style={styles.container}>
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
+
+            <Animated.View
+                style={[styles.container, { transform: [{ translateY: panY }] }]}
+                {...panResponder.panHandlers}
+            >
                 {isMediaLoading && (
                     <View style={styles.loaderContainer}>
                         <ActivityIndicator size="large" color={Colors.dark.tint} />
@@ -347,7 +394,13 @@ export default function StoryViewerModal({
                                 </TouchableOpacity>
                             </View>
                         ) : (
-                            <View style={styles.actionsContainer}>
+                            // --- SCROLL VIEW PARA EL TECLADO ---
+                            <ScrollView
+                                contentContainerStyle={styles.actionsContainer}
+                                keyboardShouldPersistTaps="always"
+                                scrollEnabled={false}
+                                style={{ flexGrow: 0 }}
+                            >
                                 <TextInput
                                     style={styles.textInputReply}
                                     placeholder="Reply to story..."
@@ -358,6 +411,9 @@ export default function StoryViewerModal({
 
                                     onChangeText={e => setReplyTextStory(e)}
                                     value={replyTextStory}
+
+                                    returnKeyType="send"
+                                    onSubmitEditing={handleReplyStory}
                                 />
 
                                 {replyTextStory ? (
@@ -381,8 +437,7 @@ export default function StoryViewerModal({
                                         />
                                     </TouchableOpacity>
                                 )}
-
-                            </View>
+                            </ScrollView>
                         )}
                     </View>
                 </KeyboardAvoidingView>
@@ -434,7 +489,7 @@ export default function StoryViewerModal({
                         </Animated.View>
                     </View>
                 )}
-            </View>
+            </Animated.View>
         </Modal>
     );
 }

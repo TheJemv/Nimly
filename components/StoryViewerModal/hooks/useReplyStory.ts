@@ -1,4 +1,5 @@
 import { useContext, useState } from "react";
+import { Keyboard } from "react-native";
 
 import { chatApi } from "@/api/chat";
 import { AuthContext } from "@/context/AuthContext";
@@ -15,6 +16,9 @@ export function useReplyStory(currentGroup: any, currentStoryId: any) {
     const handleReplyStory = async () => {
         if(!currentStoryId) return
         if(loadingReplyStory) return
+
+        // --- Cierra el teclado automáticamente ---
+        Keyboard.dismiss();
 
         try {
             setLoadingReplyStory(true)
@@ -33,7 +37,6 @@ export function useReplyStory(currentGroup: any, currentStoryId: any) {
                 content: encryptedContent,
                 type: 'text',
                 is_read: false,
-                // reply_to_id: replyToId, // 👈
                 reply_to_story_id: currentStoryId
             });
 

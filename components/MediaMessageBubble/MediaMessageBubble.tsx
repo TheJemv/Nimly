@@ -3,8 +3,8 @@ import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
 import { SymbolView } from 'expo-symbols';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Image, Modal, PanResponder, Text, TouchableOpacity, View } from 'react-native';
 
 import { styles } from "./MediaMessageBubble.styles";
 
@@ -17,6 +17,35 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
 
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
+
+    const panY = useRef(new Animated.Value(0)).current;
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderMove: Animated.event(
+                [null, { dy: panY }],
+                { useNativeDriver: false }
+            ),
+            onPanResponderRelease: (e, gestureState) => {
+                if (gestureState.dy > 120) {
+                    Animated.timing(panY, {
+                        toValue: 1000,
+                        duration: 150,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        // Solo cerramos el modal, NO reiniciamos la posición aquí
+                        setIsFullScreen(false);
+                    });
+                } else {
+                    Animated.spring(panY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                    }).start();
+                }
+            },
+        })
+    ).current;
 
     // AUTO-DESCARGA SEGURA PARA FOTOS NORMALES
     useEffect(() => {
@@ -160,12 +189,29 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                     )}
                 </TouchableOpacity>
 
-                <Modal visible={isFullScreen} transparent={false} animationType="fade">
+                {/* MODAL ACTUALIZADO */}
+                <Modal visible={isFullScreen} transparent={true} animationType="fade">
                     <View style={styles.fullScreenContainer}>
-                        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsFullScreen(false)}>
-                            <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
-                        </TouchableOpacity>
-                        {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="contain" />}
+                        {/* Contenedor Animado */}
+                        <Animated.View
+                            style={[
+                                styles.animatedContainer, // Asegúrate de agregar este estilo (te lo pasé en el mensaje anterior)
+                                { transform: [{ translateY: panY }] }
+                            ]}
+                            {...panResponder.panHandlers}
+                        >
+                            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsFullScreen(false)}>
+                                <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
+                            </TouchableOpacity>
+
+                            {imageUri && (
+                                <Image
+                                    source={{ uri: imageUri }}
+                                    style={styles.fullScreenImage}
+                                    resizeMode="contain"
+                                />
+                            )}
+                        </Animated.View>
                     </View>
                 </Modal>
             </>
@@ -200,12 +246,41 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                 )}
             </TouchableOpacity>
 
-            <Modal visible={isFullScreen} transparent={false} animationType="slide">
+            {/* <Modal visible={isFullScreen} transparent={false} animationType="slide">
                 <View style={styles.fullScreenContainer}>
                     <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
                         <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
                     </TouchableOpacity>
                     {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="contain" />}
+                </View>
+            </Modal> */}
+
+            <Modal visible={isFullScreen} transparent={true} animationType="fade">
+                <View style={styles.fullScreenContainer}>
+
+                    {/* 3. Animated.View permite que el contenedor se mueva con el dedo */}
+                    <Animated.View
+                        style={[
+                            styles.animatedContainer,
+                            { transform: [{ translateY: panY }] } // Mueve el componente en el eje Y
+                        ]}
+                        {...panResponder.panHandlers} // Activa la detección del dedo aquí
+                    >
+
+                        <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+                            <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
+                        </TouchableOpacity>
+
+                        {imageUri && (
+                            <Image
+                                source={{ uri: imageUri }}
+                                style={styles.fullScreenImage}
+                                resizeMode="contain"
+                            />
+                        )}
+
+                    </Animated.View>
+
                 </View>
             </Modal>
         </>

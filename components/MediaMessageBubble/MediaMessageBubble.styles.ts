@@ -37,5 +37,12 @@ export const styles = StyleSheet.create({
     fullScreenImage: { width: width, height: height },
     closeBtn: { position: 'absolute', top: 60, right: 25, zIndex: 99, shadowColor: '#000', shadowRadius: 10, shadowOpacity: 0.5 },
     lockedContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, minWidth: 150 },
-    lockedText: { color: '#fff', fontSize: 16 }
+    lockedText: { color: '#fff', fontSize: 16 },
+    animatedContainer: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center', // Centra la imagen verticalmente
+        alignItems: 'center',     // Centra la imagen horizontalmente
+    },
 });
