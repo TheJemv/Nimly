@@ -46,6 +46,7 @@
     "crypto-js": "4.2.0",
     "expo": "~55.0.28",
     "expo-blur": "~55.0.16",
+    "expo-build-properties": "~55.0.16",
     "expo-camera": "~55.0.21",
     "expo-clipboard": "~55.0.15",
     "expo-constants": "~55.0.17",

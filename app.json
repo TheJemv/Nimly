@@ -13,7 +13,6 @@
       "resizeMode": "contain"
     },
     "ios": {
-      "deploymentTarget": "16.0",
       "supportsTablet": false,
       "bundleIdentifier": "com.nimly.app",
       "appleTeamId": "B88RJAR9J7",
@@ -43,7 +42,15 @@
       "expo-camera",
       "expo-image-picker",
       "expo-video",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
