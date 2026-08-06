@@ -191,10 +191,15 @@ export const styles = StyleSheet.create({
         backgroundColor: "rgba(0,0,0,0.5)",
         borderWidth: 1,
         borderColor: "rgba(255,255,255,0.2)",
-        height: 44,
         paddingVertical: 12,
         paddingHorizontal: 16,
         borderRadius: 22,
         color: "#ffffff"
+    },
+
+    actionsTop: {
+        display: "flex",
+        flexDirection: "row",
+        gap: 8
     }
 });

@@ -7,7 +7,7 @@ import { reportsApi } from "@/api/reports";
 import { AuthContext } from "@/context/AuthContext";
 import { supabaseUrl } from "@/lib/supabase";
 
-//  useLike
+//  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {
     const { session } = useContext(AuthContext)
 
@@ -44,12 +44,12 @@ export function usePost(post: any, onDelete?: () => void) {
 
     //  ==== Information ====
     const isOwner = session?.user.id === post.user_id;
-    const isMedia = post.type === 'IMAGE' || post.type === 'VIDEO';
-    const mediaUrl = isMedia && post.content
-        ? `${supabaseUrl}/storage/v1/object/authenticated/media/${post.content}`
-        : null;
+    
+    // 🟢 CORREGIDO: Apuntamos a post.media_url en lugar de post.content
+    const isMedia = Boolean(post.media_url);
+    const mediaUrl = isMedia ? `${supabaseUrl}/storage/v1/object/authenticated/media/${post.media_url}` : null;
 
-    const postText = post.type === 'TEXT' ? post.content : '';
+    const postText = post.content;
     const date = new Date(post.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
     const username = post.username || 'Usuario';
     const sessionToken = session?.access_token
@@ -59,7 +59,8 @@ export function usePost(post: any, onDelete?: () => void) {
     const handleDelete = () => {
         const performDelete = async () => {
             try {
-                await deletePost(post.id, isMedia ? post.content : null);
+                // 🟢 CORREGIDO: Pasamos post.media_url para que borre el archivo correcto del storage
+                await deletePost(post.id, isMedia ? post.media_url : null);
                 if (onDelete) onDelete();
             } catch (e) {
                 Alert.alert("Error", "No se pudo eliminar");
@@ -86,20 +87,20 @@ export function usePost(post: any, onDelete?: () => void) {
 
     const handleReportPost = (postId: string) => {
         Alert.alert(
-            "Report Entry", // Título
-            "Are you sure you want to flag this content? Our security protocols will review it shortly.", // Mensaje
+            "Report Entry", 
+            "Are you sure you want to flag this content? Our security protocols will review it shortly.", 
             [{
                 text: "Cancel",
-                style: "cancel", // Estilo estándar de cancelación
+                style: "cancel",
             },
             {
                 text: "Report",
-                style: "destructive", // Este es el truco para que salga en ROJO en iOS
+                style: "destructive", 
                 onPress: async () => {
                     try {
                         await reportsApi.submitReport({
                             targetPostId: postId,
-                            reason: 'inappropriate_content' // O el motivo que prefieras
+                            reason: 'inappropriate_content' 
                         });
 
                         Alert.alert("Success", "Report filed. Access to this content may be restricted soon.");
@@ -115,8 +116,6 @@ export function usePost(post: any, onDelete?: () => void) {
             { cancelable: true }
         );
     };
-
-
 
     return { 
         isLiked, 

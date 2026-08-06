@@ -4,9 +4,10 @@ import { StoryGroup, ViewerProfile } from "@/types/types";
 import getTimeAgo from "@/utils/getTimeAgo";
 import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     FlatList,
     Image,
@@ -25,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserAvatar from "../UserAvatar";
 import { styles } from "./StoryViewerModal.styles";
 
+import { reportsApi } from "@/api/reports";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
@@ -160,6 +162,66 @@ export default function StoryViewerModal({
         onClose();
     };
 
+    const [isReporting, setIsReporting] = useState<boolean>(false)
+
+    const reportedStoryIdsRef = useRef<Set<string>>(new Set());
+    const isReportingRef = useRef(false);
+
+    const handleReport = () => {
+        if (!currentStory || !currentGroup) return;
+        if (reportedStoryIdsRef.current.has(currentStory.id)) return;
+
+        pauseTimerForSheet();
+
+        Alert.alert(
+            "Report Story",
+            `Are you sure you want to report this story by @${currentGroup.username || 'user'}?`,
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                    onPress: () => resumeTimerFromSheet(),
+                },
+                {
+                    text: "Report",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (isReportingRef.current) return;
+                        if (reportedStoryIdsRef.current.has(currentStory.id)) return; // 👈 doble check aquí también
+                        isReportingRef.current = true;
+                        setIsReporting(true);
+
+                        try {
+                            await reportsApi.submitReport({
+                                targetStoryId: currentStory.id,
+                                reason: 'inappropriate_content',
+                            }).then((e) => {
+                                if (e?.success) {
+                                    Alert.alert(
+                                        "Story Reported",
+                                        "Thank you for reporting. We will review this story shortly."
+                                    );
+                                }
+                            })
+                        } catch (e: any) {
+                            if (e.message === "AlreadyReported") {
+                                reportedStoryIdsRef.current.add(currentStory.id); // 👈 también aquí
+                                Alert.alert("Note", "You have already reported this story.");
+                            } else {
+                                // Solo en error real de red/servidor SÍ permitimos reintentar
+                                Alert.alert("Error", "Failed to report the story. Please try again later.");
+                            }
+                        } finally {
+                            isReportingRef.current = false;
+                            setIsReporting(false);
+                            resumeTimerFromSheet();
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     if (!visible || !currentGroup || !currentStory) return null;
     const currentLikedStatus = (currentStory as any).is_liked_by_me || false;
 
@@ -185,6 +247,13 @@ export default function StoryViewerModal({
                 {isMediaLoading && (
                     <View style={styles.loaderContainer}>
                         <ActivityIndicator size="large" color={Colors.dark.tint} />
+                    </View>
+                )}
+
+                {isReporting && (
+                    <View style={styles.loaderContainer}>
+                        <ActivityIndicator size="large" color={Colors.dark.tint} />
+                        <Text style={{ color: '#fff', marginTop: 12, fontSize: 13 }}>Reporting...</Text>
                     </View>
                 )}
 
@@ -250,9 +319,15 @@ export default function StoryViewerModal({
                                 </View>
                             </View>
 
-                            <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.7}>
-                                <Text style={styles.closeText}>✕</Text>
-                            </TouchableOpacity>
+                            <View style={styles.actionsTop}>
+                                <TouchableOpacity onPress={handleReport} style={styles.closeButton} activeOpacity={0.7} disabled={isReporting}>
+                                    <SymbolView name={"exclamationmark"} size={16} tintColor={Colors.dark.text} />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.7}>
+                                    <SymbolView name={"xmark"} size={16} tintColor={Colors.dark.text} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
 
@@ -311,7 +386,6 @@ export default function StoryViewerModal({
                         )}
                     </View>
                 </KeyboardAvoidingView>
-                {/* </View> */}
 
                 <View style={styles.touchOverlay}>
                     <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />

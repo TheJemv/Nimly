@@ -21,7 +21,6 @@ import { SvgXml } from "react-native-svg";
 
 const UserSearchResult = ({ item }: { item: any }) => {
     const router = useRouter();
-
     const avatarSvg = useMemo(() => {
         if (!item.avatar_config) return null;
         const estilo = ESTILOS_DICEBEAR.find(e => e.id === item.avatar_config.styleId) || ESTILOS_DICEBEAR[0];

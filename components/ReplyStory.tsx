@@ -1,6 +1,7 @@
+import { AuthContext } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { SymbolView } from "expo-symbols";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 
 // Caché simple en RAM para las Signed URLs de las historias (duran 1 hora, pero evitan fetches repetidos)
@@ -16,6 +17,8 @@ interface ReplyStoryProps {
 }
 
 const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
+    const { session } = useContext(AuthContext)
+
     // Si ya la tenemos en caché, arrancamos sin loading
     const cachedUrl = storyUrlCache[content.media_url];
 
@@ -24,7 +27,6 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
     const [hasError, setHasError] = useState<boolean>(false);
 
     useEffect(() => {
-        // Si ya está en caché, no volvemos a hacer la petición
         if (cachedUrl) return;
 
         let isMounted = true;
@@ -55,7 +57,7 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
         }
 
         return () => { isMounted = false; };
-    }, [content.media_url]);
+    }, [content.media_url, session?.user]);
 
     return (
         <View style={[styles.container, isMyMessage ? styles.containerMine : styles.containerTheirs]}>

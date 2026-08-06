@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Text, TouchableOpacity, View } from "react-native";
 
@@ -53,7 +52,7 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                         style={styles.userInfo}
                         onPress={() => {
                             if (isOwner) {
-                                router.push("/(app)/(tabs)/(profile)"); // 👈 Cambia esto por tu ruta de perfil personal si es diferente
+                                router.push("/(app)/(tabs)/(profile)");
                             } else {
                                 router.push(`/(app)/user/${post.user_id}`);
                             }
@@ -85,9 +84,17 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                     )}
                 </View>
 
-                {isMedia ? (
-                    <View style={styles.mediaFrame}>
-                        {mediaUrl && sessionToken ? (
+                {/* 🟢 CONTENIDO UNIFICADO: Texto y Media pueden coexistir */}
+                <View style={styles.contentContainer}>
+                    {postText ? (
+                        <View style={styles.textFrame}>
+                            <Text style={styles.bodyText}>{postText}</Text>
+                        </View>
+                    ) : null}
+
+                    {/* Si hay media (imagen/video), la mostramos debajo del texto */}
+                    {isMedia && mediaUrl && sessionToken ? (
+                        <View style={styles.mediaFrame}>
                             <Image
                                 source={{
                                     uri: mediaUrl,
@@ -97,13 +104,9 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                                 contentFit="cover"
                                 transition={400}
                             />
-                        ) : null}
-                    </View>
-                ) : (
-                    <View style={styles.textFrame}>
-                        <Text style={styles.bodyText}>{postText}</Text>
-                    </View>
-                )}
+                        </View>
+                    ) : null}
+                </View>
 
                 <View style={styles.footer}>
                     <TouchableOpacity

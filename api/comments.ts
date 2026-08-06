@@ -9,7 +9,7 @@ export const getComments = async (postId: string, page: number = 0) => {
         .from('comments')
         .select(`
             id, content, created_at, user_id,
-            user:profiles (username, avatar_url, avatar_config)
+            user:profiles (username, avatar_url, avatar_config, id)
         `)
         .eq('post_id', postId)
         .order('created_at', { ascending: false })

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { Alert } from 'react-native';
 
 // Definimos el tipo basado en tu ENUM de SQL para tener autocompletado
 export type ReportReason =
@@ -11,6 +12,7 @@ export type ReportReason =
 interface ReportParams {
     targetUserId?: string;
     targetPostId?: string;
+    targetStoryId?: string;
     reason: ReportReason;
     details?: string;
 }
@@ -18,13 +20,12 @@ interface ReportParams {
 export const reportsApi = {
     /**
      * Envía un reporte a la bóveda de moderación.
-     * Solo puede llevar targetUserId O targetPostId, no ambos.
+     * Solo puede llevar UNO de: targetUserId, targetPostId, o targetStoryId.
      */
-    async submitReport({ targetUserId, targetPostId, reason, details }: ReportParams) {
+    async submitReport({ targetUserId, targetPostId, targetStoryId, reason, details }: ReportParams) {
         try {
             // 1. Obtenemos el ID del reportero (el usuario actual)
             const { data: { user }, error: authError } = await supabase.auth.getUser();
-
             if (authError || !user) {
                 throw new Error("No authenticated session found.");
             }
@@ -36,6 +37,7 @@ export const reportsApi = {
                     reporter_id: user.id,
                     target_user_id: targetUserId || null,
                     target_post_id: targetPostId || null,
+                    target_story_id: targetStoryId || null,
                     reason,
                     details: details || null,
                 });
@@ -49,9 +51,14 @@ export const reportsApi = {
             }
 
             return { success: true };
-        } catch (error: any) {
-            console.error("Error at submitReport:", error.message);
-            throw error;
+        } catch (e: any) {
+            if (e.message === "AlreadyReported") {
+                Alert.alert("Note", "You have already reported this story.");
+            } else {
+                Alert.alert("Error", "Failed to report the story. Please try again later.");
+            }
+
+            return
         }
     }
 };

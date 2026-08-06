@@ -41,21 +41,17 @@ export const uploadPostMedia = async (uri: string, type: "image" | "video") => {
 };
 
 /**
- * Crea un post nuevo
+ * Crea un post nuevo permitiendo texto, media (imagen/video) o ambos combinados.
  */
 export const createPost = async (
     userId: string,
     text: string,
     media?: { uri: string; type: 'image' | 'video' }
 ) => {
-    let contentStr = text;
-    let postType = 'TEXT';
-
+    let mediaPath = null;
+    if (!media && !text) return
     if (media) {
-        postType = media.type === 'video' ? 'VIDEO' : 'IMAGE';
-
         try {
-            // 1. Convertir archivo para subirlo
             const base64 = await FileSystem.readAsStringAsync(media.uri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
@@ -64,20 +60,15 @@ export const createPost = async (
             const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
             const filePath = `${userId}/${fileName}`; // Carpeta por usuario para más orden
 
-            // 2. Subimos el archivo al bucket (Asegúrate de que se llame 'media' o el que uses)
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('media') // <-- Tu bucket (recuerda que en Supabase le quitaste lo de public)
+                .from('media')
                 .upload(filePath, decode(base64), {
                     contentType: media.type === 'video' ? `video/${ext}` : `image/${ext}`,
                     upsert: false
                 });
 
             if (uploadError) throw uploadError;
-
-            // 3. LA CLAVE DE LA SEGURIDAD:
-            // GUARDAMOS SOLO LA RUTA DEL ARCHIVO EN LA BASE DE DATOS, NO LA URL PÚBLICA
-            // Tu PostComponent se encargará de construir la ruta "/authenticated/" al mostrarlo
-            contentStr = uploadData.path;
+            mediaPath = uploadData.path;
 
         } catch (error) {
             console.error("Error subiendo media:", error);
@@ -85,18 +76,21 @@ export const createPost = async (
         }
     }
 
-    // 4. Guardamos el Post en la base de datos
     const { data, error } = await supabase
         .from('posts')
         .insert({
             user_id: userId,
-            content: contentStr,
-            type: postType
+            content: text ? text : null,
+            media_url: mediaPath ? mediaPath : null
         })
         .select()
         .single();
 
-    if (error) throw error;
+    if (error) {
+        console.error("Supabase Insert Error:", error);
+        throw error;
+    }
+    
     return data;
 };
 
@@ -121,8 +115,6 @@ export const getFriendsPosts = async () => {
         const allIds = [...new Set([...friendIds, user.id])];
 
         // 3. CONSULTA MAESTRA: Usamos la vista 'posts_with_stats'
-        // Como la vista ya tiene el JOIN con profiles y los conteos, 
-        // solo necesitamos un select('*') y filtrar por los IDs de amigos.
         const { data, error } = await supabase
             .from('posts_with_stats')
             .select('*')

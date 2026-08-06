@@ -156,7 +156,7 @@ export const vaultCrypto = {
 
             return decryptedText;
         } catch (e) {
-            return "🔒 Locked Capsule";
+            return "Locked Capsule";
         }
     }
 };

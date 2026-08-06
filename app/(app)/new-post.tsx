@@ -5,7 +5,6 @@ import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 import { createAvatar } from "@dicebear/core";
 
-import { GlassView } from "expo-glass-effect";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -16,6 +15,7 @@ import {
    Alert,
    Image,
    KeyboardAvoidingView,
+   Platform,
    Pressable,
    ScrollView,
    StyleSheet,
@@ -24,22 +24,23 @@ import {
    TouchableOpacity,
    View
 } from "react-native";
-import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
 export default function NewPostScreen() {
    const router = useRouter();
    const insets = useSafeAreaInsets();
-   const [activeTab, setActiveTab] = useState<'text' | 'media'>('text');
    const [text, setText] = useState("");
-   const [media, setMedia] = useState<{ uri: string; type: string } | null>(null);
+   const [media, setMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
    const [isPosting, setIsPosting] = useState(false);
    const [userProfile, setUserProfile] = useState<any>(null);
    const [isCameraVisible, setCameraVisible] = useState(false);
 
    const tintColor = getThemeColor("tint");
-   const canPost = ((activeTab === 'text' && text.trim().length > 0) || (activeTab === 'media' && media)) && !isPosting;
+   const MAX_CHARS = 128;
+
+   const isOverLimit = text.length > MAX_CHARS;
+   const canPost = (text.trim().length > 0 || media !== null) && !isPosting;
 
    // 1. CARGA DE PERFIL
    useEffect(() => {
@@ -60,12 +61,12 @@ export default function NewPostScreen() {
       return createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString();
    }, [userProfile]);
 
-   // 2. LÓGICA DE PERMISOS Y MULTIMEDIA (EL FIX)
+   // 2. LÓGICA DE PERMISOS Y MULTIMEDIA
    const pickMedia = async () => {
       try {
          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
          if (status !== 'granted') {
-            Alert.alert("Permiso Denegado", "Nymly necesita acceso a tus fotos para continuar.");
+            Alert.alert("Permission Denied", "Nymly needs access to your photos to continue.");
             return;
          }
 
@@ -76,49 +77,38 @@ export default function NewPostScreen() {
          });
 
          if (!result.canceled) {
-            setText("");
             setMedia({ uri: result.assets[0].uri, type: result.assets[0].type || 'image' });
          }
       } catch (e) {
          console.error("Error picking media:", e);
-         Alert.alert("Error", "No se pudo abrir la galería.");
+         Alert.alert("Error", "Could not open gallery.");
       }
    };
 
-   const takePhoto = async () => {
-      try {
-         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-         if (status !== 'granted') {
-            Alert.alert("Permiso Denegado", "Nymly necesita acceso a la cámara para capturar el momento.");
-            return;
-         }
+   // 🟢 NORMALIZACIÓN DE TEXTO (Reemplaza saltos de línea sin bloquear el input)
+   const handleTextChange = (inputText: string) => {
+      const cleanedText = inputText
+         .replace(/[\r\n]+/g, '. ')
+         .replace(/\s+/g, ' ');
 
-         const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            quality: 0.8,
-         });
-
-         if (!result.canceled) {
-            setText("");
-            setMedia({ uri: result.assets[0].uri, type: 'image' });
-         }
-      } catch (e) {
-         console.error("Error taking photo:", e);
-         Alert.alert("Error", "No se pudo activar la cámara.");
-      }
+      setText(cleanedText);
    };
 
-   // 3. ANIMACIONES Y POST
-   const pillStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: withSpring(activeTab === 'text' ? 0 : 90, { damping: 18, stiffness: 150 }) }],
-   }));
-
+   // 3. ACCIÓN DE POST
    const handlePost = async () => {
       if (!canPost) return;
+
+      // 🟢 VALIDACIÓN DE LÍMITE AL INTENTAR ENVIAR
+      if (text.length > MAX_CHARS) {
+         Alert.alert("Character limit exceeded", `Your post has ${text.length} characters, but the maximum allowed is ${MAX_CHARS}.`);
+         return;
+      }
+
       setIsPosting(true);
       try {
          const { data: { user } } = await supabase.auth.getUser();
-         await createPost(user!.id, text, media || undefined);
+         const finalCleanText = text.trim();
+         await createPost(user!.id, finalCleanText, media);
          router.back();
       } catch (error: any) {
          Alert.alert("Error", error.message);
@@ -131,7 +121,7 @@ export default function NewPostScreen() {
       <View style={styles.mainWrapper}>
          <Stack.Screen options={{
             headerShown: true,
-            headerTitle: "Vault Entry",
+            headerTitle: "New Post",
             headerShadowVisible: false,
             headerStyle: { backgroundColor: "#000" },
             headerTintColor: "#fff",
@@ -149,71 +139,68 @@ export default function NewPostScreen() {
             ),
          }} />
 
-         <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }} keyboardVerticalOffset={90}>
-            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
+         <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+         >
+            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20, paddingHorizontal: 20, paddingTop: 16 }}>
 
-               {/* SELECTOR LIQUID GLASS */}
-               <View style={styles.selectorWrapper}>
-                  <GlassView style={styles.liquidGlass}>
-                     <Animated.View style={[styles.activePill, pillStyle, { backgroundColor: tintColor }]} />
-                     <TouchableOpacity style={styles.tabItem} onPress={() => { setActiveTab('text'); setMedia(null); }}>
-                        <SymbolView name="text.justify.left" size={16} tintColor={activeTab === 'text' ? "#FFF" : "#636366"} />
-                     </TouchableOpacity>
-                     <TouchableOpacity style={styles.tabItem} onPress={() => { setActiveTab('media'); setText(""); }}>
-                        <SymbolView name="play.square.stack" size={16} tintColor={activeTab === 'media' ? "#FFF" : "#636366"} />
-                     </TouchableOpacity>
-                  </GlassView>
-               </View>
-
-               {activeTab === 'text' ? (
-                  <View style={styles.inputArea}>
-                     <View style={styles.avatarCol}>
-                        {userAvatarSvg ? <SvgXml xml={userAvatarSvg} width="40" height="40" /> : <View style={styles.avatarPlaceholder} />}
-                     </View>
-                     <View style={styles.contentCol}>
-                        <TextInput
-                           style={styles.textInput}
-                           placeholder="What's your secret?"
-                           placeholderTextColor="#3A3A3C"
-                           multiline
-                           autoFocus
-                           value={text}
-                           onChangeText={setText}
-                           selectionColor={tintColor}
-                        />
-                     </View>
+               {/* ÁREA DE ESCRITURA UNIFICADA */}
+               <View style={styles.inputArea}>
+                  <View style={styles.avatarCol}>
+                     {userAvatarSvg ? <SvgXml xml={userAvatarSvg} width="40" height="40" /> : <View style={styles.avatarPlaceholder} />}
                   </View>
-               ) : (
-                  <View style={styles.mediaViewWrapper}>
-                     {!media ? (
-                        <View style={styles.mediaPlaceholderCentered}>
-                           <TouchableOpacity style={styles.mediaOption} onPress={() => setCameraVisible(true)}>
-                              <SymbolView name="camera.fill" size={28} tintColor={tintColor} />
-                           </TouchableOpacity>
-                           <TouchableOpacity style={styles.mediaOption} onPress={pickMedia}>
-                              <SymbolView name="photo.fill" size={28} tintColor={tintColor} />
-                           </TouchableOpacity>
-                        </View>
-                     ) : (
-                        <View style={styles.previewFullWidth}>
+                  <View style={styles.contentCol}>
+                     <TextInput
+                        style={styles.textInput}
+                        placeholder="What is happening?!"
+                        placeholderTextColor="#3A3A3C"
+                        multiline
+                        autoFocus
+                        value={text}
+                        onChangeText={handleTextChange}
+                        selectionColor={tintColor}
+                     />
+
+
+                     {/* VISTA PREVIA DE MEDIA */}
+                     {media && (
+                        <View style={styles.previewContainer}>
                            <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
                            <TouchableOpacity style={styles.removeBtn} onPress={() => setMedia(null)}>
-                              <SymbolView name="trash.fill" size={14} tintColor="#FFF" />
+                              <SymbolView name="xmark" size={12} tintColor="#FFF" />
                            </TouchableOpacity>
                         </View>
                      )}
                   </View>
-               )}
+               </View>
+
             </ScrollView>
+
+            {/* BARRA INFERIOR */}
+            <View style={[styles.bottomToolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+               <View style={styles.toolbarIcons}>
+                  <TouchableOpacity style={styles.toolIconBtn} onPress={() => setCameraVisible(true)}>
+                     <SymbolView name="camera" size={22} tintColor={tintColor} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolIconBtn} onPress={pickMedia}>
+                     <SymbolView name="photo" size={22} tintColor={tintColor} />
+                  </TouchableOpacity>
+               </View>
+
+               <Text style={[styles.counterText, isOverLimit && styles.counterError]}>
+                  {text.length}/{MAX_CHARS}
+               </Text>
+            </View>
          </KeyboardAvoidingView>
 
-         {/* 👇 NUEVO: cámara in-app reusada */}
+         {/* CÁMARA IN-APP */}
          <NymlyCamera
             visible={isCameraVisible}
             onClose={() => setCameraVisible(false)}
-            simpleMode // sin panel de View Once, solo "Use Photo"
+            mode="simple"
             onSend={(uri) => {
-               setText("");
                setMedia({ uri, type: 'image' });
             }}
          />
@@ -225,19 +212,68 @@ const styles = StyleSheet.create({
    mainWrapper: { flex: 1, backgroundColor: "#000" },
    headerBtn: { padding: 10 },
    postBtnText: { fontWeight: "700", fontSize: 16 },
-   selectorWrapper: { alignItems: 'center', marginVertical: 20 },
-   liquidGlass: { flexDirection: 'row', width: 180, height: 40, borderRadius: 20, padding: 4, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-   activePill: { position: 'absolute', top: 4, left: 4, width: 82, height: 32, borderRadius: 16 },
-   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-   inputArea: { flexDirection: 'row', paddingHorizontal: 20, gap: 12 },
+   inputArea: { flexDirection: 'row', gap: 12 },
    avatarCol: { width: 40 },
    avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1C1C1E' },
    contentCol: { flex: 1 },
-   textInput: { color: "#fff", fontSize: 19, lineHeight: 26, minHeight: 200, textAlignVertical: "top" },
-   mediaViewWrapper: { paddingHorizontal: 20, minHeight: 400, justifyContent: 'center' },
-   mediaPlaceholderCentered: { flexDirection: 'row', gap: 16, justifyContent: 'center', alignItems: 'center' },
-   mediaOption: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-   previewFullWidth: { width: '100%', height: 350, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+   textInput: {
+      color: "#fff",
+      fontSize: 18,
+      lineHeight: 24,
+      minHeight: 100,
+      textAlignVertical: "top",
+      paddingTop: 4
+   },
+   counterText: {
+      color: '#636366',
+      fontSize: 16,
+      textAlign: 'right',
+      marginTop: 4,
+      marginBottom: 8
+   },
+   counterError: {
+      color: '#FF453A',
+      fontWeight: '600'
+   },
+   previewContainer: {
+      width: '100%',
+      height: 280,
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginTop: 4,
+      backgroundColor: '#1C1C1E',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)'
+   },
    mediaPreview: { width: '100%', height: '100%', resizeMode: 'cover' },
-   removeBtn: { position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,69,58,0.8)', alignItems: 'center', justifyContent: 'center' }
+   removeBtn: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)'
+   },
+   bottomToolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingTop: 10,
+      borderTopWidth: 0.5,
+      borderTopColor: 'rgba(255,255,255,0.1)',
+      backgroundColor: '#000',
+      justifyContent: "space-between"
+   },
+   toolbarIcons: {
+      flexDirection: 'row',
+      gap: 16,
+   },
+   toolIconBtn: {
+      padding: 6,
+   }
 });
