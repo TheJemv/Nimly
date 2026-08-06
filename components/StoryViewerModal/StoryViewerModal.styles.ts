@@ -99,7 +99,7 @@ export const styles = StyleSheet.create({
     touchLeft: { width: "30%", height: "100%" },
     touchRight: { width: "70%", height: "100%" },
     footer: { paddingHorizontal: 20, marginBottom: 20 },
-    actionsContainer: { alignItems: "flex-end" },
+    actionsContainer: { alignItems: "center", display: "flex", flexDirection: "row", gap: 12 },
     likeButton: {
         width: 44,
         height: 44,
@@ -185,5 +185,16 @@ export const styles = StyleSheet.create({
         display: "flex",
         flexDirection: "row",
         justifyContent: "space-between"
+    },
+    textInputReply: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.2)",
+        height: 44,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 22,
+        color: "#ffffff"
     }
 });

@@ -55,15 +55,20 @@ export function useChatSync(targetFriendId: string | undefined) {
         try {
             const { data, error } = await supabase
                 .from('messages')
-                .select('*')
+                .select(`
+                    *,
+                    reply_to:reply_to_id (id, content, sender_id, type),
+                    reply_to_story:reply_to_story_id (id, media_url, user_id)
+                `) // 👈 AQUI: Usamos !reply_to_id (el nombre de tu columna)
                 .eq('chat_id', cId)
                 .order('created_at', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
 
             if (error) throw error;
+
             if (data && data.length < PAGE_SIZE) setHasMore(false);
-            
             setMessages(prev => offset === 0 ? (data || []) : [...prev, ...(data || [])]);
+            
             return data;
         } catch (e) {
             console.error('❌ [FETCH] Error:', e);
@@ -79,14 +84,40 @@ export function useChatSync(targetFriendId: string | undefined) {
                 { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        const newMsg = payload.new;
-                        setMessages((prev) => {
-                            if (prev.some((m) => m.id === newMsg.id)) return prev;
-                            return [newMsg, ...prev];
-                        });
-                        if (targetFriendId && newMsg.sender_id === targetFriendId) {
-                            markMessagesAsRead(chatId);
-                        }
+                        const rawMsg = payload.new;
+
+                        // 🟢 Creamos una función async para procesar el mensaje entrante
+                        const handleNewMessage = async () => {
+                            let finalMsg = rawMsg;
+
+                            // Si el mensaje es una respuesta, hacemos un fetch rápido de ese mensaje
+                            // específico usando tu misma consulta para que traiga el JOIN armado.
+                            if (rawMsg.reply_to_id) {
+                                const { data } = await supabase
+                                    .from('messages')
+                                    .select(`
+                                        *,
+                                        reply_to:reply_to_id (id, content, sender_id, type)
+                                    `)
+                                    .eq('id', rawMsg.id)
+                                    .single();
+
+                                if (data) finalMsg = data;
+                            }
+
+                            // Ahora sí, lo metemos al estado de React
+                            setMessages((prev) => {
+                                if (prev.some((m) => m.id === finalMsg.id)) return prev;
+                                return [finalMsg, ...prev];
+                            });
+
+                            if (targetFriendId && finalMsg.sender_id === targetFriendId) {
+                                markMessagesAsRead(chatId);
+                            }
+                        };
+
+                        handleNewMessage();
+
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedMsg = payload.new;
                         setMessages((prev) =>

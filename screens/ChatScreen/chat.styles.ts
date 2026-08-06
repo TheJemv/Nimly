@@ -49,5 +49,17 @@ export const styles = StyleSheet.create({
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       paddingVertical: 5, backgroundColor: '#111', gap: 8
    },
-   uploadText: { color: '#fff', fontSize: 12, fontWeight: '600' }
+   uploadText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+   replyPreviewBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: '#111',
+      borderTopWidth: 0.5,
+      borderTopColor: '#222',
+   },
+   replyPreviewContent: { flex: 1, marginRight: 8 },
+   replyPreviewLabel: { color: '#DC143C', fontSize: 12, fontWeight: '600', marginBottom: 2 },
 });

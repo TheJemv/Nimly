@@ -35,6 +35,8 @@ import { prefetchChatMedia } from "@/utils/mediaPrefetch";
 
 // More
 import { chatApi } from "@/api/chat";
+import { ReplyQuote } from "@/components/ReplyQuote";
+import { ReplyStory } from "@/components/ReplyStory";
 import { supabase } from "@/lib/supabase";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
@@ -46,6 +48,7 @@ export default function ChatScreen() {
 
    const [newMessage, setNewMessage] = useState("");
    const [isCameraVisible, setCameraVisible] = useState(false);
+   const [replyingTo, setReplyingTo] = useState<any>(null);
 
    const {
       chatId,
@@ -61,7 +64,6 @@ export default function ChatScreen() {
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
 
-   // Prefetching de media
    useEffect(() => {
       if (!friendProfile?.public_key || messages.length === 0) return;
       const mediaItems = messages
@@ -82,6 +84,8 @@ export default function ChatScreen() {
       if (!cleanedMessage || !chatId || !currentUserId || !friendProfile?.public_key) return;
 
       setNewMessage("");
+      const replyToId = replyingTo?.id || null;
+      setReplyingTo(null); // limpia la barra de reply de inmediato (UX optimista)
 
       try {
          const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, friendProfile.public_key);
@@ -94,7 +98,8 @@ export default function ChatScreen() {
             sender_id: currentUserId,
             content: encryptedContent,
             type: 'text',
-            is_read: false
+            is_read: false,
+            reply_to_id: replyToId, // 👈
          });
       } catch (e) {
          console.error("❌ [SEND] Vault Send Error:", e);
@@ -109,37 +114,41 @@ export default function ChatScreen() {
    }, [friendProfile]);
 
    const renderItem = useCallback(({ item }: { item: any }) => {
-      const mine = item.sender_id === currentUserId;
+      const mine = item.sender_id === currentUserId; // ✅ CORRECTO
       const keyToUse = friendProfile?.public_key || "";
       const showReadReceipt = item.id === lastReadMessageId;
-
-      if (item.content === 'OPENED_CAPSULE') {
-         return (
-            <View style={styles.rowContainer}>
-               <View style={[styles.bubble, mine ? styles.myBubble : styles.theirBubble]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-                     <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
-                     <Text style={{ color: '#888', fontStyle: 'italic', fontSize: 14 }}>Opened Capsule</Text>
-                  </View>
-               </View>
-               {showReadReceipt && friendAvatarSvg && (
-                  <View style={styles.readReceiptContainer}>
-                     <SvgXml xml={friendAvatarSvg} width="16" height="16" />
-                  </View>
-               )}
-            </View>
-         );
-      }
 
       const isText = item.type === 'text' || !item.type;
       const isViewOnceSender = item.type === 'image-view-once' && mine;
 
+      const replyData = Array.isArray(item.reply_to) ? item.reply_to[0] : item.reply_to;
+
       return (
          <View style={styles.rowContainer}>
-            <View style={[
-               (isText || isViewOnceSender) ? styles.bubble : styles.bubbleImage,
-               mine ? styles.myBubble : styles.theirBubble
-            ]}>
+            {item.reply_to_story && (
+               <ReplyStory
+                  content={item.reply_to_story}
+                  isMyMessage={item.sender_id === currentUserId}
+               />
+            )}
+
+            <TouchableOpacity
+               activeOpacity={0.85}
+               onPress={() => isText && setReplyingTo(item)}
+               style={[
+                  (isText || isViewOnceSender) ? styles.bubble : styles.bubbleImage,
+                  mine ? styles.myBubble : styles.theirBubble
+               ]}
+            >
+               {replyData && (
+                  <ReplyQuote
+                     content={replyData.content}
+                     senderUsername={replyData.sender_id === currentUserId ? "You" : friendProfile?.username || ""}
+                     friendPublicKey={keyToUse}
+                     isMine={mine}
+                  />
+               )}
+
                {isText ? (
                   <MessageContent content={item.content} friendPublicKey={keyToUse} />
                ) : (
@@ -150,7 +159,7 @@ export default function ChatScreen() {
                      isMine={mine}
                   />
                )}
-            </View>
+            </TouchableOpacity>
             {showReadReceipt && friendAvatarSvg && (
                <View style={styles.readReceiptContainer}>
                   <SvgXml xml={friendAvatarSvg} width="16" height="16" />
@@ -243,6 +252,21 @@ export default function ChatScreen() {
                   <Text style={styles.uploadText}>Encrypting Vault...</Text>
                </View>
             )}
+
+            {replyingTo && (
+               <View style={styles.replyPreviewBar}>
+                  <View style={styles.replyPreviewContent}>
+                     <Text style={styles.replyPreviewLabel}>
+                        Replying to {replyingTo.sender_id === currentUserId ? "yourself" : friendProfile?.username}
+                     </Text>
+                     <MessageContent content={replyingTo.content} friendPublicKey={friendProfile?.public_key} />
+                  </View>
+                  <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                     <SymbolView name="xmark.circle.fill" size={20} tintColor="#666" />
+                  </TouchableOpacity>
+               </View>
+            )}
+
 
             <View style={styles.inputBar}>
                <TouchableOpacity style={styles.plusHost} onPress={() => setCameraVisible(true)}>

@@ -20,7 +20,11 @@ export const MessageContent = memo(({ content, friendPublicKey }: MessageContent
             return;
         }
 
-        if (vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")) return;
+        const cached = vaultRAMCache[content];
+        if (cached && !cached.startsWith("🔒")) {
+            setDecryptedText(cached); // 👈 antes solo hacía "return"
+            return;
+        }
 
         let isMounted = true;
         const decrypt = async () => {

@@ -17,7 +17,6 @@ export const chatApi = {
             .eq('user_id', user.id);
 
         const myIds = myChats?.map(c => c.chat_id) || [];
-
         const { data: common } = await supabase
             .from('chat_participants')
             .select('chat_id')

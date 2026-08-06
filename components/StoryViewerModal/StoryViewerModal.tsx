@@ -10,20 +10,22 @@ import {
     Animated,
     FlatList,
     Image,
+    KeyboardAvoidingView,
     Modal,
     Platform,
     Pressable,
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserAvatar from "../UserAvatar";
 import { styles } from "./StoryViewerModal.styles";
 
-import { useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
+import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
     visible: boolean;
@@ -159,8 +161,15 @@ export default function StoryViewerModal({
     };
 
     if (!visible || !currentGroup || !currentStory) return null;
-
     const currentLikedStatus = (currentStory as any).is_liked_by_me || false;
+
+    const {
+        replyTextStory,
+        loadingReplyStory,
+
+        setReplyTextStory,
+        handleReplyStory,
+    } = useReplyStory(currentGroup, currentStory.id)
 
     return (
         <Modal
@@ -199,8 +208,11 @@ export default function StoryViewerModal({
                     />
                 )}
 
-                <View
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    keyboardVerticalOffset={Platform.OS === "ios" ? -insets.bottom + 54 : 0}
                     style={[styles.uiOverlay, { paddingTop: topSafePadding }, isHolding && styles.hiddenUI]}
+                    pointerEvents="box-none"
                 >
                     <View style={styles.topSection}>
                         <View style={styles.progressContainer}>
@@ -261,17 +273,45 @@ export default function StoryViewerModal({
                             </View>
                         ) : (
                             <View style={styles.actionsContainer}>
-                                <TouchableOpacity onPress={toggleLike} style={styles.likeButton} activeOpacity={0.8}>
-                                    <SymbolView
-                                        name={currentLikedStatus ? "heart.fill" : "heart"}
-                                        tintColor={currentLikedStatus ? getThemeColor("tint") : "#636366"}
-                                        size={22}
-                                    />
-                                </TouchableOpacity>
+                                <TextInput
+                                    style={styles.textInputReply}
+                                    placeholder="Reply to story..."
+                                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
+
+                                    onFocus={() => pauseTimerForSheet()}
+                                    onBlur={() => resumeTimerFromSheet()}
+
+                                    onChangeText={e => setReplyTextStory(e)}
+                                    value={replyTextStory}
+                                />
+
+                                {replyTextStory ? (
+                                    <TouchableOpacity disabled={loadingReplyStory} onPress={handleReplyStory} style={styles.likeButton} activeOpacity={0.8}>
+                                        {loadingReplyStory ? (
+                                            <ActivityIndicator color={getThemeColor("tint")} />
+                                        ) : (
+                                            <SymbolView
+                                                name={"paperplane.fill"}
+                                                tintColor={"#fff"}
+                                                size={22}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                ) : (
+                                    <TouchableOpacity onPress={toggleLike} style={styles.likeButton} activeOpacity={0.8}>
+                                        <SymbolView
+                                            name={currentLikedStatus ? "heart.fill" : "heart"}
+                                            tintColor={currentLikedStatus ? getThemeColor("tint") : "#636366"}
+                                            size={22}
+                                        />
+                                    </TouchableOpacity>
+                                )}
+
                             </View>
                         )}
                     </View>
-                </View>
+                </KeyboardAvoidingView>
+                {/* </View> */}
 
                 <View style={styles.touchOverlay}>
                     <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
