@@ -21,7 +21,7 @@
         "NSPhotoLibraryUsageDescription": "Needed to upload photos to your vault.",
         "NSCameraUsageDescription": "Needed to capture secure photos for the vault.",
         "NSMicrophoneUsageDescription": "Needed for video recording within the vault.",
-        "ITSAppUsesNonExemptEncryption": true
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "plugins": [
