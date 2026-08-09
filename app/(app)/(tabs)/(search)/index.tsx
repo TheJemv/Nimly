@@ -1,4 +1,3 @@
-import BackgroundGlow from "@/components/background-glow";
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -6,7 +5,7 @@ import { createAvatar } from "@dicebear/core";
 import { GlassView } from 'expo-glass-effect';
 import { useRouter } from 'expo-router';
 import { SymbolView } from "expo-symbols";
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -101,8 +100,6 @@ export default function SearchScreen() {
 
     return (
         <View style={styles.container}>
-            <BackgroundGlow />
-
             <View style={styles.headerContainer}>
                 <Text style={styles.headerTitle}>Discover</Text>
                 <GlassView style={styles.searchBarGlass}>
@@ -146,7 +143,7 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0000' },
+    container: { flex: 1, backgroundColor: '#000000' },
     headerContainer: {
         paddingTop: Platform.OS === 'ios' ? 70 : 50,
         paddingHorizontal: 20,

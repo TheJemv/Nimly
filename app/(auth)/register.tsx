@@ -2,12 +2,13 @@ import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -43,16 +44,14 @@ export default function RegisterScreen() {
         }
 
         setLoading(true);
-
         const fakeEmail = `${username.toLowerCase().trim()}@nimly.com`;
-
         const { error } = await supabase.auth.signUp({
             email: fakeEmail,
             password: password,
             options: {
                 data: {
                     username: username.trim(),
-                    terms_accepted: true,
+                    terms_accepted: termsAccepted,
                     terms_accepted_at: new Date().toISOString(),
                 }
             }
@@ -68,133 +67,138 @@ export default function RegisterScreen() {
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior="padding"
             style={{ flex: 1, backgroundColor: bg }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
         >
-            <View style={styles.content}>
-                <View style={styles.header}>
-                    <Text style={[styles.title, { color: textMain }]}>Join Nimly</Text>
-                    <Text style={[styles.subtitle, { color: textSec }]}>
-                        Create your unique identity in our private network.
-                    </Text>
-                </View>
-
-                <View style={styles.form}>
-                    <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: accent }]}>USERNAME</Text>
-                        <TextInput
-                            style={[styles.input, {
-                                backgroundColor: surface,
-                                color: textMain,
-                                borderColor: glassBorder
-                            }]}
-                            placeholder="Choose a unique username"
-                            placeholderTextColor={textSec}
-                            autoCapitalize="none"
-                            value={username}
-                            onChangeText={setUsername}
-                            selectionColor={getThemeColor('tint')}
-                        />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: accent }]}>PASSWORD</Text>
-
-                        {/* Contenedor que agrupa el botón izquierdo y el TextInput */}
-                        <View style={[styles.inputWrapper, { backgroundColor: surface, borderColor: glassBorder }]}>
-                            <TextInput
-                                style={[styles.inputInner, { color: textMain }]}
-                                placeholder="Min. 6 characters"
-                                placeholderTextColor={textSec}
-                                secureTextEntry={!showPassword}
-                                value={password}
-                                onChangeText={setPassword}
-                                selectionColor={getThemeColor('tint')}
-                            />
-
-                            <TouchableOpacity
-                                style={styles.eyeButton}
-                                onPress={() => setShowPassword(!showPassword)}
-                                activeOpacity={0.7}
-                            >
-                                <SymbolView size={24} name={showPassword ? "eye.slash" : "eye"} tintColor={"#fff"} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    {/* ——— TERMS CHECKBOX ——— */}
-                    <TouchableOpacity
-                        style={styles.termsRow}
-                        onPress={() => setTermsAccepted(!termsAccepted)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={[
-                            styles.checkbox,
-                            {
-                                borderColor: termsAccepted ? accent : glassBorder,
-                                backgroundColor: termsAccepted ? accent : 'transparent',
-                            }
-                        ]}>
-                            {termsAccepted && (
-                                <Text style={styles.checkmark}>✓</Text>
-                            )}
-                        </View>
-
-                        <Text style={[styles.termsText, { color: textSec }]}>
-                            I have read and accept the{' '}
-                            <Text
-                                style={[styles.termsLink, { color: accent }]}
-                                onPress={() => router.push('/(auth)/terms')}
-                            >
-                                Terms of Use
-                            </Text>
+            <ScrollView
+                contentContainerStyle={{ flexGrow: 1 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.content}>
+                    <View style={styles.header}>
+                        <Text style={[styles.title, { color: textMain }]}>Join Nimly</Text>
+                        <Text style={[styles.subtitle, { color: textSec }]}>
+                            Create your unique identity in our private network.
                         </Text>
-                    </TouchableOpacity>
+                    </View>
 
-                    <TouchableOpacity
-                        style={[
-                            styles.buttonPrimary,
-                            {
-                                backgroundColor: termsAccepted ? accent : surface,
-                                borderWidth: termsAccepted ? 0 : 1,
-                                borderColor: glassBorder,
-                            }
-                        ]}
-                        onPress={handleSignUp}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#ffffff" />
-                        ) : (
-                            <Text style={[
-                                styles.buttonText,
-                                { color: termsAccepted ? '#ffffff' : textSec }
+                    <View style={styles.form}>
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: accent }]}>USERNAME</Text>
+                            <TextInput
+                                style={[styles.input, {
+                                    backgroundColor: surface,
+                                    color: textMain,
+                                    borderColor: glassBorder
+                                }]}
+                                placeholder="Choose a unique username"
+                                placeholderTextColor={textSec}
+                                autoCapitalize="none"
+                                value={username}
+                                onChangeText={setUsername}
+                                selectionColor={accent}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: accent }]}>PASSWORD</Text>
+
+                            <View style={[styles.inputWrapper, { backgroundColor: surface, borderColor: glassBorder }]}>
+                                <TextInput
+                                    style={[styles.inputInner, { color: textMain }]}
+                                    placeholder="Min. 6 characters"
+                                    placeholderTextColor={textSec}
+                                    secureTextEntry={!showPassword}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    selectionColor={accent}
+                                />
+
+                                <TouchableOpacity
+                                    style={styles.eyeButton}
+                                    onPress={() => setShowPassword(!showPassword)}
+                                    activeOpacity={0.7}
+                                >
+                                    <SymbolView size={24} name={showPassword ? "eye.slash" : "eye"} tintColor={"#fff"} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* ——— TERMS CHECKBOX ——— */}
+                        <TouchableOpacity
+                            style={styles.termsRow}
+                            onPress={() => setTermsAccepted(!termsAccepted)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[
+                                styles.checkbox,
+                                {
+                                    borderColor: termsAccepted ? accent : glassBorder,
+                                    backgroundColor: termsAccepted ? accent : 'transparent',
+                                }
                             ]}>
-                                CREATE ACCOUNT
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
+                                {termsAccepted && (
+                                    <Text style={styles.checkmark}>✓</Text>
+                                )}
+                            </View>
 
-                <View style={styles.footer}>
-                    <Text style={{ color: textSec }}>Already have an account? </Text>
-                    <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                        <Text style={{ color: accent, fontWeight: 'bold' }}>Enter here</Text>
-                    </TouchableOpacity>
+                            <Text style={[styles.termsText, { color: textSec }]}>
+                                I have read and accept the{' '}
+                                <Text
+                                    style={[styles.termsLink, { color: accent }]}
+                                    onPress={() => router.push('/(auth)/terms')}
+                                >
+                                    Terms of Use
+                                </Text>
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.buttonPrimary,
+                                {
+                                    backgroundColor: termsAccepted ? accent : surface,
+                                    borderWidth: termsAccepted ? 0 : 1,
+                                    borderColor: glassBorder,
+                                }
+                            ]}
+                            onPress={handleSignUp}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#ffffff" />
+                            ) : (
+                                <Text style={[
+                                    styles.buttonText,
+                                    { color: termsAccepted ? '#ffffff' : textSec }
+                                ]}>
+                                    CREATE ACCOUNT
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.footer}>
+                        <Text style={{ color: textSec }}>Already have an account? </Text>
+                        <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+                            <Text style={{ color: accent, fontWeight: 'bold' }}>Enter here</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
+            </ScrollView>
         </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
     content: {
         flex: 1,
         paddingHorizontal: 30,
         paddingTop: 20,
+        // Agregamos un poco de padding inferior para asegurar que el footer no quede pegado abajo al hacer scroll
+        paddingBottom: 40,
     },
     header: {
         marginTop: 40,
@@ -228,8 +232,6 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         fontSize: 16,
     },
-
-    // ——— INPUT WRAPPER CON BOTÓN A LA IZQUIERDA ———
     inputWrapper: {
         height: 55,
         borderRadius: 8,
@@ -243,17 +245,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    eyeIcon: {
-        fontSize: 18,
-    },
     inputInner: {
         flex: 1,
         height: '100%',
         paddingRight: 15,
         fontSize: 16,
     },
-
-    // ——— TERMS ———
     termsRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -284,7 +281,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         textDecorationLine: 'underline',
     },
-    // ——— BUTTON ———
     buttonPrimary: {
         height: 55,
         borderRadius: 8,
@@ -300,6 +296,7 @@ const styles = StyleSheet.create({
     footer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: 40,
+        marginTop: 'auto', // Empuja el footer hacia abajo si hay espacio de sobra en la pantalla
+        paddingTop: 40,
     },
 });

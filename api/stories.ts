@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 export interface Story {
@@ -69,49 +70,54 @@ export const storiesApi = {
     return storyData;
   },
 
-  async getActiveFeed() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+  async getActiveFeed(user: User) {
+      if (!user) return [];
 
-    const { data, error } = await supabase
-      .from('stories')
-      .select(`
-        *,
-        profiles:user_id (id, username, avatar_url, avatar_config),
-        story_views (
-          viewer_id,
-          viewed_at,
-          profiles:viewer_id (id, username, avatar_url, avatar_config)
-        ),
-        story_likes (user_id, reaction)
-      `)
-      .order('created_at', { ascending: false });
+      const tQueryStart = performance.now();
+      const { data, error } = await supabase
+        .from('stories')
+        .select(`
+          *,
+          profiles:user_id (id, username, avatar_config),
+          story_views (
+            viewer_id,
+            viewed_at,
+            profiles:viewer_id (id, username, avatar_config)
+          ),
+          story_likes (user_id)
+        `)
+        .order('created_at', { ascending: false });
+        console.log(JSON.stringify(data, null, 2))
+        console.log(`⏱️ [Stories] Query a Postgres: ${(performance.now() - tQueryStart).toFixed(0)}ms`);
 
-    if (error) throw error;
+      if (error) throw error;
+      const stories = data as any[];
+      if (stories.length === 0) return [];
 
-    const storiesWithSignedUrls = await Promise.all(
-      (data as any[]).map(async (story) => {
-        try {
-          const { data: signedData } = await supabase.storage
-            .from('stories')
-            .createSignedUrl(story.media_url, 3600);
+      // 👇 UNA sola petición para firmar TODAS las URLs, en vez de N peticiones separadas
+      const paths = stories.map((s) => s.media_url);
+      const { data: signedUrlsData, error: signError } = await supabase.storage
+        .from('stories')
+        .createSignedUrls(paths, 3600); // 👈 nota la "s" al final — versión batch
 
-          // 🔍 AQUÍ ESTÁ LA CLAVE: Verificamos si el usuario actual ya le dio like
+      if (signError) {
+          console.error("Error generando signed URLs en batch:", signError);
+      }
+
+      // Mapeamos por path para asociar cada historia con su URL firmada correcta
+      const signedUrlMap = new Map(
+          (signedUrlsData || []).map((item) => [item.path, item.signedUrl])
+      );
+
+      return stories.map((story) => {
           const likesList = story.story_likes || [];
           const isLikedByMe = likesList.some((l: any) => l.user_id === user.id);
-
           return {
-            ...story,
-            media_url: signedData?.signedUrl || story.media_url,
-            is_liked_by_me: isLikedByMe, // 👈 Inyectamos el booleano exacto
+              ...story,
+              media_url: signedUrlMap.get(story.media_url) || story.media_url,
+              is_liked_by_me: isLikedByMe,
           };
-        } catch {
-          return story;
-        }
-      })
-    );
-
-    return storiesWithSignedUrls;
+      });
   },
 
   async markAsViewed(storyId: string) {

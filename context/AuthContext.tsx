@@ -104,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         let securitySubscription: any = null;
         let isMounted = true;
+        let hasChecked = false
 
         const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
             return Promise.race([
@@ -115,6 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         const checkSession = async () => {
+            if (hasChecked) return
+            hasChecked = true
             try {
                 // ÚLTIMA BARRERA DE TIMEOUT: Solo para la red de Supabase Auth
                 const { data: { session: currentSession } } = await withTimeout(

@@ -8,7 +8,7 @@ export default function BackgroundGlow() {
 
 const styles = StyleSheet.create({
     bgGlow: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         opacity: 0.2
     },
 }) 

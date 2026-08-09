@@ -1,4 +1,5 @@
 import { storiesApi, Story } from "@/api/stories";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { ViewerProfile } from "@/types/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,21 +21,21 @@ export interface StoryGroup {
         views_count?: number;
         viewers?: any[];
         likes?: any[];
-        is_liked_by_me: boolean; // 👈 agregar esto
+        is_liked_by_me: boolean;
     }[];
 }
 
 export function useStoriesFeed() {
+    const { session } = useAuth()
+
     const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
     const [loadingStories, setLoadingStories] = useState(true);
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
     const channelRef = useRef<any>(null);
 
     const formatStoriesToGroups = (rawStories: Story[], userId: string | null): StoryGroup[] => {
         const groupsMap: { [key: string]: StoryGroup } = {};
 
-        // 🔄 INVERTIMOS EL ORDEN: De más vieja a más nueva para que los aros y el visor fluyan correctamente
         const sortedRaw = [...rawStories].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
         sortedRaw.forEach((story) => {
@@ -61,7 +62,6 @@ export function useStoriesFeed() {
 
             const isSeenByMe = isMe || views.some((v) => v.viewer_id === userId);
 
-            // 🔗 Cruzamos viewers con likes para saber quién de los que vieron también dio like
             const viewersWithLikeInfo: ViewerProfile[] = views.map((v: any) => ({
                 user_id: v.viewer_id,
                 username: v.profiles?.username || "user",
@@ -72,7 +72,6 @@ export function useStoriesFeed() {
                 viewed_at: v.viewed_at,
             }));
 
-
             groupsMap[uId].stories.push({
                 id: story.id,
                 media_url: story.media_url,
@@ -81,7 +80,7 @@ export function useStoriesFeed() {
                 is_seen_by_me: isSeenByMe,
                 is_view_once: story.is_view_once,
                 views_count: views.length,
-                viewers: viewersWithLikeInfo,   // 👈 ahora sí trae has_liked
+                viewers: viewersWithLikeInfo,
                 likes,
                 is_liked_by_me: (story as any).is_liked_by_me || false,
             });
@@ -91,66 +90,82 @@ export function useStoriesFeed() {
     };
 
     const reloadStories = useCallback(async (showLoading = true) => {
+        const userId = session?.user?.id;
+        if (!userId) return; // 👈 sin sesión, no hay nada que cargar
+
+        const t0 = performance.now();
         try {
             if (showLoading) setLoadingStories(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-            setCurrentUserId(user.id);
 
-            const rawStories = await storiesApi.getActiveFeed();
-            const groups = formatStoriesToGroups(rawStories as Story[], user.id);
+            const tFetchStart = performance.now();
+            const rawStories = await storiesApi.getActiveFeed(session?.user);
+            const tFetchEnd = performance.now();
+            console.log(`⏱️ [Stories] getActiveFeed() (${rawStories.length} historias): ${(tFetchEnd - tFetchStart).toFixed(0)}ms`);
+
+            const groups = formatStoriesToGroups(rawStories as Story[], userId);
             setStoryGroups(groups);
+
+            console.log(`⏱️ [Stories] TOTAL reloadStories(): ${(performance.now() - t0).toFixed(0)}ms`);
         } catch (error) {
             console.error("Error cargando historias:", error);
         } finally {
             if (showLoading) setLoadingStories(false);
         }
-    }, []);
+    }, [session?.user?.id]);
 
-    // 📡 REALTIME ROBUSTO PARA INSERT, UPDATE Y DELETE
     useEffect(() => {
         let isMounted = true;
+        let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+        let retryCount = 0;
+        let isIntentionalClose = false; // 👈 nueva bandera
+        const MAX_RETRY_DELAY = 15000;
 
         const initRealtime = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = session?.user
             if (!user || !isMounted) return;
-            setCurrentUserId(user.id);
 
             await reloadStories(true);
 
             if (channelRef.current) {
+                isIntentionalClose = true; // 👈 marcamos ANTES de remover
                 supabase.removeChannel(channelRef.current);
             }
 
             const uniqueChannelName = `stories_feed_v2_${user.id}-${Date.now()}`;
 
             const channel = supabase.channel(uniqueChannelName)
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'stories' },
-                    (payload) => {
-                        console.log('📡 Evento realtime en stories:', payload); // 👈
-                        if (isMounted) reloadStories(false);
-                    }
-                )
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'story_views' },
-                    (payload) => {
-                        console.log('📡 Evento realtime en story_views:', payload); // 👈
-                        if (isMounted) reloadStories(false);
-                    }
-                )
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'story_likes' },
-                    (payload) => {
-                        console.log('📡 Evento realtime en story_likes:', payload); // 👈
-                        if (isMounted) reloadStories(false);
-                    }
-                )
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' },
+                    (payload) => { if (isMounted) reloadStories(false); })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'story_views' },
+                    (payload) => { if (isMounted) reloadStories(false); })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'story_likes' },
+                    (payload) => { if (isMounted) reloadStories(false); })
                 .subscribe((status, err) => {
-                    console.log('🔌 Estado del canal de historias:', status, err); // 👈
+                    console.log('🔌 Estado del canal de historias:', status, err);
+
+                    if (status === 'SUBSCRIBED') {
+                        retryCount = 0;
+                        isIntentionalClose = false; // 👈 resetear una vez conectado bien
+                        return;
+                    }
+
+                    if (status === 'CLOSED' && isIntentionalClose) {
+                        // 👈 este cierre lo causamos nosotros al remover el canal viejo — ignorar
+                        isIntentionalClose = false;
+                        return;
+                    }
+
+                    if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
+                        if (!isMounted) return;
+                        retryCount++;
+                        const delay = Math.min(1000 * 2 ** retryCount, MAX_RETRY_DELAY);
+                        console.log(`⚠️ Canal de historias caído (${status}). Reintentando en ${delay}ms...`);
+
+                        if (retryTimeout) clearTimeout(retryTimeout);
+                        retryTimeout = setTimeout(() => {
+                            if (isMounted) initRealtime();
+                        }, delay);
+                    }
                 });
 
             channelRef.current = channel;
@@ -160,11 +175,13 @@ export function useStoriesFeed() {
 
         return () => {
             isMounted = false;
+            if (retryTimeout) clearTimeout(retryTimeout);
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
             }
         };
     }, [reloadStories]);
+
 
     const handleStorySeen = async (storyId: string) => {
         try {
@@ -193,9 +210,7 @@ export function useStoriesFeed() {
 
     const handleSendStory = async (uri: string, mediaType: "image" | "video") => {
         try {
-            // 1. Subimos la historia a la base de datos
             await storiesApi.createStory(uri, mediaType, false);
-            // 2. Forzamos la recarga inmediata con firmas de URL para que el aro rojo aparezca al instante sin requerir refresh manual
             await reloadStories(false);
         } catch (error) {
             console.error("Error publicando historia:", error);
@@ -221,7 +236,7 @@ export function useStoriesFeed() {
     return {
         storyGroups,
         loadingStories,
-        currentUserId,
+        currentUserId: session?.user?.id ?? null,
         reloadStories,
         handleStorySeen,
         handleStoryLiked,

@@ -2,7 +2,7 @@ import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function TabLayout() {
   const [unreadCount, setUnreadCount] = useState<number>(0);

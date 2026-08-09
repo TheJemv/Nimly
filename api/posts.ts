@@ -97,31 +97,12 @@ export const createPost = async (
 /**
  * Obtiene los posts de AMIGOS (Lógica Bidireccional)
  */
-export const getFriendsPosts = async () => {
+export const getFriendsPosts = async (userId: string) => {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return [];
-
-        // 1. Buscamos quiénes son mis amigos
-        const { data: friendships, error: fError } = await supabase
-            .from('friends')
-            .select('user_id, friend_id')
-            .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
-
-        if (fError) throw fError;
-
-        // 2. Extraemos los IDs y nos incluimos a nosotros mismos
-        const friendIds = friendships?.map(f => f.user_id === user.id ? f.friend_id : f.user_id) || [];
-        const allIds = [...new Set([...friendIds, user.id])];
-
-        // 3. CONSULTA MAESTRA: Usamos la vista 'posts_with_stats'
-        const { data, error } = await supabase
-            .from('posts_with_stats')
-            .select('*')
-            .in('user_id', allIds)
-            .order('created_at', { ascending: false })
-            .limit(15);
-
+        if (!userId) return [];
+        const { data, error } = await supabase.rpc('get_friends_posts', {
+            requesting_user_id: userId,
+        });
         if (error) throw error;
         return data;
     } catch (error) {

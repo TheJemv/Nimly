@@ -1,6 +1,6 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { createAvatar } from "@dicebear/core";
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 

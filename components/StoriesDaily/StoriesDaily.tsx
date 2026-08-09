@@ -1,7 +1,7 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { supabase } from "@/lib/supabase";
 import { createAvatar } from "@dicebear/core";
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     Image,
     ScrollView,

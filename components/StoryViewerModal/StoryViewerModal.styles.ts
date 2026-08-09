@@ -8,7 +8,7 @@ export const styles = StyleSheet.create({
         backgroundColor: Colors.dark.background,
     },
     loaderContainer: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         justifyContent: "center",
         alignItems: "center",
         zIndex: 2,
@@ -21,7 +21,7 @@ export const styles = StyleSheet.create({
         left: 0,
     },
     uiOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 10,
         justifyContent: "space-between",
         pointerEvents: "box-none",
@@ -92,7 +92,7 @@ export const styles = StyleSheet.create({
         fontWeight: "bold",
     },
     touchOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         flexDirection: "row",
         zIndex: 5,
     },
@@ -118,7 +118,7 @@ export const styles = StyleSheet.create({
         fontWeight: "bold",
     },
     backdrop: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         backgroundColor: "rgba(0,0,0,0.6)",
         zIndex: 20,
     },

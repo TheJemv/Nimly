@@ -15,3 +15,7 @@ run:
 run-build:
 	@echo "📱 Compilando y ejecutando la app nativa en dispositivo físico iOS (--device) con Bun..."
 	bunx expo run:ios --device
+
+xcode:
+	@echo "🍎 Abriendo en xcode"
+	open ./ios/Nimly.xcworkspace

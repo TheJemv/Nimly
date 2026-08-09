@@ -1,8 +1,7 @@
 // app/(auth)/index.tsx
 import { Fonts, getThemeColor } from '@/constants/theme';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function WelcomeScreen() {
@@ -23,7 +22,14 @@ export default function WelcomeScreen() {
                 {/* VIP Header */}
                 <View style={styles.logoContainer}>
                     <View style={[styles.glassIcon, { borderColor: glassBorder, backgroundColor: glassBg }]}>
-                        <Text style={[styles.logoLetter, { color: accent }]}>N</Text>
+                        {/* <Text style={[styles.logoLetter, { color: accent }]}>N</Text> */}
+                        <Image
+                            source={require("@/assets/expo/splash.png")}
+                            style={{
+                                width: 64,
+                                height: 64,
+                            }}
+                        />
                     </View>
                     <Text style={[styles.title, { color: textMain, fontFamily: Fonts?.sans }]}>Nimly</Text>
                     <View style={[styles.badge, { backgroundColor: glassBorder }]}>

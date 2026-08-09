@@ -2,16 +2,12 @@
   "expo": {
     "name": "Nimly",
     "slug": "Nimly",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/expo/icon.png",
     "scheme": "nimly",
     "backgroundColor": "#000000",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "backgroundColor": "#000000",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.nimly.app",
@@ -29,10 +25,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "backgroundColor": "#000000",
+          "image": "./assets/expo/splash.png",
           "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "resizeMode": "contain"
         }
       ],
       "expo-font",
@@ -47,14 +43,14 @@
         "expo-build-properties",
         {
           "ios": {
-            "deploymentTarget": "16.0"
+            "deploymentTarget": "16.4"
           }
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "owner": "jemv05",
     "extra": {

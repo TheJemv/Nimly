@@ -4,7 +4,7 @@ import { StoryGroup, ViewerProfile } from "@/types/types";
 import getTimeAgo from "@/utils/getTimeAgo";
 import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -285,7 +285,7 @@ export default function StoryViewerModal({
         >
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
 
             <Animated.View
                 style={[styles.container, { transform: [{ translateY: panY }] }]}
@@ -324,6 +324,11 @@ export default function StoryViewerModal({
                     />
                 )}
 
+                <View style={styles.touchOverlay}>
+                    <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
+                    <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapRight} />
+                </View>
+
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : undefined}
                     keyboardVerticalOffset={Platform.OS === "ios" ? -insets.bottom + 54 : 0}
@@ -355,7 +360,6 @@ export default function StoryViewerModal({
                             <View style={styles.userInfo}>
                                 <View style={styles.headerAvatarContainer}>
                                     <UserAvatar
-                                        avatar_url={currentGroup.avatar_url}
                                         avatar_config={currentGroup.avatar_config}
                                         size={28}
                                     />
@@ -442,13 +446,8 @@ export default function StoryViewerModal({
                     </View>
                 </KeyboardAvoidingView>
 
-                <View style={styles.touchOverlay}>
-                    <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
-                    <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapRight} />
-                </View>
-
                 {isViewsSheetOpen && (
-                    <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+                    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                         <Pressable style={styles.backdrop} onPress={() => closeViewsSheet(resumeTimerFromSheet)} />
 
                         <Animated.View style={[styles.sheetContainer, { transform: [{ translateY: sheetAnim }] }]}>
@@ -469,7 +468,7 @@ export default function StoryViewerModal({
                                     <View style={styles.viewerRow}>
                                         <View style={styles.viewerLeft}>
                                             <View style={styles.viewerAvatar}>
-                                                <UserAvatar avatar_url={item.avatar_url} avatar_config={item.avatar_config} size={40} />
+                                                <UserAvatar avatar_config={item.avatar_config} size={40} />
                                             </View>
                                             <Text style={styles.viewerUsername}>@{item.username}</Text>
                                         </View>
