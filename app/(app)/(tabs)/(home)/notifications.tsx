@@ -1,9 +1,8 @@
 import { friendsApi } from '@/api/friends';
-import { ESTILOS_DICEBEAR } from '@/constants/dicebear';
+import UserAvatar from '@/components/UserAvatar';
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { formatRelativeTime } from '@/utils/dateFormatter';
-import { createAvatar } from '@dicebear/core';
 import { Stack } from 'expo-router';
 import { SFSymbol, SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,10 +16,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SvgXml } from 'react-native-svg';
 
 const PAGE_SIZE = 20;
-
 export default function NotificationsScreen() {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [page, setPage] = useState(0);
@@ -51,8 +48,8 @@ export default function NotificationsScreen() {
         }
     };
 
-    // 2. CARGA DE DATOS
-    const fetchNotifications = async (pageNumber: number, isRefresh = false) => {
+    // 2. CARGA DE DATOS (envuelto en useCallback para mantener estabilidad referencial)
+    const fetchNotifications = useCallback(async (pageNumber: number, isRefresh = false) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
@@ -92,25 +89,20 @@ export default function NotificationsScreen() {
             setLoadingMore(false);
             setRefreshing(false);
         }
-    };
+    }, []);
 
-    // 3. REALTIME (Corregido con ID único para evitar choques de caché)
+    // 3. REALTIME
     useEffect(() => {
         fetchNotifications(0, true);
-
         let isMounted = true;
-
         const initRealtime = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user || !isMounted) return;
-
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
             }
 
-            // 🛡️ TRUCO: Nombre de canal único con timestamp para evitar colisiones en memoria
             const uniqueChannelName = `notifs_v4_${user.id}-${Date.now()}`;
-
             const channel = supabase.channel(uniqueChannelName)
                 .on(
                     'postgres_changes',
@@ -151,25 +143,18 @@ export default function NotificationsScreen() {
                 supabase.removeChannel(channelRef.current);
             }
         };
-    }, []);
+    }, [fetchNotifications]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         setPage(0);
         fetchNotifications(0, true);
-    }, []);
+    }, [fetchNotifications]);
 
     const renderItem = ({ item }: { item: any }) => {
         const type = item.type?.toUpperCase();
         const isFriendNotif = item.content === 'is now your friend.';
         const time = formatRelativeTime(item.created_at);
-
-        const avatarSvg = (() => {
-            const config = item.actor?.avatar_config;
-            if (!config) return null;
-            const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-            return createAvatar(estilo.collection as any, { ...config.options, radius: 50 }).toString();
-        })();
 
         const ui = (() => {
             if (isFriendNotif) return { icon: "person.2.fill", color: "#34C759" };
@@ -196,7 +181,7 @@ export default function NotificationsScreen() {
             >
                 <View style={styles.avatarWrapper}>
                     <View style={styles.avatarCircle}>
-                        {avatarSvg ? <SvgXml xml={avatarSvg} width="100%" height="100%" /> : <View style={styles.avatarPlaceholder} />}
+                        <UserAvatar avatar_config={item.actor?.avatar_config} />
                     </View>
                     <View style={[styles.typeBadge, { backgroundColor: ui.color }]}>
                         <SymbolView name={ui.icon as SFSymbol} size={10} tintColor="#FFF" />
@@ -220,10 +205,11 @@ export default function NotificationsScreen() {
             <Stack.Screen options={{
                 headerTitle: "Notifications",
                 headerLargeTitle: true,
-                headerStyle: { backgroundColor: '#000' },
                 headerTintColor: getThemeColor('text'),
                 headerShadowVisible: false,
                 headerTransparent: false,
+                headerStyle: { backgroundColor: getThemeColor("background") },
+                contentStyle: { backgroundColor: getThemeColor("background") },
             }} />
 
             <FlatList

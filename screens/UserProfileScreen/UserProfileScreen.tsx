@@ -7,14 +7,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from "expo-symbols";
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import ProfileHeaderMenu from './components/ProfileHeaderMenu';
 import { useProfileActions, useUserProfileData } from './hooks';
 import { styles } from './UserProfileScreen.styles';
 
 export default function UserProfileScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id, user: userParam } = useLocalSearchParams<{ id: string; user?: string }>();
 
     const bottomSheetModalRef = useRef<BottomSheetModal>(null);
     const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -24,10 +24,25 @@ export default function UserProfileScreen() {
     const surface = getThemeColor('surface');
     const glassBorder = getThemeColor('glassBorder');
 
+    // Parsear de inmediato el objeto user que vino por los parámetros de la ruta
+    const routeUser = useMemo(() => {
+        if (!userParam) return null;
+        try {
+            return typeof userParam === 'string' ? JSON.parse(userParam) : userParam;
+        } catch {
+            return null;
+        }
+    }, [userParam]);
+
     const {
         profile, statusInfo, friendsCount, userPosts, blockStatus,
         loading, refreshing, onRefresh, refetch,
     } = useUserProfileData(id);
+
+    // Priorizamos la base de datos pero usamos los datos del route de forma instantánea
+    const displayUsername = profile?.username || routeUser?.username;
+    const displayAvatarUrl = profile?.avatar_url || routeUser?.avatar_url;
+    const displayAvatarConfig = profile?.avatar_config || routeUser?.avatar_config;
 
     const {
         sending,
@@ -39,9 +54,9 @@ export default function UserProfileScreen() {
         handleReportUser,
     } = useProfileActions({
         id,
-        username: profile?.username,
+        username: displayUsername,
         statusInfo,
-        setLoading: () => { }, // el loading de acciones ya no bloquea la pantalla completa; ver nota abajo
+        setLoading: () => { },
         refetch,
     });
 
@@ -49,8 +64,6 @@ export default function UserProfileScreen() {
         setActiveCommentPostId(postId);
         bottomSheetModalRef.current?.present();
     };
-
-    if (loading) return <View style={styles.center}><ActivityIndicator color={accent} /></View>;
 
     const isAccepted = statusInfo?.status === 'ACCEPTED';
     const isPending = statusInfo?.status === 'PENDING';
@@ -62,7 +75,7 @@ export default function UserProfileScreen() {
             <Stack.Screen
                 options={{
                     headerShown: true,
-                    headerTitle: profile?.username ? `@${profile.username}` : "Profile",
+                    headerTitle: displayUsername ? `@${displayUsername}` : "Profile",
                     headerShadowVisible: false,
                     headerStyle: { backgroundColor: "#000" },
                     headerTintColor: "#fff",
@@ -90,7 +103,7 @@ export default function UserProfileScreen() {
             ) : iBlockedThem ? (
                 <View style={styles.blockedArea}>
                     <Ionicons name="hand-left" size={48} color={accent} />
-                    <ThemedText style={styles.blockedTitle}>You blocked @{profile?.username}</ThemedText>
+                    <ThemedText style={styles.blockedTitle}>You blocked @{displayUsername || 'user'}</ThemedText>
                     <ThemedText style={styles.blockedSubtitle}>
                         You won't see their content and they can't contact you.
                     </ThemedText>
@@ -109,10 +122,11 @@ export default function UserProfileScreen() {
                     <View style={styles.headerSection}>
                         <View style={styles.topRow}>
                             <View style={[styles.avatarWrapper, { borderColor: isAccepted ? '#4ade80' : glassBorder, display: "flex", alignItems: "center", justifyContent: "center" }]}>
-                                <UserAvatar avatar_url={profile?.avatar_url} avatar_config={profile?.avatar_config} size={94} />
+                                <UserAvatar avatar_url={displayAvatarUrl} avatar_config={displayAvatarConfig} size={94} />
                             </View>
 
-                            {isAccepted && (
+                            {/* Solo muestra los stats cuando ya terminó de cargar */}
+                            {isAccepted && !loading && (
                                 <View style={styles.statsRow}>
                                     <View style={styles.statItem}>
                                         <SymbolView name='person.2.fill' size={20} tintColor="#fff" />
@@ -126,16 +140,29 @@ export default function UserProfileScreen() {
                                     </View>
                                 </View>
                             )}
+
+                            {isAccepted && loading && (
+                                <View style={styles.statsRow}>
+                                    <ActivityIndicator color={accent} size="small" />
+                                </View>
+                            )}
                         </View>
 
                         <View style={styles.bioSection}>
                             <ThemedText style={styles.bioText}>
-                                {profile?.description || "Profile data encrypted."}
+                                {loading && !profile?.description
+                                    ? "Loading bio..."
+                                    : (profile?.description || "No bio yet.")}
                             </ThemedText>
                         </View>
                     </View>
 
-                    {!isAccepted ? (
+                    {/* 🛡️ BLOQUEO DE CARGA: Si está cargando, mostramos un loader limpio en lugar de "Connect to Vault" */}
+                    {loading ? (
+                        <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+                            <ActivityIndicator color={accent} size="large" />
+                        </View>
+                    ) : !isAccepted ? (
                         <View style={styles.lockedArea}>
                             <View style={[styles.lockedCard, { backgroundColor: surface, borderColor: isPending ? '#fbbf24' : accent }]}>
                                 <Ionicons

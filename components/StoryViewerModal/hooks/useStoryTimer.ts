@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated } from "react-native";
 
+import { useAnimatedValue } from "@/utils/animations";
+
 const DEFAULT_IMAGE_DURATION = 5000;
 
 interface UseStoryTimerProps {
@@ -23,7 +25,7 @@ export function useStoryTimer({
   const [isMediaLoading, setIsMediaLoading] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
 
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useAnimatedValue(0);
   const currentProgressVal = useRef(0);
   const isHoldingRef = useRef(false);
   const pressInTimeRef = useRef(0);

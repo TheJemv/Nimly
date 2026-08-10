@@ -1,37 +1,19 @@
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
-import { supabase } from "@/lib/supabase";
-import { createAvatar } from "@dicebear/core";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-    Image,
     ScrollView,
     Text,
     TouchableOpacity,
     View
 } from "react-native";
-import { SvgXml } from "react-native-svg";
 
 import NymlyCamera from "@/components/NymlyCamera";
 import StoryViewerModal from "@/components/StoryViewerModal";
-import { styles } from "./StoriesDaily.styles";
+import UserAvatar from "@/components/UserAvatar";
 
-export interface StoryGroup {
-    user_id: string;
-    username: string;
-    avatar_url: string | null;
-    avatar_config?: any;
-    is_me: boolean;
-    stories: {
-        id: string;
-        media_url: string;
-        media_type: "image" | "video";
-        created_at: string;
-        is_seen_by_me: boolean;
-        is_view_once: boolean;
-        views_count?: number;
-        viewers?: any[];
-    }[];
-}
+import { useProfile } from "@/context/ProfileContext";
+import { StoryGroup } from "@/types/types";
+
+import { styles } from "./StoriesDaily.styles";
 
 interface StoriesDailyProps {
     storyGroups: StoryGroup[];
@@ -42,67 +24,19 @@ interface StoriesDailyProps {
     onSendStory: (uri: string, mediaType: "image" | "video") => Promise<void>;
 }
 
-function StoryAvatar({ group }: { group: StoryGroup }) {
-    const avatarSvg = useMemo(() => {
-        const config = group.avatar_config;
-        if (!config || !config.styleId) return null;
-        try {
-            const estilo =
-                ESTILOS_DICEBEAR.find((e) => e.id === config.styleId) ||
-                ESTILOS_DICEBEAR[0];
-            return createAvatar(estilo.collection as any, {
-                ...config.options,
-                radius: 50,
-            }).toString();
-        } catch (e) {
-            return null;
-        }
-    }, [group.avatar_config]);
-
-    if (avatarSvg) {
-        return <SvgXml xml={avatarSvg} width="100%" height="100%" />;
-    }
-
-    return (
-        <Image
-            source={{
-                uri:
-                    group.avatar_url ||
-                    "https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png",
-            }}
-            style={styles.avatar}
-        />
-    );
-}
 
 export default function StoriesDaily({
     storyGroups,
     currentUserId,
     onStorySeen,
-    onStoryLiked,      // 👈
-    onStoryDeleted,    // 👈
+    onStoryLiked,
+    onStoryDeleted,
     onSendStory,
 }: StoriesDailyProps) {
+    const { profile: myProfileConfig } = useProfile();
+
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
-    const [myProfileConfig, setMyProfileConfig] = useState<any>(null);
-
-    // 🔍 Consultamos el perfil del propio usuario para inyectar su avatar_config en "Tu historia"
-    useEffect(() => {
-        const fetchMyProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-            const { data } = await supabase
-                .from('profiles')
-                .select('avatar_config, avatar_url')
-                .eq('id', user.id)
-                .single();
-            if (data) {
-                setMyProfileConfig(data);
-            }
-        };
-        fetchMyProfile();
-    }, []);
 
     const sortedStories = useMemo(() => {
         if (selectedUserId !== null) {
@@ -110,20 +44,17 @@ export default function StoriesDaily({
         }
 
         let myGroup = storyGroups.find((item) => item.is_me || item.user_id === currentUserId);
-
         if (myGroup) {
             myGroup = {
                 ...myGroup,
-                username: "Tu historia",
+                username: "Your story",
                 is_me: true,
                 avatar_config: myGroup.avatar_config || myProfileConfig?.avatar_config,
-                avatar_url: myGroup.avatar_url || myProfileConfig?.avatar_url,
             };
         } else {
             myGroup = {
                 user_id: currentUserId || "me",
-                username: "Tu historia",
-                avatar_url: myProfileConfig?.avatar_url || null,
+                username: "Your story",
                 avatar_config: myProfileConfig?.avatar_config || null,
                 is_me: true,
                 stories: []
@@ -154,7 +85,7 @@ export default function StoriesDaily({
         });
 
         return [myGroup, ...friendsGroups];
-    }, [storyGroups, selectedUserId, currentUserId, myProfileConfig]);
+    }, [storyGroups, selectedUserId, currentUserId, myProfileConfig]); // myProfileConfig ahora viene del context
 
     const handleAvatarPress = (group: StoryGroup) => {
         if (group.is_me && group.stories.length === 0) {
@@ -194,7 +125,7 @@ export default function StoriesDaily({
                         >
                             <View style={[styles.avatarRing, ringStyle]}>
                                 <View style={styles.avatarInner}>
-                                    <StoryAvatar group={group} />
+                                    <UserAvatar avatar_config={group.avatar_config} size={56} />
                                 </View>
 
                                 {group.is_me && (

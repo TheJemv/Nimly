@@ -37,27 +37,6 @@ export const Colors = {
     success: '#D6B98C',          // Oro champaña para confirmaciones con un toque de lujo
     warning: '#C9A227',          // Oro viejo
   },
-
-  // Forzamos el esquema "light" a usar los mismos valores oscuros.
-  // Así, sin importar la configuración del iPhone del usuario, 
-  // Floxly siempre mantendrá su identidad "VIP & Discrete".
-  light: {
-    text: '#F2E8D8',
-    textSecondary: '#8A8A8A',
-    background: '#0A0A0A',
-    surface: '#161616',
-    tint: tintColorDark,
-    icon: '#4A4A4A',
-    tabIconDefault: '#4A4A4A',
-    tabIconSelected: tintColorDark,
-    activeIcon: tintColorDark,
-    glassBorder: 'rgba(220, 20, 60, 0.15)',
-    glassBackground: 'rgba(220, 20, 60, 0.03)',
-    glassHighlight: 'rgba(220, 20, 60, 0.10)',
-    error: '#8B1538',
-    success: '#D6B98C',
-    warning: '#C9A227',
-  },
 };
 
 export const Fonts = Platform.select({

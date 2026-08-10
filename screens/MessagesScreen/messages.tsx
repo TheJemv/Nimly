@@ -34,7 +34,6 @@ export default function MessagesScreen() {
                         <ChatCard
                             item={item}
                             myId={myId}
-                            onPress={() => router.push({ pathname: "/chat", params: { id: item.profiles?.id } })}
                         />
                     )}
                     contentInsetAdjustmentBehavior="automatic"

@@ -28,7 +28,7 @@ export default function CommentInputFooter({
             const comment = await createComment(postId, text.trim());
             onCommentPosted(comment);
             setText("");
-        } catch (error) {
+        } catch {
             Alert.alert("Error", "No se pudo publicar el comentario");
         } finally {
             setIsPosting(false);

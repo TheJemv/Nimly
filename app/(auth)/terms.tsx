@@ -95,7 +95,7 @@ export default function TermsModal() {
 
                 <Section title="7. Disclaimer of Warranties" accent={accent}>
                     <Body color={textSec}>
-                        Nimly is provided "as is" without warranties of any kind. We do not guarantee
+                        Nimly is provided &quot;as is&quot; without warranties of any kind. We do not guarantee
                         uninterrupted service or that the platform will be free of errors.
                     </Body>
                 </Section>

@@ -25,11 +25,11 @@ const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId }, ref) => {
         <CommentInputFooter {...props} postId={postId} insets={insets} onCommentPosted={addComment} />
     ), [postId, insets, addComment]);
 
-    const handleProfileUser = (item: any) => {
-        if (session?.user.id == item.user?.id) return
+    const handleProfileUser = useCallback((item: any) => {
+        if (session?.user.id === item.user?.id) return;
         if (ref && 'current' in ref && ref.current) ref.current.dismiss();
-        router.push(`/(app)/user/${item.user?.id}`)
-    }
+        router.push(`/(app)/user/${item.user?.id}`);
+    }, [session?.user.id, ref, router]);
 
     const renderComment = useCallback(({ item }: { item: any }) => (
         <View style={styles.commentRow}>
@@ -37,13 +37,13 @@ const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId }, ref) => {
                 <UserAvatar avatar_url={item.user?.avatar_url} avatar_config={item.user?.avatar_config} size={36} />
             </View>
             <View style={styles.commentContent}>
-                <TouchableOpacity onPress={() => handleProfileUser(item)} disabled={session?.user.id == item.user?.id}>
+                <TouchableOpacity onPress={() => handleProfileUser(item)} disabled={session?.user.id === item.user?.id}>
                     <Text style={styles.username}>@{item.user?.username}</Text>
                 </TouchableOpacity>
                 <Text style={styles.commentText}>{item.content}</Text>
             </View>
         </View>
-    ), []);
+    ), [session?.user.id, handleProfileUser]);
 
     return (
         <NymlySheet ref={ref} snapPoints={['65%', '100%']} footerComponent={renderFooter}>

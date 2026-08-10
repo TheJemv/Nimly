@@ -29,6 +29,7 @@ import UserAvatar from "../UserAvatar";
 import { styles } from "./StoryViewerModal.styles";
 
 import { reportsApi } from "@/api/reports";
+import { useAnimatedValue } from "@/utils/animations";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
@@ -169,8 +170,7 @@ export default function StoryViewerModal({
     const isReportingRef = useRef(false);
 
     // --- ANIMACIÓN PARA DESLIZAR Y CERRAR ---
-    const panY = useRef(new Animated.Value(0)).current;
-
+    const panY = useAnimatedValue(0)
     const isViewsSheetOpenRef = useRef(isViewsSheetOpen);
     useEffect(() => {
         isViewsSheetOpenRef.current = isViewsSheetOpen;

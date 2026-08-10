@@ -1,29 +1,10 @@
 import { storiesApi, Story } from "@/api/stories";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { ViewerProfile } from "@/types/types";
+import { StoryGroup, ViewerProfile } from "@/types/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 
-export interface StoryGroup {
-    user_id: string;
-    username: string;
-    avatar_url: string | null;
-    avatar_config?: any;
-    is_me: boolean;
-    stories: {
-        id: string;
-        media_url: string;
-        media_type: "image" | "video";
-        created_at: string;
-        is_seen_by_me: boolean;
-        is_view_once: boolean;
-        views_count?: number;
-        viewers?: any[];
-        likes?: any[];
-        is_liked_by_me: boolean;
-    }[];
-}
 
 export function useStoriesFeed() {
     const { session } = useAuth()
@@ -49,7 +30,6 @@ export function useStoriesFeed() {
                 groupsMap[uId] = {
                     user_id: uId,
                     username: profile.username || "User",
-                    avatar_url: profile.avatar_url,
                     avatar_config: profile.avatar_config,
                     is_me: isMe,
                     stories: [],
@@ -74,6 +54,7 @@ export function useStoriesFeed() {
 
             groupsMap[uId].stories.push({
                 id: story.id,
+                user_id: uId, // 👈 ¡Faltaba esta línea para cumplir con la interfaz Story!
                 media_url: story.media_url,
                 media_type: story.media_type,
                 created_at: story.created_at,

@@ -45,7 +45,7 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
                     storyUrlCache[content.media_url] = data.signedUrl;
                     setMediaUrl(data.signedUrl);
                 }
-            } catch (error) {
+            } catch {
                 if (isMounted) setHasError(true);
             } finally {
                 if (isMounted) setLoading(false);
@@ -57,7 +57,7 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
         }
 
         return () => { isMounted = false; };
-    }, [content.media_url, session?.user]);
+    }, [content.media_url, session?.user, cachedUrl]);
 
     return (
         <View style={[styles.container, isMyMessage ? styles.containerMine : styles.containerTheirs]}>

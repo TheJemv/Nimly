@@ -23,7 +23,7 @@ export function usePost(post: any, onDelete?: () => void) {
 
         try {
             await toggleLike(post.id);
-        } catch (error) {
+        } catch {
             setIsLiked(prevLiked);
             setLikesCount(prevCount);
         }
@@ -62,7 +62,7 @@ export function usePost(post: any, onDelete?: () => void) {
                 // 🟢 CORREGIDO: Pasamos post.media_url para que borre el archivo correcto del storage
                 await deletePost(post.id, isMedia ? post.media_url : null);
                 if (onDelete) onDelete();
-            } catch (e) {
+            } catch {
                 Alert.alert("Error", "No se pudo eliminar");
             }
         };

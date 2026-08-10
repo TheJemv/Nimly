@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
 import { SymbolView } from 'expo-symbols';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Modal, PanResponder, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Modal, PanResponder, Text, TouchableOpacity, useAnimatedValue, View } from 'react-native';
 
 import { styles } from "./MediaMessageBubble.styles";
 
@@ -18,7 +18,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
 
-    const panY = useRef(new Animated.Value(0)).current;
+    const panY = useAnimatedValue(0)
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
@@ -131,9 +131,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                     .eq('content', filePath);
 
                 delete vaultRAMCache[filePath];
-            } catch (e) {
-                // Silencioso
-            }
+            } catch { }
         }
     };
 

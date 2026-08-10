@@ -25,7 +25,6 @@ export const storiesApi = {
     if (!user) throw new Error("No authenticated session found");
 
     let fileUri = localUri;
-
     if (mediaType === 'image') {
       try {
         const manipResult = await ImageManipulator.manipulateAsync(
@@ -73,7 +72,7 @@ export const storiesApi = {
   async getActiveFeed(user: User) {
       if (!user) return [];
 
-      const tQueryStart = performance.now();
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('stories')
         .select(`
@@ -86,9 +85,8 @@ export const storiesApi = {
           ),
           story_likes (user_id)
         `)
+        .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false });
-        console.log(JSON.stringify(data, null, 2))
-        console.log(`⏱️ [Stories] Query a Postgres: ${(performance.now() - tQueryStart).toFixed(0)}ms`);
 
       if (error) throw error;
       const stories = data as any[];
@@ -126,7 +124,7 @@ export const storiesApi = {
 
     const { error } = await supabase
       .from('story_views')
-      .insert([{ story_id: storyId, viewer_id: user.id }], { upsert: true });
+      .upsert({ story_id: storyId, viewer_id: user.id }); // 👈 Cambiado a .upsert() directo
 
     if (error) throw error;
     return true;

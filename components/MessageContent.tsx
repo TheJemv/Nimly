@@ -36,7 +36,7 @@ export const MessageContent = memo(({ content, friendPublicKey }: MessageContent
                     }
                     setDecryptedText(clearText);
                 }
-            } catch (e) {
+            } catch {
                 if (isMounted) setDecryptedText("🔒 Locked Capsule");
             }
         };

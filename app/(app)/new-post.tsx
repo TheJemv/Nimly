@@ -1,15 +1,12 @@
 import { createPost } from "@/api/posts";
 import NymlyCamera from "@/components/NymlyCamera";
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from "@/constants/theme";
-import { supabase } from "@/lib/supabase";
-import { createAvatar } from "@dicebear/core";
 
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
    ActivityIndicator,
    Alert,
@@ -25,15 +22,20 @@ import {
    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgXml } from "react-native-svg";
+
+// 1. 👇 Importamos tus contextos
+import UserAvatar from "@/components/UserAvatar";
+import { useAuth } from "@/context/AuthContext";
 
 export default function NewPostScreen() {
    const router = useRouter();
    const insets = useSafeAreaInsets();
+
+   const { session } = useAuth();
+
    const [text, setText] = useState("");
-   const [media, setMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
+   const [media, setMedia] = useState<{ uri: string; type: 'image' | 'video' } | undefined>(undefined);
    const [isPosting, setIsPosting] = useState(false);
-   const [userProfile, setUserProfile] = useState<any>(null);
    const [isCameraVisible, setCameraVisible] = useState(false);
 
    const tintColor = getThemeColor("tint");
@@ -42,26 +44,7 @@ export default function NewPostScreen() {
    const isOverLimit = text.length > MAX_CHARS;
    const canPost = (text.trim().length > 0 || media !== null) && !isPosting;
 
-   // 1. CARGA DE PERFIL
-   useEffect(() => {
-      async function getAvatar() {
-         const { data: { user } } = await supabase.auth.getUser();
-         if (user) {
-            const { data } = await supabase.from('profiles').select('avatar_config').eq('id', user.id).single();
-            setUserProfile(data);
-         }
-      }
-      getAvatar();
-   }, []);
-
-   const userAvatarSvg = useMemo(() => {
-      if (!userProfile?.avatar_config) return null;
-      const config = userProfile.avatar_config;
-      const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-      return createAvatar(estilo.collection, { ...config.options, radius: 50 }).toString();
-   }, [userProfile]);
-
-   // 2. LÓGICA DE PERMISOS Y MULTIMEDIA
+   // LÓGICA DE PERMISOS Y MULTIMEDIA
    const pickMedia = async () => {
       try {
          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -77,7 +60,9 @@ export default function NewPostScreen() {
          });
 
          if (!result.canceled) {
-            setMedia({ uri: result.assets[0].uri, type: result.assets[0].type || 'image' });
+            const assetType = result.assets[0].type;
+            const safeType = assetType === 'video' ? 'video' : 'image';
+            setMedia({ uri: result.assets[0].uri, type: safeType });
          }
       } catch (e) {
          console.error("Error picking media:", e);
@@ -85,7 +70,7 @@ export default function NewPostScreen() {
       }
    };
 
-   // 🟢 NORMALIZACIÓN DE TEXTO (Reemplaza saltos de línea sin bloquear el input)
+   // NORMALIZACIÓN DE TEXTO
    const handleTextChange = (inputText: string) => {
       const cleanedText = inputText
          .replace(/[\r\n]+/g, '. ')
@@ -94,11 +79,10 @@ export default function NewPostScreen() {
       setText(cleanedText);
    };
 
-   // 3. ACCIÓN DE POST
+   // ACCIÓN DE POST
    const handlePost = async () => {
-      if (!canPost) return;
+      if (!canPost || !session?.user?.id) return;
 
-      // 🟢 VALIDACIÓN DE LÍMITE AL INTENTAR ENVIAR
       if (text.length > MAX_CHARS) {
          Alert.alert("Character limit exceeded", `Your post has ${text.length} characters, but the maximum allowed is ${MAX_CHARS}.`);
          return;
@@ -106,9 +90,9 @@ export default function NewPostScreen() {
 
       setIsPosting(true);
       try {
-         const { data: { user } } = await supabase.auth.getUser();
          const finalCleanText = text.trim();
-         await createPost(user!.id, finalCleanText, media);
+         // 4. 👇 Usamos el session.user.id directamente
+         await createPost(session.user.id, finalCleanText, media);
          router.back();
       } catch (error: any) {
          Alert.alert("Error", error.message);
@@ -146,10 +130,9 @@ export default function NewPostScreen() {
          >
             <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20, paddingHorizontal: 20, paddingTop: 16 }}>
 
-               {/* ÁREA DE ESCRITURA UNIFICADA */}
                <View style={styles.inputArea}>
                   <View style={styles.avatarCol}>
-                     {userAvatarSvg ? <SvgXml xml={userAvatarSvg} width="40" height="40" /> : <View style={styles.avatarPlaceholder} />}
+                     <UserAvatar />
                   </View>
                   <View style={styles.contentCol}>
                      <TextInput
@@ -164,11 +147,10 @@ export default function NewPostScreen() {
                      />
 
 
-                     {/* VISTA PREVIA DE MEDIA */}
                      {media && (
                         <View style={styles.previewContainer}>
                            <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
-                           <TouchableOpacity style={styles.removeBtn} onPress={() => setMedia(null)}>
+                           <TouchableOpacity style={styles.removeBtn} onPress={() => setMedia(undefined)}>
                               <SymbolView name="xmark" size={12} tintColor="#FFF" />
                            </TouchableOpacity>
                         </View>
@@ -178,7 +160,6 @@ export default function NewPostScreen() {
 
             </ScrollView>
 
-            {/* BARRA INFERIOR */}
             <View style={[styles.bottomToolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                <View style={styles.toolbarIcons}>
                   <TouchableOpacity style={styles.toolIconBtn} onPress={() => setCameraVisible(true)}>
@@ -195,7 +176,6 @@ export default function NewPostScreen() {
             </View>
          </KeyboardAvoidingView>
 
-         {/* CÁMARA IN-APP */}
          <NymlyCamera
             visible={isCameraVisible}
             onClose={() => setCameraVisible(false)}

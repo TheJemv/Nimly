@@ -1,15 +1,21 @@
-.PHONY: help run run-build
+.PHONY: help run run-build xcode ios doctor clean-modules clean-all
+
 help:
 	@echo ""
 	@echo "  Comandos disponibles en el Makefile (Bun + Nativo):"
 	@echo "  --------------------------------------------------"
-	@echo "  make run        - Inicia Metro sin caché usando bunx --clear"
-	@echo "  make run-build  - Compila y ejecuta la app nativa en dispositivo físico (--device) con bun"
-	@echo "  make help       - Muestra este menú de ayuda"
+	@echo "  make run            - Inicia Metro sin caché usando Bun"
+	@echo "  make run-build      - Compila y ejecuta la app nativa en dispositivo físico (--device)"
+	@echo "  make xcode          - Abre el workspace de Xcode"
+	@echo "  make ios            - Regenera la plataforma nativa de iOS desde cero (Prebuild + Pods)"
+	@echo "  make doctor         - Ejecuta expo-doctor para verificar dependencias"
+	@echo "  make clean-modules  - Limpia node_modules y reinstala con Bun"
+	@echo "  make clean-all      - Limpieza profunda (node_modules, ios, android y lockfile)"
+	@echo "  make help           - Muestra este menú de ayuda"
 	@echo ""
 
 run:
-	@echo "🧹 Limpiando caché de Metro y corriendo en iOS (Bun)..."
+	@echo "🧹 Limpiando caché de Metro y corriendo Expo (Bun)..."
 	bunx expo start --clear
 
 run-build:
@@ -17,5 +23,28 @@ run-build:
 	bunx expo run:ios --device
 
 xcode:
-	@echo "🍎 Abriendo en xcode"
+	@echo "🍎 Abriendo en Xcode..."
 	open ./ios/Nimly.xcworkspace
+
+ios:
+	@echo "🍎 Limpiando y ejecutando prebuild para iOS..."
+	rm -rf ios
+	bunx expo prebuild --platform ios --clean
+	@echo "✨ ¡iOS listo para compilar con 'make run-build' o 'make xcode'!"
+
+doctor:
+	@echo "🩺 Ejecutando Expo Doctor..."
+	bunx expo-doctor
+
+clean-modules:
+	@echo "🗑️ Limpiando node_modules y reinstalando con Bun..."
+	rm -rf node_modules bun.lockb
+	bun install
+
+clean-all:
+	@echo "🔥 Ejecutando limpieza profunda del proyecto..."
+	rm -rf node_modules ios android bun.lockb
+	bun install
+	bunx expo prebuild --platform ios --clean
+	cd ios && pod install && cd ..
+	@echo "🚀 ¡Proyecto limpio y regenerado con éxito!"

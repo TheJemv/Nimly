@@ -155,8 +155,8 @@ export const vaultCrypto = {
             if (!decryptedText) throw new Error("Malformed data");
 
             return decryptedText;
-        } catch (e) {
-            return "Locked Capsule";
+        } catch {
+            return "🔒 Locked Capsule";
         }
     }
 };

@@ -1,10 +1,14 @@
-export type PostType = "IMAGE" | "TEXT";
+export type PostType = "IMAGE" | "TEXT" | "VIDEO";
 
 export interface User {
     id: string; // UUID de auth.users / public.profiles
     username: string;
-    avatar_url: string;
-    description: string;
+    avatar_url: string | null;
+    avatar_config?: any; // jsonb
+    description: string | null;
+    current_device_id?: string | null;
+    expo_push_token?: string | null;
+    public_key?: string | null;
     created_at: string;
 
     // Relaciones opcionales (se llenan al consultar)
@@ -14,8 +18,8 @@ export interface User {
 
 export interface Friend {
     id: string;
-    user_id_1: string;
-    user_id_2: string;
+    user_id: string; // 👈 Corregido de user_id_1
+    friend_id: string; // 👈 Corregido de user_id_2
     created_at: string;
 
     // El objeto del amigo tras el join
@@ -37,10 +41,11 @@ export interface Post {
     id: string;
     user_id: string;
     type: PostType;
-    content: string;
+    content: string | null;
+    media_url: string | null; // 👈 Agregado de tu DB
     created_at: string;
 
-    // Relaciones (Cargadas mediante .select('*, author:profiles(*), likes(*), comments(*)'))
+    // Relaciones (Cargadas mediante joins)
     author?: User;
     likes?: Like[];
     comments?: Comment[];
@@ -85,9 +90,19 @@ export interface Message {
     id: string;
     chat_id: string;
     sender_id: string;
-    content: string;
-    created_at: string;
+    receiver_id: string | null; // 👈 Agregado de tu DB
+    content: string | null;
+    image_url: string | null; // 👈 Agregado de tu DB
+    type: string; // En DB es un enum 'message_content_type'
     is_read: boolean;
+    
+    // 👈 Agregados campos de Cifrado y Respuestas de tu DB
+    encryption_iv?: string | null;
+    encryption_tag?: string | null;
+    reply_to_id?: string | null;
+    reply_to_story_id?: string | null;
+    
+    created_at: string;
 
     // Quién envió el mensaje
     sender?: User;
@@ -105,21 +120,26 @@ export interface ViewerProfile {
 
 export interface Story {
     id: string;
+    user_id: string; // 👈 Faltaba tu DB
     media_url: string;
-    media_type?: "image" | "video";
+    media_type: "image" | "video"; // 👈 Obligatorio según DB
+    is_view_once: boolean; // 👈 Corregido de tu DB
     created_at: string;
+    
+    // Virtuales (Cargados desde la UI o Funciones SQL)
     is_seen_by_me?: boolean;
     is_liked_by_me?: boolean;
     views_count?: number;
-    is_view_once?: boolean;
+
     viewers?: ViewerProfile[];
+    likes?: any[];
 }
 
 export interface StoryGroup {
     user_id: string;
     username: string;
-    avatar_url: string | null;
     avatar_config?: any;
     is_me: boolean;
+
     stories: Story[];
 }

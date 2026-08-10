@@ -4,6 +4,8 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from '@/constants/theme';
 
+import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { formatTime } from "../../utils";
 import LastMessageContent from "../LastMessageContent";
 import { styles } from "./ChatCard.styles";
@@ -11,15 +13,26 @@ import { styles } from "./ChatCard.styles";
 interface ChatCardProps {
     item: any;
     myId: string | null;
-    onPress: () => void;
 }
 
-export default function ChatCard({ item, myId, onPress }: ChatCardProps) {
+export default function ChatCard({ item, myId }: ChatCardProps) {
+    const router = useRouter()
+
     const messages = item.chats?.messages || [];
     const lastMsg = messages[messages.length - 1];
     const isMine = lastMsg?.sender_id === myId;
     const unreadCount = messages.filter((m: any) => m.sender_id !== myId && m.is_read === false).length;
     const hasUnread = unreadCount > 0;
+
+    const onPress = useCallback(() => {
+        router.push({
+            pathname: "/chat",
+            params: {
+                id: item.profiles?.id,
+                user: JSON.stringify(item.profiles),
+            }
+        })
+    }, [item])
 
     return (
         <TouchableOpacity style={styles.chatCard} onPress={onPress} activeOpacity={0.6}>

@@ -44,7 +44,7 @@ export default function HomeScreen() {
    const commentsRef = useRef<BottomSheetModal>(null);
    const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
 
-   const loadPosts = async (showLoading = true) => {
+   const loadPosts = useCallback(async (showLoading = true) => {
       if (showLoading) setLoadingPosts(true);
       const userId = session?.user?.id;
       if (!userId) return; // 👈 sin sesión, no cargamos nada
@@ -60,15 +60,17 @@ export default function HomeScreen() {
          setLoadingPosts(false);
          setRefreshing(false);
       }
-   };
+   }, [session?.user?.id]);
 
-   const mountTimeRef = useRef<number>(performance.now());
+   const mountTimeRef = useRef<number>(0);
+   if (mountTimeRef.current === 0 && typeof performance !== 'undefined' && performance.now) {
+      mountTimeRef.current = performance.now();
+   }
+
    const hasLoggedInitialLoad = useRef(false);
-
    useEffect(() => {
-      console.log("🔑 Session al montar HomeScreen:", session?.access_token ? "presente" : "AUSENTE", session?.user?.id);
       loadPosts();
-   }, [session]);
+   }, [session, loadPosts]);
 
    useEffect(() => {
       if (hasLoggedInitialLoad.current) return;
@@ -84,9 +86,8 @@ export default function HomeScreen() {
       const t0 = performance.now();
       await Promise.all([loadPosts(false), reloadStories(false)]);
       console.log(`⏱️ [Home] onRefresh() total: ${(performance.now() - t0).toFixed(0)}ms`);
-   }, [reloadStories]);
+   }, [reloadStories, loadPosts]);
 
-   const isInitialLoading = loadingPosts && loadingStories && !refreshing;
    return (
       <View style={styles.container}>
          <Stack.Screen
@@ -111,11 +112,6 @@ export default function HomeScreen() {
             }}
          />
 
-         {/* {isInitialLoading ? (
-            <View style={styles.loaderContainer}>
-               <ActivityIndicator size="large" color={getThemeColor("tint")} />
-            </View>
-         ) : ( */}
          <ScrollView
             showsVerticalScrollIndicator={false}
             contentInsetAdjustmentBehavior="automatic"

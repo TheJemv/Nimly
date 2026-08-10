@@ -17,9 +17,17 @@ import {
     View
 } from "react-native";
 
+// 👇 1. Importamos los contextos
+import { useAuth } from "@/context/AuthContext";
+import { useProfile } from "@/context/ProfileContext";
+
 export default function SettingsScreen() {
     const router = useRouter();
-    const [loading, setLoading] = useState(false);
+
+    // 👇 2. Obtenemos sesión y perfil global directamente de la caché
+    const { session } = useAuth();
+    const { profile, refreshProfile } = useProfile();
+
     const [bio, setBio] = useState("");
     const [initialBio, setInitialBio] = useState("");
     const [updating, setUpdating] = useState(false);
@@ -31,44 +39,29 @@ export default function SettingsScreen() {
     const textSec = getThemeColor('textSecondary');
     const glassBorder = getThemeColor('glassBorder');
 
+    // 👇 3. Sincronizamos el estado local cuando el perfil esté listo
     useEffect(() => {
-        getProfile();
-    }, []);
-
-    async function getProfile() {
-        try {
-            setLoading(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('description')
-                    .eq('id', user.id)
-                    .single();
-                if (data) {
-                    setBio(data.description || "");
-                    setInitialBio(data.description || "");
-                }
-            }
-        } catch (error) {
-            console.error("Profile fetch error:", error);
-        } finally {
-            setLoading(false);
+        if (profile) {
+            const currentBio = profile.description || "";
+            setBio(currentBio);
+            setInitialBio(currentBio);
         }
-    }
+    }, [profile]);
 
     async function updateBio() {
-        if (bio === initialBio) return;
+        if (bio === initialBio || !session?.user?.id) return;
+
         try {
             setUpdating(true);
-            const { data: { user } } = await supabase.auth.getUser();
             const { error } = await supabase
                 .from('profiles')
                 .update({ description: bio })
-                .eq('id', user?.id);
+                .eq('id', session.user.id); // 👈 Usamos el ID directamente
 
             if (error) throw error;
+
             setInitialBio(bio);
+            await refreshProfile(); // 👈 Forzamos recarga en el contexto global para que el resto de la app lo sepa de inmediato
             Alert.alert("Success", "Identity profile updated.");
         } catch (error: any) {
             Alert.alert("Error", error.message);
@@ -77,7 +70,7 @@ export default function SettingsScreen() {
         }
     }
 
-    // 1. SIGN OUT: Con advertencia de pérdida de llaves
+    // SIGN OUT: Con advertencia de pérdida de llaves
     async function handleLogout() {
         Alert.alert(
             "Sign Out",
@@ -93,7 +86,7 @@ export default function SettingsScreen() {
         );
     }
 
-    // 2. DELETE ACCOUNT: Redirección a la página del timer
+    // DELETE ACCOUNT: Redirección a la página del timer
     async function goToDeleteAccount() {
         router.push("/(app)/delete-account");
     }
@@ -148,7 +141,7 @@ export default function SettingsScreen() {
                         </View>
                     </View>
 
-                    {/* SECCIÓN: SECURITY (Aquí hicimos el cambio) */}
+                    {/* SECCIÓN: SECURITY */}
                     <View style={styles.section}>
                         <ThemedText style={[styles.label, { color: accent }]}>SECURITY & PRIVACY</ThemedText>
 
@@ -161,7 +154,7 @@ export default function SettingsScreen() {
                             <SymbolView name="chevron.right" size={14} tintColor={textSec} />
                         </TouchableOpacity>
 
-                        {/* DELETE ACCOUNT (Sustituye a Remote Sessions) */}
+                        {/* DELETE ACCOUNT */}
                         <TouchableOpacity style={styles.menuItem} onPress={goToDeleteAccount}>
                             <View style={[styles.iconBox, { backgroundColor: '#1a0000' }]}>
                                 <SymbolView name="trash.fill" size={18} tintColor="#FF453A" />
@@ -171,7 +164,8 @@ export default function SettingsScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    <ThemedText style={styles.versionText}>Nymly Discrete v1.0.5</ThemedText>
+                    {/* Versión actualizada */}
+                    <ThemedText style={styles.versionText}>Nymly Discrete v1.2.2</ThemedText>
                 </View>
             </ScrollView>
         </KeyboardAvoidingView>

@@ -1,6 +1,5 @@
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useState } from 'react';
 
@@ -9,7 +8,6 @@ export default function TabLayout() {
 
   useEffect(() => {
     let channel: any;
-
     const fetchTotalUnread = async () => {
       try {
         // 1. Obtener la sesión del usuario actual
@@ -57,50 +55,48 @@ export default function TabLayout() {
   const badgeContent = renderBadgeValue();
 
   return (
-    <ThemeProvider value={DarkTheme}>
-      <NativeTabs
-        minimizeBehavior='onScrollDown'
-        tintColor={getThemeColor("tabIconDefault")}
-      >
-        <NativeTabs.Trigger name='(home)'>
-          <NativeTabs.Trigger.Label hidden />
-          <NativeTabs.Trigger.Icon
-            selectedColor={getThemeColor("tabIconSelected")}
-            sf={{ default: "house", selected: "house.fill" }}
-            drawable='custom_android_drawable'
-          />
-        </NativeTabs.Trigger>
+    <NativeTabs
+      minimizeBehavior='onScrollDown'
+      tintColor={getThemeColor("tabIconDefault")}
+    >
+      <NativeTabs.Trigger name='(home)'>
+        <NativeTabs.Trigger.Label hidden />
+        <NativeTabs.Trigger.Icon
+          selectedColor={getThemeColor("tabIconSelected")}
+          sf={{ default: "house", selected: "house.fill" }}
+          drawable='custom_android_drawable'
+        />
+      </NativeTabs.Trigger>
 
-        <NativeTabs.Trigger name='(search)'>
-          <NativeTabs.Trigger.Label hidden />
-          <NativeTabs.Trigger.Icon
-            selectedColor={getThemeColor("tabIconSelected")}
-            sf={{ default: "magnifyingglass", selected: "magnifyingglass" }}
-            drawable='custom_android_drawable'
-          />
-        </NativeTabs.Trigger>
+      <NativeTabs.Trigger name='(search)'>
+        <NativeTabs.Trigger.Label hidden />
+        <NativeTabs.Trigger.Icon
+          selectedColor={getThemeColor("tabIconSelected")}
+          sf={{ default: "magnifyingglass", selected: "magnifyingglass" }}
+          drawable='custom_android_drawable'
+        />
+      </NativeTabs.Trigger>
 
-        <NativeTabs.Trigger name='(messages)'>
-          {badgeContent && (
-            <NativeTabs.Trigger.Badge>{badgeContent}</NativeTabs.Trigger.Badge>
-          )}
-          <NativeTabs.Trigger.Label hidden />
-          <NativeTabs.Trigger.Icon
-            selectedColor={getThemeColor("tabIconSelected")}
-            sf={{ default: "ellipsis.message", selected: "ellipsis.message.fill" }}
-            drawable='custom_android_drawable'
-          />
-        </NativeTabs.Trigger>
+      <NativeTabs.Trigger name='(messages)'>
+        {badgeContent && (
+          <NativeTabs.Trigger.Badge>{badgeContent}</NativeTabs.Trigger.Badge>
+        )}
+        <NativeTabs.Trigger.Label hidden />
+        <NativeTabs.Trigger.Icon
+          selectedColor={getThemeColor("tabIconSelected")}
+          sf={{ default: "ellipsis.message", selected: "ellipsis.message.fill" }}
+          drawable='custom_android_drawable'
+        />
+      </NativeTabs.Trigger>
 
-        <NativeTabs.Trigger name='(profile)'>
-          <NativeTabs.Trigger.Label hidden />
-          <NativeTabs.Trigger.Icon
-            selectedColor={getThemeColor("tabIconSelected")}
-            sf={{ default: "person", selected: "person.fill" }}
-            drawable='custom_android_drawable'
-          />
-        </NativeTabs.Trigger>
-      </NativeTabs>
-    </ThemeProvider>
+      <NativeTabs.Trigger name='(profile)'>
+        <NativeTabs.Trigger.Label hidden />
+        <NativeTabs.Trigger.Icon
+          selectedColor={getThemeColor("tabIconSelected")}
+          sf={{ default: "person", selected: "person.fill" }}
+          drawable='custom_android_drawable'
+        />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

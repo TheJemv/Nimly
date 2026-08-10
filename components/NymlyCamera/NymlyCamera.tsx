@@ -55,17 +55,19 @@ export default function NymlyCamera({
     const cameraRef = useRef<CameraView>(null);
 
     // Reproductor de Video
-    const videoPlayer = useVideoPlayer(
-        capturedMedia?.type === 'video' ? capturedMedia.uri : null
-    );
+    const videoPlayer = useVideoPlayer(capturedMedia?.type === 'video' ? capturedMedia.uri : null, player => {
+        player.loop = true;
+        player.play();
+    });
 
     // Reproducción automática en bucle
     useEffect(() => {
         if (capturedMedia?.type === 'video' && capturedMedia.uri && videoPlayer) {
             try {
-                videoPlayer.replace(capturedMedia.uri);
-                videoPlayer.loop = true;
-                videoPlayer.play();
+                // videoPlayer.replace(capturedMedia.uri);
+                // videoPlayer.loop = true;
+                // videoPlayer.play();
+
             } catch (e) {
                 console.warn("Error al reproducir vista previa de video:", e);
             }

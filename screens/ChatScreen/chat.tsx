@@ -1,4 +1,3 @@
-import { createAvatar } from "@dicebear/core";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
    ActivityIndicator,
@@ -11,7 +10,6 @@ import {
    TouchableOpacity,
    View
 } from "react-native";
-import { SvgXml } from "react-native-svg";
 
 // Expo
 import { Button, ContextMenu, Host, Image as SwiftImage } from "@expo/ui/swift-ui";
@@ -20,13 +18,14 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
 // Constants
-import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from "@/constants/theme";
 
 // Components
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import { MessageContent } from "@/components/MessageContent";
 import NymlyCamera from "@/components/NymlyCamera";
+import { ReplyStory } from "@/components/ReplyStory";
+import UserAvatar from "@/components/UserAvatar";
 
 // Utils
 import { cleanChatMessage } from "@/utils/chatUtils";
@@ -35,15 +34,12 @@ import { prefetchChatMedia } from "@/utils/mediaPrefetch";
 
 // More
 import { chatApi } from "@/api/chat";
-import { ReplyQuote } from "@/components/ReplyQuote";
-import { ReplyStory } from "@/components/ReplyStory";
 import { supabase } from "@/lib/supabase";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
 
-// Component
 export default function ChatScreen() {
-   const { id: targetFriendId } = useLocalSearchParams<{ id: string }>();
+   const { id: targetFriendId, user: routeUserParam } = useLocalSearchParams<{ id: string; user?: string }>();
    const router = useRouter();
 
    const [newMessage, setNewMessage] = useState("");
@@ -64,14 +60,32 @@ export default function ChatScreen() {
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
 
+   // Parsear el objeto user que viene por parámetro de ruta (si existe)
+   const routeUser = useMemo(() => {
+      if (!routeUserParam) return null;
+      console.log(routeUser)
+      try {
+         return typeof routeUserParam === 'string' ? JSON.parse(routeUserParam) : routeUserParam;
+      } catch {
+         return null;
+      }
+   }, [routeUserParam]);
+
+   // Prioridad: Perfil de BD > Parámetro de ruta > 'User'
+   const displayName = friendProfile?.username || routeUser?.username || 'User';
+   const avatarConfig = friendProfile?.avatar_config || routeUser?.avatar_config;
+   const avatarUrl = friendProfile?.avatar_url || routeUser?.avatar_url;
+
    useEffect(() => {
-      if (!friendProfile?.public_key || messages.length === 0) return;
+      if (!friendProfile?.public_key && !routeUser?.public_key || messages.length === 0) return;
+      const pubKey = friendProfile?.public_key || routeUser?.public_key;
+
       const mediaItems = messages
          .filter(m => m.type === 'image' && m.content && m.content !== 'OPENED_CAPSULE')
-         .map(m => ({ filePath: m.content, friendPublicKey: friendProfile.public_key }));
+         .map(m => ({ filePath: m.content, friendPublicKey: pubKey }));
 
       if (mediaItems.length > 0) prefetchChatMedia(mediaItems);
-   }, [messages, friendProfile?.public_key]);
+   }, [messages, friendProfile?.public_key, routeUser?.public_key]);
 
    const lastReadMessageId = useMemo(() => {
       if (!currentUserId) return null;
@@ -81,14 +95,15 @@ export default function ChatScreen() {
 
    const handleSendText = async () => {
       const cleanedMessage = cleanChatMessage(newMessage);
-      if (!cleanedMessage || !chatId || !currentUserId || !friendProfile?.public_key) return;
+      const pubKey = friendProfile?.public_key || routeUser?.public_key;
+      if (!cleanedMessage || !chatId || !currentUserId || !pubKey) return;
 
       setNewMessage("");
       const replyToId = replyingTo?.id || null;
-      setReplyingTo(null); // limpia la barra de reply de inmediato (UX optimista)
+      setReplyingTo(null);
 
       try {
-         const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, friendProfile.public_key);
+         const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, pubKey);
          if (!encryptedContent) throw new Error("Encryption failed");
 
          vaultRAMCache[encryptedContent] = cleanedMessage;
@@ -99,23 +114,16 @@ export default function ChatScreen() {
             content: encryptedContent,
             type: 'text',
             is_read: false,
-            reply_to_id: replyToId, // 👈
+            reply_to_id: replyToId,
          });
       } catch (e) {
          console.error("❌ [SEND] Vault Send Error:", e);
       }
    };
 
-   const friendAvatarSvg = useMemo(() => {
-      if (!friendProfile?.avatar_config) return null;
-      const config = friendProfile.avatar_config;
-      const estilo = ESTILOS_DICEBEAR.find(e => e.id === config.styleId) || ESTILOS_DICEBEAR[0];
-      return createAvatar(estilo.collection as any, { ...config.options, radius: 50 }).toString();
-   }, [friendProfile]);
-
    const renderItem = useCallback(({ item }: { item: any }) => {
-      const mine = item.sender_id === currentUserId; // ✅ CORRECTO
-      const keyToUse = friendProfile?.public_key || "";
+      const mine = item.sender_id === currentUserId;
+      const keyToUse = friendProfile?.public_key || routeUser?.public_key || "";
       const showReadReceipt = item.id === lastReadMessageId;
 
       const isText = item.type === 'text' || !item.type;
@@ -141,12 +149,11 @@ export default function ChatScreen() {
                ]}
             >
                {replyData && (
-                  <ReplyQuote
-                     content={replyData.content}
-                     senderUsername={replyData.sender_id === currentUserId ? "You" : friendProfile?.username || ""}
-                     friendPublicKey={keyToUse}
-                     isMine={mine}
-                  />
+                  <View style={{ marginBottom: 4 }}>
+                     <Text style={{ color: '#aaa', fontSize: 11 }}>
+                        Replying to {replyData.sender_id === currentUserId ? "yourself" : displayName}
+                     </Text>
+                  </View>
                )}
 
                {isText ? (
@@ -160,14 +167,15 @@ export default function ChatScreen() {
                   />
                )}
             </TouchableOpacity>
-            {showReadReceipt && friendAvatarSvg && (
+
+            {showReadReceipt && (
                <View style={styles.readReceiptContainer}>
-                  <SvgXml xml={friendAvatarSvg} width="16" height="16" />
+                  <UserAvatar size={16} avatar_url={avatarUrl} avatar_config={avatarConfig} />
                </View>
             )}
          </View>
       );
-   }, [currentUserId, friendProfile, lastReadMessageId, friendAvatarSvg]);
+   }, [currentUserId, friendProfile, routeUser, lastReadMessageId, displayName, avatarUrl, avatarConfig]);
 
    const handleBurnHistory = () => {
       if (!chatId) return;
@@ -183,7 +191,7 @@ export default function ChatScreen() {
                   try {
                      await chatApi.burnChatHistory(chatId);
                      setMessages([]);
-                  } catch (e) {
+                  } catch {
                      alert("Failed to burn history.");
                   }
                }
@@ -192,126 +200,141 @@ export default function ChatScreen() {
       );
    };
 
-   if (loading) return <View style={styles.center}><ActivityIndicator color={getThemeColor("tint")} /></View>;
+   const handleProfile = useCallback(() => {
+      router.push({
+         pathname: "/(app)/user/[id]",
+         params: {
+            id: targetFriendId,
+            user: JSON.stringify(friendProfile),
+         }
+      });
+   }, [targetFriendId, friendProfile])
 
    return (
-      <>
-         <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.container}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-         >
-            <Stack.Screen
-               options={{
-                  headerStyle: { backgroundColor: '#000' },
-                  headerShadowVisible: false,
-                  headerTitle: () => (
-                     <TouchableOpacity style={styles.headerBtn} onPress={() => router.push(`/(app)/user/${targetFriendId}`)}>
-                        <View style={styles.headerAvatar}>
-                           {friendAvatarSvg && <SvgXml xml={friendAvatarSvg} width="32" height="32" />}
-                        </View>
-                        <View>
-                           <Text style={styles.headerName}>@{friendProfile?.username || 'User'}</Text>
-                           <Text style={styles.headerSub}>View Profile</Text>
-                        </View>
-                     </TouchableOpacity>
-                  ),
-                  headerRight: () => (
-                     <Host style={{ width: 35, height: 35 }}>
-                        <ContextMenu>
-                           <ContextMenu.Items>
-                              <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
-                              <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
-                           </ContextMenu.Items>
-                           <ContextMenu.Trigger>
-                              <SwiftImage systemName="ellipsis" />
-                           </ContextMenu.Trigger>
-                        </ContextMenu>
-                     </Host>
-                  )
-               }}
-            />
+      <KeyboardAvoidingView
+         behavior={Platform.OS === "ios" ? "padding" : "height"}
+         style={styles.container}
+         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+         <Stack.Screen
+            options={{
+               headerStyle: { backgroundColor: '#000' },
+               headerShadowVisible: false,
+               headerTitle: () => (
+                  <TouchableOpacity style={styles.headerBtn} onPress={handleProfile}>
+                     <View style={styles.headerAvatar}>
+                        <UserAvatar size={32} avatar_url={avatarUrl} avatar_config={avatarConfig} />
+                     </View>
+                     <View>
+                        <Text style={styles.headerName}>@{displayName}</Text>
+                        <Text style={styles.headerSub}>View Profile</Text>
+                     </View>
+                  </TouchableOpacity>
+               ),
+               headerRight: () => (
+                  <Host style={{ width: 35, height: 35 }}>
+                     <ContextMenu>
+                        <ContextMenu.Items>
+                           <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
+                           <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
+                        </ContextMenu.Items>
+                        <ContextMenu.Trigger>
+                           <SwiftImage systemName="ellipsis" />
+                        </ContextMenu.Trigger>
+                     </ContextMenu>
+                  </Host>
+               )
+            }}
+         />
 
+         {loading ? (
+            <View style={styles.center}>
+               <ActivityIndicator color={getThemeColor("tint")} size="large" />
+            </View>
+         ) : (
             <FlatList
                inverted
                data={messages}
                keyExtractor={(item) => item.id}
                renderItem={renderItem}
-               onEndReached={loadMoreMessages}
+               onEndReached={() => {
+                  if (hasMore && !loadingMore) {
+                     loadMoreMessages();
+                  }
+               }}
                onEndReachedThreshold={0.2}
                contentContainerStyle={{ padding: 16 }}
                removeClippedSubviews={Platform.OS === 'android'}
                maxToRenderPerBatch={10}
                windowSize={5}
-               ListFooterComponent={() => loadingMore ? <ActivityIndicator style={{ margin: 10 }} /> : null}
+               ListFooterComponent={() => loadingMore ? <ActivityIndicator style={{ margin: 10 }} color={getThemeColor("tint")} /> : null}
             />
+         )}
 
-            {isUploading && (
-               <View style={styles.uploadIndicator}>
-                  <ActivityIndicator size="small" color={getThemeColor("tint")} />
-                  <Text style={styles.uploadText}>Encrypting Vault...</Text>
+         {isUploading && (
+            <View style={styles.uploadIndicator}>
+               <ActivityIndicator size="small" color={getThemeColor("tint")} />
+               <Text style={styles.uploadText}>Encrypting Vault...</Text>
+            </View>
+         )}
+
+         {replyingTo && (
+            <View style={styles.replyPreviewBar}>
+               <View style={styles.replyPreviewContent}>
+                  <Text style={styles.replyPreviewLabel}>
+                     Replying to {replyingTo.sender_id === currentUserId ? "yourself" : displayName}
+                  </Text>
+                  <MessageContent content={replyingTo.content} friendPublicKey={friendProfile?.public_key || routeUser?.public_key} />
                </View>
-            )}
-
-            {replyingTo && (
-               <View style={styles.replyPreviewBar}>
-                  <View style={styles.replyPreviewContent}>
-                     <Text style={styles.replyPreviewLabel}>
-                        Replying to {replyingTo.sender_id === currentUserId ? "yourself" : friendProfile?.username}
-                     </Text>
-                     <MessageContent content={replyingTo.content} friendPublicKey={friendProfile?.public_key} />
-                  </View>
-                  <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                     <SymbolView name="xmark.circle.fill" size={20} tintColor="#666" />
-                  </TouchableOpacity>
-               </View>
-            )}
-
-
-            <View style={styles.inputBar}>
-               <TouchableOpacity style={styles.plusHost} onPress={() => setCameraVisible(true)}>
-                  <GlassView style={styles.plusButton}>
-                     <SymbolView name="camera" size={22} tintColor={getThemeColor("tint")} />
-                  </GlassView>
-               </TouchableOpacity>
-
-               <TextInput
-                  style={styles.input}
-                  placeholder="Message..."
-                  placeholderTextColor="#666"
-                  value={newMessage}
-                  onChangeText={setNewMessage}
-                  multiline
-                  selectionColor={getThemeColor("tint")}
-               />
-
-               <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSendText}
-                  disabled={!newMessage.trim()}
-               >
-                  <SymbolView
-                     name="arrow.up.circle.fill"
-                     size={48}
-                     tintColor={newMessage.trim() ? getThemeColor("tint") : "#333"}
-                  />
+               <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                  <SymbolView name="xmark.circle.fill" size={20} tintColor="#666" />
                </TouchableOpacity>
             </View>
-         </KeyboardAvoidingView>
+         )}
+
+         <View style={styles.inputBar}>
+            <TouchableOpacity style={styles.plusHost} onPress={() => setCameraVisible(true)}>
+               <GlassView style={styles.plusButton}>
+                  <SymbolView name="camera" size={22} tintColor={getThemeColor("tint")} />
+               </GlassView>
+            </TouchableOpacity>
+
+            <TextInput
+               style={styles.input}
+               placeholder="Message..."
+               placeholderTextColor="#666"
+               value={newMessage}
+               onChangeText={setNewMessage}
+               multiline
+               selectionColor={getThemeColor("tint")}
+            />
+
+            <TouchableOpacity
+               style={styles.sendButton}
+               onPress={handleSendText}
+               disabled={!newMessage.trim() || loading}
+            >
+               <SymbolView
+                  name="arrow.up.circle.fill"
+                  size={48}
+                  tintColor={newMessage.trim() ? getThemeColor("tint") : "#333"}
+               />
+            </TouchableOpacity>
+         </View>
 
          <NymlyCamera
             visible={isCameraVisible}
             onClose={() => setCameraVisible(false)}
             onSend={(uri, type, option) => {
-               if (friendProfile?.public_key) {
+               const pubKey = friendProfile?.public_key || routeUser?.public_key;
+               if (pubKey) {
                   const finalType = option || type;
-                  sendCapturedImage(uri, finalType, friendProfile.public_key);
+                  sendCapturedImage(uri, finalType, pubKey);
                } else {
                   alert("Connecting Vault. Please wait a second.");
                }
             }}
          />
-      </>
+      </KeyboardAvoidingView>
    );
 }
-

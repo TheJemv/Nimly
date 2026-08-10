@@ -24,7 +24,7 @@ const getValidOptions = (collection: any, category: string) => {
       if (prop.items && prop.items.enum) return prop.items.enum;
       if (prop.enum) return prop.enum;
       return [];
-   } catch (error) {
+   } catch {
       return [];
    }
 };
@@ -154,7 +154,7 @@ export default function AvatarSelectScreen() {
          if (error) throw error;
 
          router.back();
-      } catch (error) {
+      } catch {
          Alert.alert("Error", "Could not save avatar configuration.");
       }
    };

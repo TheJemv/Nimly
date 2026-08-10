@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
-import { Animated, Dimensions } from "react-native";
+import { useState } from "react";
+import { Animated, Dimensions, useAnimatedValue } from "react-native";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export function useViewsSheet() {
     const [isViewsSheetOpen, setIsViewsSheetOpen] = useState(false);
-    const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+    const sheetAnim = useAnimatedValue(SCREEN_HEIGHT);
 
     const openViewsSheet = (onOpen?: () => void) => {
         setIsViewsSheetOpen(true);

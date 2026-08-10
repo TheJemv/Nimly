@@ -18,6 +18,9 @@ export const styles = StyleSheet.create({
         borderRadius: 28,
         overflow: "hidden",
         backgroundColor: Colors.dark.surface,
+        display: "flex",
+        justifyContent:"center",
+        alignContent: "center"
     },
     ringUnseen: { borderColor: Colors.dark.tint },
     ringSeen: { borderColor: Colors.dark.icon },

@@ -1,20 +1,28 @@
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+
+import { Host } from "@expo/ui/swift-ui";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { Stack, useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
+
+import { getThemeColor } from "@/constants/theme";
+import { supabase } from "@/lib/supabase";
+
 import { friendsApi } from "@/api/friends";
 import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
 import { ThemedText } from "@/components/themed-text";
 import UserAvatar from "@/components/UserAvatar";
-import { getThemeColor } from "@/constants/theme";
-import { supabase } from "@/lib/supabase";
-import { Host } from "@expo/ui/swift-ui";
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useAuth } from "@/context/AuthContext";
+import { useProfile } from "@/context/ProfileContext";
 
 export default function ProfileScreen() {
+    const { session } = useAuth()
+    const { profile } = useProfile()
+    const myUserId = session?.user?.id
+
     const router = useRouter();
-    const [profile, setProfile] = useState<any>(null);
     const [friendsCount, setFriendsCount] = useState(0);
     const [myPosts, setMyPosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -34,27 +42,21 @@ export default function ProfileScreen() {
         commentsRef.current?.present();
     };
 
-    const loadProfileData = async (showLoading = true) => {
-        if (showLoading) setLoading(true);
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
 
-            const [profileRes, count, postsRes] = await Promise.all([
-                supabase.from('profiles').select('*').eq('id', user.id).single(),
+    const loadPostsAndFriends = async (showLoading = true) => {
+        if (!myUserId) return;
+        if (showLoading) setLoading(true);
+
+        try {
+            const [count, postsRes] = await Promise.all([
                 friendsApi.getFriendsCount(),
-                supabase
-                    .from('posts_with_stats')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
+                supabase.from('posts_with_stats').select('*').eq('user_id', myUserId).order('created_at', { ascending: false })
             ]);
 
-            if (profileRes.data) setProfile(profileRes.data);
             setFriendsCount(count || 0);
             setMyPosts(postsRes.data || []);
         } catch (error) {
-            console.error("Error loading profile:", error);
+            console.error(error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -62,25 +64,20 @@ export default function ProfileScreen() {
     };
 
     useEffect(() => {
-        loadProfileData();
-        const channel = supabase
-            .channel('my-profile-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => loadProfileData(false))
+        loadPostsAndFriends();
+        if (!myUserId) return;
+
+        const postsChannel = supabase
+            .channel('my-posts-changes')
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'posts', filter: `user_id=eq.${myUserId}` },
+                () => loadPostsAndFriends(false)
+            )
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
-    }, []);
+        return () => { supabase.removeChannel(postsChannel); };
+    }, [myUserId]);
 
-    useFocusEffect(
-        useCallback(() => {
-            loadProfileData(false);
-        }, [])
-    );
-
-    const onRefresh = () => {
-        setRefreshing(true);
-        loadProfileData(false);
-    };
 
     if (loading && !refreshing) {
         return (
@@ -89,6 +86,11 @@ export default function ProfileScreen() {
             </View>
         );
     }
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        loadPostsAndFriends(false);
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -118,11 +120,7 @@ export default function ProfileScreen() {
                 <View style={styles.topContainerMain}>
                     <View style={styles.topContainer}>
                         <TouchableOpacity onPress={openAvatarSelect} style={styles.avatarContainer}>
-                            <UserAvatar
-                                avatar_url={profile?.avatar_url}
-                                avatar_config={profile?.avatar_config}
-                                size={88}
-                            />
+                            <UserAvatar size={88} />
                         </TouchableOpacity>
 
                         <View style={styles.statsRow}>
@@ -152,7 +150,7 @@ export default function ProfileScreen() {
                         <PostComponent
                             post={post}
                             key={post.id}
-                            onDelete={() => loadProfileData(false)}
+                            onDelete={() => loadPostsAndFriends(false)}
                             onCommentPress={() => handleOpenComments(post.id)}
                         />
                     ))}
@@ -171,7 +169,7 @@ export default function ProfileScreen() {
                     <CommentsSheet
                         ref={commentsRef}
                         postId={activeCommentPostId}
-                        postOwnerId={profile?.id}
+                        postOwnerId={myUserId as string}
                     />
                 </Host>
             )}

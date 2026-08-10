@@ -4,14 +4,16 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-get-random-values';
 
 import { AppMetrics, ObserveRoot } from "expo-observe";
-import { Stack } from "expo-router";
+import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 
-import ConnectionErrorView from "@/components/ConnectionErrorView"; // Importamos tu nueva pantalla
+import ConnectionErrorView from "@/components/ConnectionErrorView";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { supabase } from '@/lib/supabase'; // Importamos supabase para el chequeo de red
+import { supabase } from '@/lib/supabase';
 
+import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { StatusBar } from 'react-native';
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({
@@ -22,7 +24,7 @@ SplashScreen.setOptions({
 function RootLayoutNav() {
     const { isLoading } = useAuth();
     const [isOffline, setIsOffline] = useState(false);
-    const [isCheckingNetwork, setIsCheckingNetwork] = useState(true); // 👈 empieza true
+    const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
 
     const checkServerConnection = async () => {
         try {
@@ -32,7 +34,7 @@ function RootLayoutNav() {
             const pingPromise = supabase.from('profiles').select('id').limit(1).maybeSingle();
             await Promise.race([pingPromise, timeoutPromise]);
             setIsOffline(false);
-        } catch (e) {
+        } catch {
             setIsOffline(true);
         } finally {
             setIsCheckingNetwork(false);
@@ -49,7 +51,6 @@ function RootLayoutNav() {
         checkServerConnection();
     }, []);
 
-    // 👇 Un solo punto de verdad para ocultar el splash
     useEffect(() => {
         if (!isLoading && !isCheckingNetwork) {
             SplashScreen.hide();
@@ -58,18 +59,25 @@ function RootLayoutNav() {
     }, [isLoading, isCheckingNetwork]);
 
     if (isLoading || isCheckingNetwork) {
-        return null; // el splash sigue visible, no montamos el ActivityIndicator todavía
+        return null;
     }
 
     if (isOffline) {
         return <ConnectionErrorView onRetrySuccess={() => setIsOffline(false)} />;
     }
 
-    // PRIORIDAD 3: Red segura garantizada, renderizar el árbol de navegación normal
     return (
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000000' }}>
             <BottomSheetModalProvider>
-                <Stack screenOptions={{ headerShown: false }}>
+                <Stack
+                    screenOptions={{
+                        headerShown: false,
+                        // 👈 Asegúrate de poner el fondo negro también aquí
+                        contentStyle: { backgroundColor: '#000000' },
+                        headerStyle: { backgroundColor: '#000000' },
+                        headerTintColor: '#fff',
+                    }}
+                >
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="(app)" />
                 </Stack>
@@ -80,10 +88,18 @@ function RootLayoutNav() {
 
 function AppLayout() {
     return (
-        <AuthProvider>
-            <RootLayoutNav />
-        </AuthProvider>
+        <>
+            <StatusBar backgroundColor="#000000" />
+            <ThemeProvider value={DarkTheme}>
+                <AuthProvider>
+                    <ProfileProvider>
+                        <RootLayoutNav />
+                    </ProfileProvider>
+                </AuthProvider>
+            </ThemeProvider>
+        </>
     );
 }
+
 
 export default ObserveRoot.wrap(AppLayout)

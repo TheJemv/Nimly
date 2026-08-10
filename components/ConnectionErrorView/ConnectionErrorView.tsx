@@ -17,24 +17,16 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
         setIsChecking(true);
 
         try {
-            // 1. FIREWALes DE INFRAESTRUCTURA: Hacemos un ping ultra-rápido y directo a la API de Supabase
             const startTime = Date.now();
-
-            // Forzamos un timeout de 4 segundos para no dejar colgado al usuario si la señal es pésima
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error("Timeout")), 4000)
             );
 
             const pingPromise = supabase.from('profiles').select('id').limit(1).maybeSingle();
-
-            // Competencia de promesas para romper bloqueos de red
             await Promise.race([pingPromise, timeoutPromise]);
-
             console.log(`📡 [NETWORK_VAULT] Connection restored in ${Date.now() - startTime}ms`);
-
-            // 2. Si la consulta responde con éxito, disparamos el callback para desbloquear el Home
             onRetrySuccess();
-        } catch (e) {
+        } catch {
             console.log("❌ [NETWORK_VAULT] Server unreachable. Still offline.");
         } finally {
             setIsChecking(false);

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState } from "react";
 
 const PAGE_SIZE = 30;
+
 export function useChatSync(targetFriendId: string | undefined) {
     const [chatId, setChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<any[]>([]);
@@ -17,6 +18,35 @@ export function useChatSync(targetFriendId: string | undefined) {
         if (!targetFriendId) return;
         await chatApi.markAsRead(cId, targetFriendId);
     }, [targetFriendId]);
+
+    const fetchMessages = useCallback(async (cId: string, offset: number) => {
+        try {
+            const { data, error } = await supabase
+                .from('messages')
+                .select(`
+                    *,
+                    reply_to:reply_to_id (id, content, sender_id, type),
+                    reply_to_story:reply_to_story_id (id, media_url, user_id)
+                `)
+                .eq('chat_id', cId)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + PAGE_SIZE - 1);
+
+            if (error) throw error;
+
+            const fetchedData = data || [];
+
+            if (fetchedData.length < PAGE_SIZE) {
+                setHasMore(false);
+            }
+
+            setMessages(prev => offset === 0 ? fetchedData : [...prev, ...fetchedData]);
+            
+            return fetchedData;
+        } catch (e) {
+            console.error('❌ [FETCH] Error:', e);
+        }
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -33,7 +63,7 @@ export function useChatSync(targetFriendId: string | undefined) {
 
                 await markMessagesAsRead(cId);
 
-                const [_, profRes] = await Promise.all([
+                const [, profRes] = await Promise.all([
                     fetchMessages(cId, 0),
                     supabase.from('profiles').select('*').eq('id', targetFriendId).single()
                 ]);
@@ -49,31 +79,7 @@ export function useChatSync(targetFriendId: string | undefined) {
         };
         init();
         return () => { isMounted = false; };
-    }, [targetFriendId, markMessagesAsRead]);
-
-    const fetchMessages = async (cId: string, offset: number) => {
-        try {
-            const { data, error } = await supabase
-                .from('messages')
-                .select(`
-                    *,
-                    reply_to:reply_to_id (id, content, sender_id, type),
-                    reply_to_story:reply_to_story_id (id, media_url, user_id)
-                `) // 👈 AQUI: Usamos !reply_to_id (el nombre de tu columna)
-                .eq('chat_id', cId)
-                .order('created_at', { ascending: false })
-                .range(offset, offset + PAGE_SIZE - 1);
-
-            if (error) throw error;
-
-            if (data && data.length < PAGE_SIZE) setHasMore(false);
-            setMessages(prev => offset === 0 ? (data || []) : [...prev, ...(data || [])]);
-            
-            return data;
-        } catch (e) {
-            console.error('❌ [FETCH] Error:', e);
-        }
-    };
+    }, [targetFriendId, markMessagesAsRead, fetchMessages]);
 
     useEffect(() => {
         if (!chatId) return;
@@ -86,12 +92,9 @@ export function useChatSync(targetFriendId: string | undefined) {
                     if (payload.eventType === 'INSERT') {
                         const rawMsg = payload.new;
 
-                        // 🟢 Creamos una función async para procesar el mensaje entrante
                         const handleNewMessage = async () => {
                             let finalMsg = rawMsg;
 
-                            // Si el mensaje es una respuesta, hacemos un fetch rápido de ese mensaje
-                            // específico usando tu misma consulta para que traiga el JOIN armado.
                             if (rawMsg.reply_to_id) {
                                 const { data } = await supabase
                                     .from('messages')
@@ -105,7 +108,6 @@ export function useChatSync(targetFriendId: string | undefined) {
                                 if (data) finalMsg = data;
                             }
 
-                            // Ahora sí, lo metemos al estado de React
                             setMessages((prev) => {
                                 if (prev.some((m) => m.id === finalMsg.id)) return prev;
                                 return [finalMsg, ...prev];

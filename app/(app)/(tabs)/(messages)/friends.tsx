@@ -16,10 +16,10 @@ import {
 
 export default function NewChatModal() {
     const router = useRouter();
-    const [friends, setFriends] = useState<any[]>([]);
+    // const [friends, setFriends] = useState<any[]>([]);
     const [filteredFriends, setFilteredFriends] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
+    // const [_search, setSearch] = useState("");
 
     useEffect(() => {
         fetchFriendsForChat();
@@ -28,7 +28,7 @@ export default function NewChatModal() {
     const fetchFriendsForChat = async () => {
         try {
             const allFriends = await friendsApi.getFriendsList(0, 50);
-            setFriends(allFriends);
+            // setFriends(allFriends);
             setFilteredFriends(allFriends);
         } catch (error) {
             console.error(error);
@@ -37,17 +37,17 @@ export default function NewChatModal() {
         }
     };
 
-    const handleSearch = (text: string) => {
-        setSearch(text);
-        if (text) {
-            const filtered = friends.filter(f =>
-                f.username.toLowerCase().includes(text.toLowerCase())
-            );
-            setFilteredFriends(filtered);
-        } else {
-            setFilteredFriends(friends);
-        }
-    };
+    // const handleSearch = (text: string) => {
+    //     setSearch(text);
+    //     if (text) {
+    //         const filtered = friends.filter(f =>
+    //             f.username.toLowerCase().includes(text.toLowerCase())
+    //         );
+    //         setFilteredFriends(filtered);
+    //     } else {
+    //         setFilteredFriends(friends);
+    //     }
+    // };
 
     const startChat = async (friendId: string) => {
         router.back();
@@ -71,13 +71,13 @@ export default function NewChatModal() {
         <>
             <Stack.Screen
                 options={{
-                    headerSearchBarOptions: {
-                        placeholder: "Search friends...",
-                        textColor: "#fff",
-                        hintTextColor: "#666",
-                        onChangeText: (event) => handleSearch(event.nativeEvent.text),
-                        onCancelButtonPress: () => setFilteredFriends(friends),
-                    },
+                    // headerSearchBarOptions: {
+                    //     placeholder: "Search friends...",
+                    //     textColor: "#fff",
+                    //     hintTextColor: "#666",
+                    //     onChangeText: (event) => handleSearch(event.nativeEvent.text),
+                    //     onCancelButtonPress: () => setFilteredFriends(friends),
+                    // },
                     headerLeft: () => (
                         <TouchableOpacity onPress={() => router.back()}>
                             <SymbolView name={"xmark"} tintColor={getThemeColor("tint")} />
