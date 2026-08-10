@@ -1,4 +1,4 @@
-.PHONY: help run run-build xcode ios doctor clean-modules clean-all
+.PHONY: help run run-build xcode ios doctor clean-modules clean-all eas-build eas-submit
 
 help:
 	@echo ""
@@ -11,6 +11,8 @@ help:
 	@echo "  make doctor         - Ejecuta expo-doctor para verificar dependencias"
 	@echo "  make clean-modules  - Limpia node_modules y reinstala con Bun"
 	@echo "  make clean-all      - Limpieza profunda (node_modules, ios, android y lockfile)"
+	@echo "  make eas-build      - Genera un build de producción para iOS en la nube (EAS)"
+	@echo "  make eas-submit     - Envía el último build de iOS a TestFlight / App Store Connect"
 	@echo "  make help           - Muestra este menú de ayuda"
 	@echo ""
 
@@ -48,3 +50,11 @@ clean-all:
 	bunx expo prebuild --platform ios --clean
 	cd ios && pod install && cd ..
 	@echo "🚀 ¡Proyecto limpio y regenerado con éxito!"
+
+eas-build:
+	@echo "☁️ Iniciando compilación de producción para iOS en los servidores de EAS..."
+	bunx eas build --platform ios --profile production
+
+eas-submit:
+	@echo "🚀 Enviando el último build de iOS hacia TestFlight / App Store Connect..."
+	bunx eas submit --platform ios
