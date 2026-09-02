@@ -9,12 +9,18 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
+
+import { blocksApi } from "@/api/blocks";
+import { reportsApi } from "@/api/reports";
+import { useBlockedUsers } from "@/context/BlockedUsersContext";
+import { promptReportReason } from "@/utils/moderation";
 
 // "Media" = mensajes con contenido multimedia. Los view-once ya consumidos
 // pasan a `type: 'text'` (ver MediaMessageBubble) → dejan de contar aquí.
@@ -105,11 +111,60 @@ export default function ChatInfoScreen() {
         return rel === "Just now" ? rel : `${rel} ago`;
     })();
 
+    const { blockLocally, unblockLocally } = useBlockedUsers();
+
     const copyChatId = async () => {
         if (!chatId) return;
         await Clipboard.setStringAsync(chatId);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
+    };
+
+    const handleReport = async () => {
+        const reason = await promptReportReason("Report user", `Why are you reporting @${friend?.username || 'this user'}?`);
+        if (!reason) return;
+        try {
+            await reportsApi.submitReport({ targetUserId: friendId, reason });
+            Alert.alert("Report received", "Thanks. Our team reviews reports within 24 hours.");
+        } catch (error: any) {
+            if (error.message === "AlreadyReported") {
+                Alert.alert("Note", "You have already reported this user.");
+            } else {
+                Alert.alert("Error", "The report could not be sent.");
+            }
+        }
+    };
+
+    const handleBlock = () => {
+        Alert.alert(
+            "Block user",
+            `@${friend?.username || 'this user'} will no longer be able to contact you or see your content. This also ends your connection.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        const reason = await promptReportReason(
+                            "Block user",
+                            "Tell us what's wrong so we can review this account.",
+                        );
+                        blockLocally(friendId);
+                        try {
+                            await blocksApi.blockUser(friendId, reason ?? 'other');
+                            router.replace("/(app)/(tabs)/(messages)");
+                        } catch (e: any) {
+                            if (e?.message !== "AlreadyBlocked") {
+                                unblockLocally(friendId);
+                                Alert.alert("Error", "Action could not be completed.");
+                            } else {
+                                router.replace("/(app)/(tabs)/(messages)");
+                            }
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     if (loading) {
@@ -167,6 +222,19 @@ export default function ChatInfoScreen() {
                     </TouchableOpacity>
                     <Row label="Messages" value={messageCount?.toLocaleString() ?? "—"} />
                     <Row label="Media items" value={mediaCount?.toLocaleString() ?? "—"} last />
+                </View>
+
+                {/* Safety */}
+                <Text style={styles.sectionLabel}>SAFETY</Text>
+                <View style={styles.card}>
+                    <TouchableOpacity style={styles.row} activeOpacity={0.6} onPress={handleReport}>
+                        <Text style={styles.rowLabel}>Report user</Text>
+                        <SymbolView name="exclamationmark.bubble" size={16} tintColor="#9A9A9A" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} activeOpacity={0.6} onPress={handleBlock}>
+                        <Text style={[styles.rowLabel, { color: "#FF453A" }]}>Block user</Text>
+                        <SymbolView name="hand.raised" size={16} tintColor="#FF453A" />
+                    </TouchableOpacity>
                 </View>
             </ScrollView>
         </View>

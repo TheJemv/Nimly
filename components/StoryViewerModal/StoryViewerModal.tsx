@@ -6,6 +6,7 @@ import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActionSheetIOS,
     ActivityIndicator,
     Alert,
     Animated,
@@ -28,8 +29,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserAvatar from "../UserAvatar";
 import { styles } from "./StoryViewerModal.styles";
 
+import { blocksApi } from "@/api/blocks";
 import { reportsApi } from "@/api/reports";
+import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
+import { promptReportReason } from "@/utils/moderation";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
@@ -52,6 +56,7 @@ export default function StoryViewerModal({
     onStoryDeleted,
 }: StoryViewerModalProps) {
     const insets = useSafeAreaInsets();
+    const { blockLocally, unblockLocally } = useBlockedUsers();
     const topSafePadding =
         insets.top > 0 ? insets.top + 4 : Platform.OS === "ios" ? 50 : 20;
 
@@ -211,58 +216,88 @@ export default function StoryViewerModal({
         })
     ).current;
 
-    const handleReport = () => {
+    const doReportStory = async () => {
         if (!currentStory || !currentGroup) return;
-        if (reportedStoryIdsRef.current.has(currentStory.id)) return;
+        if (isReportingRef.current) return;
+        if (reportedStoryIdsRef.current.has(currentStory.id)) {
+            Alert.alert("Note", "You have already reported this story.");
+            return;
+        }
+
+        const reason = await promptReportReason("Report story", "Why are you reporting this story?");
+        if (!reason) return;
+
+        isReportingRef.current = true;
+        setIsReporting(true);
+        try {
+            const res = await reportsApi.submitReport({
+                targetStoryId: currentStory.id,
+                reason,
+            });
+            if (res?.success) {
+                reportedStoryIdsRef.current.add(currentStory.id);
+                Alert.alert("Report received", "Thanks. Our team reviews reports within 24 hours.");
+            }
+        } catch (e: any) {
+            if (e.message === "AlreadyReported") {
+                reportedStoryIdsRef.current.add(currentStory.id);
+                Alert.alert("Note", "You have already reported this story.");
+            } else {
+                Alert.alert("Error", "Failed to report the story. Please try again later.");
+            }
+        } finally {
+            isReportingRef.current = false;
+            setIsReporting(false);
+        }
+    };
+
+    const doBlockStoryOwner = async () => {
+        if (!currentGroup) return;
+        const targetId = currentGroup.user_id;
+        const reason = await promptReportReason(
+            "Block user",
+            "Tell us what's wrong so we can review this account.",
+        );
+        blockLocally(targetId);
+        onClose();
+        try {
+            await blocksApi.blockUser(targetId, reason ?? 'other');
+        } catch (e: any) {
+            if (e?.message !== "AlreadyBlocked") {
+                unblockLocally(targetId);
+                Alert.alert("Error", "Action could not be completed.");
+            }
+        }
+    };
+
+    const handleReport = () => {
+        if (!currentStory || !currentGroup || currentGroup.is_me) return;
 
         pauseTimerForSheet();
+        const label = `@${currentGroup.username || 'user'}`;
+        const done = () => resumeTimerFromSheet();
 
-        Alert.alert(
-            "Report Story",
-            `Are you sure you want to report this story by @${currentGroup.username || 'user'}?`,
-            [
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
                 {
-                    text: "Cancel",
-                    style: "cancel",
-                    onPress: () => resumeTimerFromSheet(),
+                    options: ['Cancel', 'Report story', `Block ${label}`],
+                    destructiveButtonIndex: 2,
+                    cancelButtonIndex: 0,
+                    title: 'This story',
                 },
-                {
-                    text: "Report",
-                    style: "destructive",
-                    onPress: async () => {
-                        if (isReportingRef.current) return;
-                        if (reportedStoryIdsRef.current.has(currentStory.id)) return;
-                        isReportingRef.current = true;
-                        setIsReporting(true);
-
-                        try {
-                            await reportsApi.submitReport({
-                                targetStoryId: currentStory.id,
-                                reason: 'inappropriate_content',
-                            }).then((e) => {
-                                if (e?.success) {
-                                    Alert.alert(
-                                        "Story Reported",
-                                        "Thank you for reporting. We will review this story shortly."
-                                    );
-                                }
-                            })
-                        } catch (e: any) {
-                            if (e.message === "AlreadyReported") {
-                                reportedStoryIdsRef.current.add(currentStory.id);
-                                Alert.alert("Note", "You have already reported this story.");
-                            } else {
-                                Alert.alert("Error", "Failed to report the story. Please try again later.");
-                            }
-                        } finally {
-                            isReportingRef.current = false;
-                            setIsReporting(false);
-                            resumeTimerFromSheet();
-                        }
-                    }
-                }
-            ]
-        );
+                (index) => {
+                    if (index === 1) doReportStory().finally(done);
+                    else if (index === 2) doBlockStoryOwner().finally(done);
+                    else done();
+                },
+            );
+        } else {
+            Alert.alert('This story', undefined, [
+                { text: 'Cancel', style: 'cancel', onPress: done },
+                { text: 'Report story', onPress: () => doReportStory().finally(done) },
+                { text: `Block ${label}`, style: 'destructive', onPress: () => doBlockStoryOwner().finally(done) },
+            ]);
+        }
     };
 
     if (!visible || !currentGroup || !currentStory) return null;
@@ -371,9 +406,11 @@ export default function StoryViewerModal({
                             </View>
 
                             <View style={styles.actionsTop}>
-                                <TouchableOpacity onPress={handleReport} style={styles.closeButton} activeOpacity={0.7} disabled={isReporting}>
-                                    <SymbolView name={"exclamationmark"} size={16} tintColor={Colors.dark.text} />
-                                </TouchableOpacity>
+                                {!currentGroup.is_me && (
+                                    <TouchableOpacity onPress={handleReport} style={styles.closeButton} activeOpacity={0.7} disabled={isReporting}>
+                                        <SymbolView name={"exclamationmark"} size={16} tintColor={Colors.dark.text} />
+                                    </TouchableOpacity>
+                                )}
 
                                 <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.7}>
                                     <SymbolView name={"xmark"} size={16} tintColor={Colors.dark.text} />

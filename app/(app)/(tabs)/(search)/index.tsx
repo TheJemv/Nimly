@@ -1,5 +1,6 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from '@/constants/theme';
+import { useBlockedUsers } from '@/context/BlockedUsersContext';
 import { supabase } from '@/lib/supabase';
 import { createAvatar } from "@dicebear/core";
 import { GlassView } from 'expo-glass-effect';
@@ -53,7 +54,13 @@ export default function SearchScreen() {
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const { isBlocked, blockedIds } = useBlockedUsers();
     const accent = getThemeColor('tint');
+
+    const visibleResults = useMemo(
+        () => results.filter((r) => !isBlocked(r.id)),
+        [results, isBlocked, blockedIds],
+    );
 
     // 1. Obtener el ID del usuario actual al montar el componente
     useEffect(() => {
@@ -126,7 +133,7 @@ export default function SearchScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={results}
+                    data={visibleResults}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => <UserSearchResult item={item} />}
                     contentContainerStyle={styles.listPadding}

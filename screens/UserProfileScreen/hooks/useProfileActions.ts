@@ -1,7 +1,9 @@
 import { blocksApi } from '@/api/blocks';
 import { friendsApi } from '@/api/friends';
 import { reportsApi } from '@/api/reports';
+import { useBlockedUsers } from '@/context/BlockedUsersContext';
 import { supabase } from '@/lib/supabase';
+import { promptReportReason } from '@/utils/moderation';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Alert } from 'react-native';
@@ -16,6 +18,7 @@ interface UseProfileActionsProps {
 
 export function useProfileActions({ id, username, statusInfo, setLoading, refetch }: UseProfileActionsProps) {
     const [sending, setSending] = useState(false);
+    const { blockLocally, unblockLocally } = useBlockedUsers();
 
     const handleCopyUsername = async () => {
         if (username) {
@@ -59,14 +62,25 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
                     text: "Block",
                     style: "destructive",
                     onPress: async () => {
+                        // Preguntamos el motivo para incluirlo en el reporte que
+                        // recibe el desarrollador. Cancelar el motivo NO cancela
+                        // el bloqueo.
+                        const reason = await promptReportReason(
+                            "Block User",
+                            "Tell us what's wrong so we can review this account.",
+                        );
+
+                        // Ocultamos su contenido al instante.
+                        blockLocally(id);
                         try {
                             setLoading(true);
-                            await blocksApi.blockUser(id);
+                            await blocksApi.blockUser(id, reason ?? 'other');
                             await refetch();
                         } catch (e: any) {
                             if (e.message === "AlreadyBlocked") {
                                 Alert.alert("Note", "You have already blocked this user.");
                             } else {
+                                unblockLocally(id);
                                 Alert.alert("Error", "Action could not be completed.");
                             }
                         } finally {
@@ -87,11 +101,13 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
                 {
                     text: "Unblock",
                     onPress: async () => {
+                        unblockLocally(id);
                         try {
                             setLoading(true);
                             await blocksApi.unblockUser(id);
                             await refetch();
                         } catch (e) {
+                            blockLocally(id);
                             Alert.alert("Error", "Action could not be completed.");
                         } finally {
                             setLoading(false);
@@ -123,9 +139,11 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
     };
 
     const handleReportUser = async () => {
+        const reason = await promptReportReason("Report User", `Why are you reporting @${username}?`);
+        if (!reason) return;
         try {
-            await reportsApi.submitReport({ targetUserId: id, reason: 'harassment' });
-            Alert.alert("Report Filed", "Our security protocols have logged your report.");
+            await reportsApi.submitReport({ targetUserId: id, reason });
+            Alert.alert("Report received", "Thanks. Our team reviews reports within 24 hours.");
         } catch (error: any) {
             if (error.message === "AlreadyReported") {
                 Alert.alert("Note", "You have already reported this user.");

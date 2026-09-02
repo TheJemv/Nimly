@@ -123,6 +123,17 @@ export default function LoginScreen() {
                                 <Text style={styles.buttonText}>ACCESS ACCOUNT</Text>
                             )}
                         </TouchableOpacity>
+
+                        <Text style={[styles.legalText, { color: textSec }]}>
+                            By continuing you agree to Nimly&apos;s{' '}
+                            <Text
+                                style={[styles.legalLink, { color: accent }]}
+                                onPress={() => router.push('/(auth)/terms')}
+                            >
+                                Terms of Use
+                            </Text>
+                            , including a zero-tolerance policy for objectionable content and abusive behavior.
+                        </Text>
                     </View>
 
                     <View style={styles.footer}>
@@ -193,6 +204,16 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
         letterSpacing: 1,
+    },
+    legalText: {
+        fontSize: 12,
+        lineHeight: 18,
+        textAlign: 'center',
+        marginTop: 4,
+    },
+    legalLink: {
+        fontWeight: '700',
+        textDecorationLine: 'underline',
     },
     footer: {
         flexDirection: 'row',

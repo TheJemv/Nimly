@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
    ActivityIndicator,
    RefreshControl,
@@ -21,10 +21,12 @@ import PostComponent from "@/components/PostComponent";
 import StoriesDaily from "@/components/StoriesDaily";
 import { Colors, getThemeColor } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useStoriesFeed } from "@/hooks/useStoriesFeed";
 
 export default function HomeScreen() {
    const { session } = useAuth()
+   const { blockedIds, isBlocked } = useBlockedUsers();
 
    const [posts, setPosts] = useState<any[]>([]);
    const [loadingPosts, setLoadingPosts] = useState(true);
@@ -67,6 +69,16 @@ export default function HomeScreen() {
       setRefreshing(true);
       await Promise.all([loadPosts(false), reloadStories(false)]);
    }, [reloadStories, loadPosts]);
+
+   // Oculta al instante el contenido de usuarios bloqueados (Guideline 1.2).
+   const visiblePosts = useMemo(
+      () => posts.filter((p) => !isBlocked(p.user_id)),
+      [posts, isBlocked, blockedIds],
+   );
+   const visibleStoryGroups = useMemo(
+      () => storyGroups.filter((g) => g.is_me || !isBlocked(g.user_id)),
+      [storyGroups, isBlocked, blockedIds],
+   );
 
    return (
       <View style={styles.container}>
@@ -116,7 +128,7 @@ export default function HomeScreen() {
                   </View>
                ) : (
                   <StoriesDaily
-                     storyGroups={storyGroups}
+                     storyGroups={visibleStoryGroups}
                      currentUserId={currentUserId}
                      onStorySeen={handleStorySeen}
                      onStoryLiked={handleStoryLiked}
@@ -125,10 +137,10 @@ export default function HomeScreen() {
                   />
                )}
 
-               {loadingPosts && posts.length === 0 ? (
+               {loadingPosts && visiblePosts.length === 0 ? (
                   <ActivityIndicator style={{ marginTop: 40 }} color={getThemeColor("tint")} />
                ) : (
-                  posts.map((post) => (
+                  visiblePosts.map((post) => (
                      <PostComponent
                         post={post}
                         key={post.id}

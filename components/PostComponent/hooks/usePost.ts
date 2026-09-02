@@ -1,11 +1,14 @@
 import { useContext, useEffect, useState } from "react";
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 
+import { blocksApi } from "@/api/blocks";
 import { deletePost, toggleLike } from "@/api/posts";
 import { reportsApi } from "@/api/reports";
 
 import { AuthContext } from "@/context/AuthContext";
+import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { supabase } from "@/lib/supabase";
+import { promptReportReason } from "@/utils/moderation";
 
 /** Extrae el path dentro del bucket 'media' de un valor que puede venir como
  *  path desnudo ("userId/file.jpg") o como URL completa (.../media/userId/file.jpg). */
@@ -18,6 +21,7 @@ const toStoragePath = (value: string): string => {
 //  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {
     const { session } = useContext(AuthContext)
+    const { blockLocally, unblockLocally } = useBlockedUsers();
 
     //  ==== Likes ====
     const [likesCount, setLikesCount] = useState<number>(post.likes_count || 0);
@@ -104,36 +108,75 @@ export function usePost(post: any, onDelete?: () => void) {
         }
     };
 
-    const handleReportPost = (postId: string) => {
-        Alert.alert(
-            "Report Entry", 
-            "Are you sure you want to flag this content? Our security protocols will review it shortly.", 
-            [{
-                text: "Cancel",
-                style: "cancel",
-            },
-            {
-                text: "Report",
-                style: "destructive", 
-                onPress: async () => {
-                    try {
-                        await reportsApi.submitReport({
-                            targetPostId: postId,
-                            reason: 'inappropriate_content' 
-                        });
+    const reportPost = async (postId: string) => {
+        const reason = await promptReportReason("Report post", "Why are you reporting this post?");
+        if (!reason) return;
+        try {
+            await reportsApi.submitReport({ targetPostId: postId, reason });
+            Alert.alert("Report received", "Thanks. Our team reviews reports within 24 hours.");
+        } catch (error: any) {
+            if (error.message === "AlreadyReported") {
+                Alert.alert("Note", "You have already reported this post.");
+            } else {
+                Alert.alert("Error", "The report could not be sent.");
+            }
+        }
+    };
 
-                        Alert.alert("Success", "Report filed. Access to this content may be restricted soon.");
-                    } catch (error: any) {
-                        if (error.message === "AlreadyReported") {
-                            Alert.alert("Note", "You have already flagged this post.");
-                        } else {
-                            Alert.alert("Error", "The secure report could not be sent.");
+    const blockAuthor = () => {
+        const targetId = post.user_id;
+        Alert.alert(
+            "Block user",
+            `@${post.username || 'this user'} will no longer be able to contact you or see your content, and their posts will disappear from your feed.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        const reason = await promptReportReason(
+                            "Block user",
+                            "Tell us what's wrong so we can review this account.",
+                        );
+                        blockLocally(targetId);
+                        onDelete?.();
+                        try {
+                            await blocksApi.blockUser(targetId, reason ?? 'other');
+                        } catch (e: any) {
+                            if (e?.message !== "AlreadyBlocked") {
+                                unblockLocally(targetId);
+                                Alert.alert("Error", "Action could not be completed.");
+                            }
                         }
-                    }
+                    },
                 },
-            }],
-            { cancelable: true }
+            ],
         );
+    };
+
+    // Menú de moderación del botón "⚠️" en posts ajenos.
+    const handleReportPost = (postId: string) => {
+        const authorLabel = `@${post.username || 'user'}`;
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['Cancel', 'Report post', `Block ${authorLabel}`],
+                    destructiveButtonIndex: 2,
+                    cancelButtonIndex: 0,
+                    title: 'This post',
+                },
+                (index) => {
+                    if (index === 1) reportPost(postId);
+                    if (index === 2) blockAuthor();
+                },
+            );
+        } else {
+            Alert.alert('This post', undefined, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Report post', onPress: () => reportPost(postId) },
+                { text: `Block ${authorLabel}`, style: 'destructive', onPress: blockAuthor },
+            ]);
+        }
     };
 
     return { 

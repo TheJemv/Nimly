@@ -11,6 +11,7 @@ import ConnectionErrorView from "@/components/ConnectionErrorView";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { supabase } from '@/lib/supabase';
 
+import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'react-native';
@@ -89,7 +90,9 @@ function AppLayout() {
             <ThemeProvider value={DarkTheme}>
                 <AuthProvider>
                     <ProfileProvider>
-                        <RootLayoutNav />
+                        <BlockedUsersProvider>
+                            <RootLayoutNav />
+                        </BlockedUsersProvider>
                     </ProfileProvider>
                 </AuthProvider>
             </ThemeProvider>

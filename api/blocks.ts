@@ -1,3 +1,4 @@
+import type { ReportReason } from '@/api/reports';
 import { supabase } from '@/lib/supabase';
 import { assertUuid } from '@/utils/validation';
 
@@ -5,8 +6,13 @@ export const blocksApi = {
     /**
      * Bloquea a un usuario. Inserta en blocked_users.
      * Lanza error "AlreadyBlocked" si ya existe el bloqueo.
+     *
+     * Además registra un reporte de moderación para que el desarrollador quede
+     * notificado del contenido/comportamiento inapropiado (requisito de la
+     * App Store Guideline 1.2). El fallo al registrar el reporte NO impide el
+     * bloqueo.
      */
-    async blockUser(blockedId: string) {
+    async blockUser(blockedId: string, reason: ReportReason = 'other', details?: string) {
         assertUuid(blockedId, 'blockedId');
         const { data: userData } = await supabase.auth.getUser();
         const blockerId = userData.user?.id;
@@ -41,6 +47,25 @@ export const blocksApi = {
             .from('friend_requests')
             .delete()
             .or(`and(from_id.eq.${blockerId},to_id.eq.${blockedId}),and(from_id.eq.${blockedId},to_id.eq.${blockerId})`);
+
+        // Notificar al desarrollador (moderación). Best-effort: si ya existe un
+        // reporte de este usuario hacia ese target, la unicidad lo rechaza y lo
+        // ignoramos.
+        try {
+            const { error: reportError } = await supabase
+                .from('reports')
+                .insert({
+                    reporter_id: blockerId,
+                    target_user_id: blockedId,
+                    reason,
+                    details: details ?? 'Filed automatically when the user blocked this account.',
+                });
+            if (reportError && reportError.code !== '23505' && __DEV__) {
+                console.warn('No se pudo registrar el reporte de bloqueo:', reportError.message);
+            }
+        } catch (e) {
+            if (__DEV__) console.warn('No se pudo registrar el reporte de bloqueo:', e);
+        }
 
         return { success: true };
     },
