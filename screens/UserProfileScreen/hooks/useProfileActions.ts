@@ -129,6 +129,8 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
         } catch (error: any) {
             if (error.message === "AlreadyReported") {
                 Alert.alert("Note", "You have already reported this user.");
+            } else {
+                Alert.alert("Error", "The report could not be sent. Please try again later.");
             }
         }
     };

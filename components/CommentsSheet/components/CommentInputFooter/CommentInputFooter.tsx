@@ -29,7 +29,7 @@ export default function CommentInputFooter({
             onCommentPosted(comment);
             setText("");
         } catch {
-            Alert.alert("Error", "No se pudo publicar el comentario");
+            Alert.alert("Error", "Could not post the comment");
         } finally {
             setIsPosting(false);
         }
@@ -41,7 +41,7 @@ export default function CommentInputFooter({
                 <View style={styles.inputArea}>
                     <BottomSheetTextInput
                         style={styles.input}
-                        placeholder="Escribe un comentario..."
+                        placeholder="Write a comment..."
                         placeholderTextColor="#636366"
                         value={text}
                         onChangeText={setText}

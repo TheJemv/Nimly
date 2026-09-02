@@ -1,11 +1,13 @@
 // api/friends.ts
 import { supabase } from '@/lib/supabase';
+import { assertUuid } from '@/utils/validation';
 
 export const friendsApi = {
     /**
      * Envía una solicitud de conexión.
      */
     async sendRequest(targetId: string) {
+        assertUuid(targetId, 'targetId');
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("No authenticated session found");
 
@@ -23,6 +25,7 @@ export const friendsApi = {
      * Verifica el estado de la relación de forma bidireccional.
      */
     async getStatus(targetId: string) {
+        const safeTarget = assertUuid(targetId, 'targetId');
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return null;
 
@@ -30,7 +33,7 @@ export const friendsApi = {
         const { data: friendship } = await supabase
             .from('friends')
             .select('*')
-            .or(`and(user_id.eq.${user.id},friend_id.eq.${targetId}),and(user_id.eq.${targetId},friend_id.eq.${user.id})`)
+            .or(`and(user_id.eq.${user.id},friend_id.eq.${safeTarget}),and(user_id.eq.${safeTarget},friend_id.eq.${user.id})`)
             .maybeSingle();
 
         if (friendship) return { status: 'ACCEPTED' };
@@ -39,7 +42,7 @@ export const friendsApi = {
         const { data: request } = await supabase
             .from('friend_requests')
             .select('id, status, from_id, to_id')
-            .or(`and(from_id.eq.${user.id},to_id.eq.${targetId}),and(from_id.eq.${targetId},to_id.eq.${user.id})`)
+            .or(`and(from_id.eq.${user.id},to_id.eq.${safeTarget}),and(from_id.eq.${safeTarget},to_id.eq.${user.id})`)
             .eq('status', 'PENDING')
             .maybeSingle();
 
@@ -90,17 +93,19 @@ export const friendsApi = {
         const { data: { user } } = await supabase.auth.getUser();
         const idToQuery = targetUserId || user?.id;
         if (!idToQuery) return 0;
+        const safeId = assertUuid(idToQuery, 'userId');
 
         const { count, error } = await supabase
             .from('friends')
             .select('*', { count: 'exact', head: true })
-            .or(`user_id.eq.${idToQuery},friend_id.eq.${idToQuery}`);
+            .or(`user_id.eq.${safeId},friend_id.eq.${safeId}`);
 
         if (error) throw error;
         return count || 0;
     },
 
     async severConnection(friendId: string) {
+        assertUuid(friendId, 'friendId');
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Unauthorized");
         const { error } = await supabase.rpc('sever_connection_and_wipe_chat', {

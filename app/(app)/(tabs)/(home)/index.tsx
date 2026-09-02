@@ -47,45 +47,25 @@ export default function HomeScreen() {
    const loadPosts = useCallback(async (showLoading = true) => {
       if (showLoading) setLoadingPosts(true);
       const userId = session?.user?.id;
-      if (!userId) return; // 👈 sin sesión, no cargamos nada
-      const t0 = performance.now();
+      if (!userId) return; // sin sesión, no cargamos nada
       try {
          const postsData = await getFriendsPosts(userId);
-         const t1 = performance.now();
-         console.log(`⏱️ [Home] getFriendsPosts() (${postsData?.length ?? 0} posts): ${(t1 - t0).toFixed(0)}ms`);
          setPosts(postsData || []);
       } catch (err) {
-         console.error("Error cargando posts:", err);
+         console.error("Error loading posts:", err);
       } finally {
          setLoadingPosts(false);
          setRefreshing(false);
       }
    }, [session?.user?.id]);
 
-   const mountTimeRef = useRef<number>(0);
-   if (mountTimeRef.current === 0 && typeof performance !== 'undefined' && performance.now) {
-      mountTimeRef.current = performance.now();
-   }
-
-   const hasLoggedInitialLoad = useRef(false);
    useEffect(() => {
       loadPosts();
    }, [session, loadPosts]);
 
-   useEffect(() => {
-      if (hasLoggedInitialLoad.current) return;
-      if (!loadingPosts && !loadingStories) {
-         hasLoggedInitialLoad.current = true;
-         const elapsed = performance.now() - mountTimeRef.current;
-         console.log(`⏱️ [Home] TIEMPO TOTAL HASTA PANTALLA LISTA (posts + stories): ${elapsed.toFixed(0)}ms`);
-      }
-   }, [loadingPosts, loadingStories]);
-
    const onRefresh = useCallback(async () => {
       setRefreshing(true);
-      const t0 = performance.now();
       await Promise.all([loadPosts(false), reloadStories(false)]);
-      console.log(`⏱️ [Home] onRefresh() total: ${(performance.now() - t0).toFixed(0)}ms`);
    }, [reloadStories, loadPosts]);
 
    return (
@@ -145,17 +125,21 @@ export default function HomeScreen() {
                   />
                )}
 
-               {posts.map((post) => (
-                  <PostComponent
-                     post={post}
-                     key={post.id}
-                     onDelete={() => loadPosts(false)}
-                     onCommentPress={() => {
-                        setActiveCommentPostId(post.id);
-                        commentsRef.current?.present();
-                     }}
-                  />
-               ))}
+               {loadingPosts && posts.length === 0 ? (
+                  <ActivityIndicator style={{ marginTop: 40 }} color={getThemeColor("tint")} />
+               ) : (
+                  posts.map((post) => (
+                     <PostComponent
+                        post={post}
+                        key={post.id}
+                        onDelete={() => loadPosts(false)}
+                        onCommentPress={() => {
+                           setActiveCommentPostId(post.id);
+                           commentsRef.current?.present();
+                        }}
+                     />
+                  ))
+               )}
             </View>
          </ScrollView>
          {/* )} */}

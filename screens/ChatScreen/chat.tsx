@@ -54,6 +54,7 @@ export default function ChatScreen() {
       loadingMore,
       hasMore,
       friendProfile,
+      friendKeyChanged,
       currentUserId,
       loadMoreMessages
    } = useChatSync(targetFriendId);
@@ -63,7 +64,6 @@ export default function ChatScreen() {
    // Parsear el objeto user que viene por parámetro de ruta (si existe)
    const routeUser = useMemo(() => {
       if (!routeUserParam) return null;
-      console.log(routeUser)
       try {
          return typeof routeUserParam === 'string' ? JSON.parse(routeUserParam) : routeUserParam;
       } catch {
@@ -96,11 +96,22 @@ export default function ChatScreen() {
    const handleSendText = async () => {
       const cleanedMessage = cleanChatMessage(newMessage);
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
-      if (!cleanedMessage || !chatId || !currentUserId || !pubKey) return;
+      if (!cleanedMessage || !chatId || !currentUserId) return;
 
-      setNewMessage("");
+      if (!pubKey) {
+         Alert.alert("Vault not ready", "Still establishing the secure channel with this contact. Try again in a moment.");
+         return;
+      }
+
       const replyToId = replyingTo?.id || null;
+      // Optimistically clear the composer, but keep what we need to restore on failure.
+      setNewMessage("");
       setReplyingTo(null);
+
+      const restoreComposer = () => {
+         setNewMessage(cleanedMessage);
+         if (replyingTo) setReplyingTo(replyingTo);
+      };
 
       try {
          const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, pubKey);
@@ -108,7 +119,7 @@ export default function ChatScreen() {
 
          vaultRAMCache[encryptedContent] = cleanedMessage;
 
-         await supabase.from('messages').insert({
+         const { error } = await supabase.from('messages').insert({
             chat_id: chatId,
             sender_id: currentUserId,
             content: encryptedContent,
@@ -116,8 +127,11 @@ export default function ChatScreen() {
             is_read: false,
             reply_to_id: replyToId,
          });
+         if (error) throw error;
       } catch (e) {
          console.error("❌ [SEND] Vault Send Error:", e);
+         restoreComposer();
+         Alert.alert("Message not sent", "Your message could not be secured and sent. It has been restored to the text box.");
       }
    };
 
@@ -126,7 +140,9 @@ export default function ChatScreen() {
       const keyToUse = friendProfile?.public_key || routeUser?.public_key || "";
       const showReadReceipt = item.id === lastReadMessageId;
 
-      const isText = item.type === 'text' || !item.type;
+      // Cápsula view-once ya consumida: el emisor la marca content='OPENED_CAPSULE'
+      const isOpenedCapsule = item.content === 'OPENED_CAPSULE';
+      const isText = !isOpenedCapsule && (item.type === 'text' || !item.type);
       const isViewOnceSender = item.type === 'image-view-once' && mine;
 
       const replyData = Array.isArray(item.reply_to) ? item.reply_to[0] : item.reply_to;
@@ -144,11 +160,11 @@ export default function ChatScreen() {
                activeOpacity={0.85}
                onPress={() => isText && setReplyingTo(item)}
                style={[
-                  (isText || isViewOnceSender) ? styles.bubble : styles.bubbleImage,
+                  (isText || isViewOnceSender || isOpenedCapsule) ? styles.bubble : styles.bubbleImage,
                   mine ? styles.myBubble : styles.theirBubble
                ]}
             >
-               {replyData && (
+               {replyData && !isOpenedCapsule && (
                   <View style={{ marginBottom: 4 }}>
                      <Text style={{ color: '#aaa', fontSize: 11 }}>
                         Replying to {replyData.sender_id === currentUserId ? "yourself" : displayName}
@@ -156,7 +172,12 @@ export default function ChatScreen() {
                   </View>
                )}
 
-               {isText ? (
+               {isOpenedCapsule ? (
+                  <View style={styles.openedCapsule}>
+                     <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
+                     <Text style={styles.openedCapsuleText}>Opened</Text>
+                  </View>
+               ) : isText ? (
                   <MessageContent content={item.content} friendPublicKey={keyToUse} />
                ) : (
                   <MediaMessageBubble
@@ -202,13 +223,13 @@ export default function ChatScreen() {
 
    const handleProfile = useCallback(() => {
       router.push({
-         pathname: "/(app)/user/[id]",
+         pathname: "/(app)/chat-info",
          params: {
-            id: targetFriendId,
-            user: JSON.stringify(friendProfile),
+            chatId: chatId ?? "",
+            friendId: targetFriendId,
          }
       });
-   }, [targetFriendId, friendProfile])
+   }, [chatId, targetFriendId])
 
    return (
       <KeyboardAvoidingView
@@ -227,25 +248,40 @@ export default function ChatScreen() {
                      </View>
                      <View>
                         <Text style={styles.headerName}>@{displayName}</Text>
-                        <Text style={styles.headerSub}>View Profile</Text>
+                        <Text style={styles.headerSub}>Chat & security info</Text>
                      </View>
                   </TouchableOpacity>
                ),
                headerRight: () => (
-                  <Host style={{ width: 35, height: 35 }}>
-                     <ContextMenu>
-                        <ContextMenu.Items>
-                           <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
-                           <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
-                        </ContextMenu.Items>
-                        <ContextMenu.Trigger>
-                           <SwiftImage systemName="ellipsis" />
-                        </ContextMenu.Trigger>
-                     </ContextMenu>
-                  </Host>
+                  Platform.OS === 'ios' ? (
+                     <Host style={{ width: 35, height: 35 }}>
+                        <ContextMenu>
+                           <ContextMenu.Items>
+                              <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
+                              <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
+                           </ContextMenu.Items>
+                           <ContextMenu.Trigger>
+                              <SwiftImage systemName="ellipsis" />
+                           </ContextMenu.Trigger>
+                        </ContextMenu>
+                     </Host>
+                  ) : (
+                     <TouchableOpacity onPress={handleBurnHistory} style={{ padding: 8 }}>
+                        <SymbolView name="trash" size={20} tintColor="#fff" />
+                     </TouchableOpacity>
+                  )
                )
             }}
          />
+
+         {friendKeyChanged && (
+            <TouchableOpacity style={styles.keyChangeBanner} onPress={handleProfile} activeOpacity={0.8}>
+               <SymbolView name="exclamationmark.shield.fill" size={16} tintColor="#E6B800" />
+               <Text style={styles.keyChangeText}>
+                  @{displayName}&apos;s encryption keys changed. Messages from before then can&apos;t be read. Tap for details.
+               </Text>
+            </TouchableOpacity>
+         )}
 
          {loading ? (
             <View style={styles.center}>

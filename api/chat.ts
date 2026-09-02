@@ -97,7 +97,7 @@ export const chatApi = {
                 .map(m => m.content);
 
             if (mediaFiles.length > 0) {
-                console.log(`Vault: Burning ${mediaFiles.length} physical files...`);
+                if (__DEV__) console.log(`Vault: Burning ${mediaFiles.length} physical files...`);
                 const { error: storageError } = await supabase.storage.from('chat-media').remove(mediaFiles);
                 if (storageError) console.error("⚠️ Aviso: Algunos archivos no se borraron del storage:", storageError);
             }
@@ -126,7 +126,7 @@ export const chatApi = {
                 throw msgError;
             }
 
-            console.log("Vault: Chat history completely burned.");
+            if (__DEV__) console.log("Vault: Chat history completely burned.");
             return { success: true };
         } catch (error) {
             console.error("Failed to burn chat history:", error);

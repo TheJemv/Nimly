@@ -6,6 +6,7 @@ import { Session } from '@supabase/supabase-js';
 
 // Custom Hooks
 import { useProtectedRoute, useVaultSecurity } from './hooks';
+import type { VaultState } from './hooks/useVaultSecurity';
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
     if (__DEV__) return promise;
@@ -17,16 +18,35 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
     ]);
 };
 
-export const AuthContext = createContext<{ session: Session | null; isLoading: boolean }>({
+interface AuthContextValue {
+    session: Session | null;
+    isLoading: boolean;
+    vault: {
+        state: VaultState;
+        confirmNewIdentity: () => Promise<void>;
+    };
+}
+
+export const AuthContext = createContext<AuthContextValue>({
     session: null,
-    isLoading: true
+    isLoading: true,
+    vault: {
+        state: 'loading',
+        confirmNewIdentity: async () => { },
+    },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const { setupSecuritySync, setupVaultIdentity, purgeVaultData } = useVaultSecurity();
+    const {
+        setupSecuritySync,
+        setupVaultIdentity,
+        purgeVaultData,
+        vaultState,
+        confirmNewIdentity,
+    } = useVaultSecurity();
     useProtectedRoute(session, isLoading);
 
     useEffect(() => {
@@ -81,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             } catch (e) {
                 console.error("Auth state change handler failed:", e);
+                if (isMounted && !currentSession) setSession(null);
             } finally {
                 if (isMounted) setIsLoading(false);
             }
@@ -94,7 +115,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ session, isLoading }}>
+        <AuthContext.Provider
+            value={{
+                session,
+                isLoading,
+                vault: {
+                    state: vaultState,
+                    confirmNewIdentity,
+                },
+            }}
+        >
             {children}
         </AuthContext.Provider>
     );

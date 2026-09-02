@@ -1,5 +1,6 @@
 import { chatApi } from "@/api/chat";
 import { supabase } from "@/lib/supabase";
+import { contactKeys } from "@/utils/crypto";
 import { useCallback, useEffect, useState } from "react";
 
 const PAGE_SIZE = 30;
@@ -12,6 +13,8 @@ export function useChatSync(targetFriendId: string | undefined) {
     const [hasMore, setHasMore] = useState(true);
     const [friendProfile, setFriendProfile] = useState<any>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    // true si la public key del contacto cambió respecto a la última vista en este dispositivo
+    const [friendKeyChanged, setFriendKeyChanged] = useState(false);
 
     // Marcar mensajes como leídos
     const markMessagesAsRead = useCallback(async (cId: string) => {
@@ -70,6 +73,10 @@ export function useChatSync(targetFriendId: string | undefined) {
 
                 if (isMounted && profRes.data) {
                     setFriendProfile(profRes.data);
+
+                    // Detección local de cambio de llave (estilo "safety number changed").
+                    const { changed } = await contactKeys.record(targetFriendId, profRes.data.public_key ?? null);
+                    if (isMounted) setFriendKeyChanged(changed);
                 }
             } catch (e) {
                 console.error("❌ [INIT] Chat Init Error:", e);
@@ -156,6 +163,7 @@ export function useChatSync(targetFriendId: string | undefined) {
         loadingMore,
         hasMore,
         friendProfile,
+        friendKeyChanged,
         currentUserId,
         loadMoreMessages,
         markMessagesAsRead

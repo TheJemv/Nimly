@@ -8,8 +8,7 @@ import { Platform } from 'react-native';
 // El AccentPrimary: Carmesí / Rojo Rubí (Alto contraste, exclusivo y llamativo)
 const tintColorDark = '#DC143C';
 
-export const Colors = {
-  dark: {
+const darkPalette = {
     // --- Tipografía ---
     text: '#F2E8D8',             // Marfil (Ivory) para una lectura suave, descansa la vista y se ve premium
     textSecondary: '#8A8A8A',    // Gris neutro apagado para información secundaria
@@ -36,7 +35,17 @@ export const Colors = {
     error: '#8B1538',            // Borgoña oscuro (para no competir con el brillo de tu Carmesí)
     success: '#D6B98C',          // Oro champaña para confirmaciones con un toque de lujo
     warning: '#C9A227',          // Oro viejo
-  },
+};
+
+/**
+ * Nimly es una app dark-only (ver app.json → userInterfaceStyle: "dark").
+ * Exponemos `light` y `dark` con la MISMA paleta para que cualquier consumidor
+ * (p. ej. useThemeColor) sea seguro aunque useColorScheme() devuelva 'light'
+ * o null durante el primer render.
+ */
+export const Colors = {
+  dark: darkPalette,
+  light: darkPalette,
 };
 
 export const Fonts = Platform.select({

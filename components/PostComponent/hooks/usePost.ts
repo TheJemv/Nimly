@@ -5,7 +5,15 @@ import { deletePost, toggleLike } from "@/api/posts";
 import { reportsApi } from "@/api/reports";
 
 import { AuthContext } from "@/context/AuthContext";
-import { supabaseUrl } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+
+/** Extrae el path dentro del bucket 'media' de un valor que puede venir como
+ *  path desnudo ("userId/file.jpg") o como URL completa (.../media/userId/file.jpg). */
+const toStoragePath = (value: string): string => {
+    const marker = "/media/";
+    const i = value.lastIndexOf(marker);
+    return i >= 0 ? value.slice(i + marker.length) : value;
+};
 
 //  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {
@@ -44,15 +52,26 @@ export function usePost(post: any, onDelete?: () => void) {
 
     //  ==== Information ====
     const isOwner = session?.user.id === post.user_id;
-    
-    // 🟢 CORREGIDO: Apuntamos a post.media_url en lugar de post.content
+
     const isMedia = Boolean(post.media_url);
-    const mediaUrl = isMedia ? `${supabaseUrl}/storage/v1/object/authenticated/media/${post.media_url}` : null;
+
+    // URL firmada de corta duración para el bucket privado 'media'
+    // (en vez de exponer el access_token como header de la imagen).
+    const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+    useEffect(() => {
+        let active = true;
+        if (!post.media_url) { setMediaUrl(null); return; }
+        supabase.storage
+            .from('media')
+            .createSignedUrl(toStoragePath(post.media_url), 3600)
+            .then(({ data }) => { if (active) setMediaUrl(data?.signedUrl ?? null); })
+            .catch(() => { if (active) setMediaUrl(null); });
+        return () => { active = false; };
+    }, [post.media_url]);
 
     const postText = post.content;
     const date = new Date(post.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
-    const username = post.username || 'Usuario';
-    const sessionToken = session?.access_token
+    const username = post.username || 'user';
 
 
     //  ==== Actions ====
@@ -63,24 +82,24 @@ export function usePost(post: any, onDelete?: () => void) {
                 await deletePost(post.id, isMedia ? post.media_url : null);
                 if (onDelete) onDelete();
             } catch {
-                Alert.alert("Error", "No se pudo eliminar");
+                Alert.alert("Error", "Could not delete the post");
             }
         };
 
         if (Platform.OS === 'ios') {
             ActionSheetIOS.showActionSheetWithOptions(
                 {
-                    options: ['Cancelar', 'Eliminar'],
+                    options: ['Cancel', 'Delete'],
                     destructiveButtonIndex: 1,
                     cancelButtonIndex: 0,
-                    title: '¿Eliminar publicación?',
+                    title: 'Delete this post?',
                 },
                 (index) => { if (index === 1) performDelete(); }
             );
         } else {
-            Alert.alert("Eliminar", "¿Borrar este post?", [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Eliminar", style: "destructive", onPress: performDelete }
+            Alert.alert("Delete", "Delete this post?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: performDelete }
             ]);
         }
     };
@@ -131,7 +150,6 @@ export function usePost(post: any, onDelete?: () => void) {
 
         username,
         isOwner,
-        sessionToken,
 
         handleDelete,
         handleReportPost,

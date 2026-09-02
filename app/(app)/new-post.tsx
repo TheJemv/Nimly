@@ -49,7 +49,7 @@ export default function NewPostScreen() {
       try {
          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
          if (status !== 'granted') {
-            Alert.alert("Permission Denied", "Nymly needs access to your photos to continue.");
+            Alert.alert("Permission Denied", "Nimly needs access to your photos to continue.");
             return;
          }
 

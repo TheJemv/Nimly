@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { assertUuid } from '@/utils/validation';
 
 export const blocksApi = {
     /**
@@ -6,6 +7,7 @@ export const blocksApi = {
      * Lanza error "AlreadyBlocked" si ya existe el bloqueo.
      */
     async blockUser(blockedId: string) {
+        assertUuid(blockedId, 'blockedId');
         const { data: userData } = await supabase.auth.getUser();
         const blockerId = userData.user?.id;
         if (!blockerId) throw new Error('NotAuthenticated');
@@ -47,6 +49,7 @@ export const blocksApi = {
      * Quita el bloqueo.
      */
     async unblockUser(blockedId: string) {
+        assertUuid(blockedId, 'blockedId');
         const { data: userData } = await supabase.auth.getUser();
         const blockerId = userData.user?.id;
         if (!blockerId) throw new Error('NotAuthenticated');
@@ -65,6 +68,7 @@ export const blocksApi = {
      * Revisa si el usuario actual bloqueó a `targetId`, o si fue bloqueado por él.
      */
     async getBlockStatus(targetId: string) {
+        const safeTarget = assertUuid(targetId, 'targetId');
         const { data: userData } = await supabase.auth.getUser();
         const myId = userData.user?.id;
         if (!myId) throw new Error('NotAuthenticated');
@@ -72,7 +76,7 @@ export const blocksApi = {
         const { data, error } = await supabase
             .from('blocked_users')
             .select('blocker_id, blocked_id')
-            .or(`and(blocker_id.eq.${myId},blocked_id.eq.${targetId}),and(blocker_id.eq.${targetId},blocked_id.eq.${myId})`);
+            .or(`and(blocker_id.eq.${myId},blocked_id.eq.${safeTarget}),and(blocker_id.eq.${safeTarget},blocked_id.eq.${myId})`);
 
         if (error) throw error;
 

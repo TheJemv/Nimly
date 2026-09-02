@@ -2,6 +2,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
+import Constants from "expo-constants";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
@@ -70,11 +71,11 @@ export default function SettingsScreen() {
         }
     }
 
-    // SIGN OUT: Con advertencia de pérdida de llaves
+    // SIGN OUT: las llaves E2EE viven solo en este dispositivo y no hay respaldo.
     async function handleLogout() {
         Alert.alert(
             "Sign Out",
-            "Are you sure? Your security keys are stored locally. If you sign out without a backup, you will lose access to your current encrypted messages forever.",
+            "Your encryption keys live only on this device and there is no backup. If you sign out, you will get a new identity next time and your current encrypted messages will no longer be readable.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -165,7 +166,9 @@ export default function SettingsScreen() {
                     </View>
 
                     {/* Versión actualizada */}
-                    <ThemedText style={styles.versionText}>Nymly Discrete v1.2.2</ThemedText>
+                    <ThemedText style={styles.versionText}>
+                        Nimly Discrete v{Constants.expoConfig?.version ?? ''}
+                    </ThemedText>
                 </View>
             </ScrollView>
         </KeyboardAvoidingView>

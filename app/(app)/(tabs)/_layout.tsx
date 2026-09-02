@@ -1,5 +1,6 @@
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
+import { debounce } from '@/utils/debounce';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useState } from 'react';
 
@@ -8,13 +9,14 @@ export default function TabLayout() {
 
   useEffect(() => {
     let channel: any;
+    let cancelled = false;
+
     const fetchTotalUnread = async () => {
       try {
-        // 1. Obtener la sesión del usuario actual
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user || cancelled) return;
 
-        // 2. Contar todos los mensajes no leídos dirigidos a mí
+        // Mensajes no leídos que no envié yo (RLS ya limita a mis chats).
         const { count, error } = await supabase
           .from('messages')
           .select('*', { count: 'exact', head: true })
@@ -22,26 +24,28 @@ export default function TabLayout() {
           .eq('is_read', false);
 
         if (error) throw error;
-        setUnreadCount(count || 0);
+        if (!cancelled) setUnreadCount(count || 0);
       } catch (e) {
         console.error("❌ [TABS_BADGE] Error fetching unread count:", e);
       }
     };
 
+    // Colapsa ráfagas de eventos realtime en un solo refetch.
+    const debouncedRefetch = debounce(fetchTotalUnread, 800);
+
     fetchTotalUnread();
 
-    // 3. Listener en tiempo real global para escuchar cualquier cambio (*): nuevos mensajes o lecturas
     channel = supabase
-      .channel('global_unread_badge')
+      .channel(`global_unread_badge_${Date.now()}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'messages' },
-        () => {
-          fetchTotalUnread();
-        }
+        () => debouncedRefetch()
       )
       .subscribe();
 
     return () => {
+      cancelled = true;
+      debouncedRefetch.cancel();
       if (channel) supabase.removeChannel(channel);
     };
   }, []);

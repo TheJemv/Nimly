@@ -83,7 +83,7 @@ export const storiesApi = {
             viewed_at,
             profiles:viewer_id (id, username, avatar_config)
           ),
-          story_likes (user_id)
+          story_likes (user_id, reaction)
         `)
         .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false });
@@ -116,18 +116,6 @@ export const storiesApi = {
               is_liked_by_me: isLikedByMe,
           };
       });
-  },
-
-  async markAsViewed(storyId: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
-
-    const { error } = await supabase
-      .from('story_views')
-      .upsert({ story_id: storyId, viewer_id: user.id }); // 👈 Cambiado a .upsert() directo
-
-    if (error) throw error;
-    return true;
   },
 
   // 💖 TOGGLE LIKE CORREGIDO Y BLINDADO

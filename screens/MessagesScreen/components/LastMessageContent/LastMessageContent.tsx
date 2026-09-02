@@ -13,9 +13,14 @@ interface LastMessageContentProps {
 }
 
 const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUnread }: LastMessageContentProps) => {
-    const decryptedText = useDecryptedMessage(content, friendPublicKey);
+    const isOpenedCapsule = content === 'OPENED_CAPSULE';
+    const decryptedText = useDecryptedMessage(isOpenedCapsule ? '' : content, friendPublicKey);
     const messageStyle = hasUnread ? styles.lastMessageUnread : isMine ? styles.lastMessageMine : styles.lastMessageRead;
     const normalizedType = type ? type.toLowerCase() : '';
+
+    if (isOpenedCapsule) {
+        return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}👁 Opened</Text>;
+    }
     const isMediaContent =
         normalizedType === 'image' ||
         normalizedType === 'image-view-once' ||

@@ -9,6 +9,7 @@
     "backgroundColor": "#000000",
     "userInterfaceStyle": "dark",
     "ios": {
+      "icon": "./assets/Icon.icon",
       "supportsTablet": false,
       "bundleIdentifier": "com.nimly.app",
       "appleTeamId": "B88RJAR9J7",
@@ -57,6 +58,18 @@
       "eas": {
         "projectId": "a641f4fb-5891-4c81-9427-c57bb896c1b7"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a641f4fb-5891-4c81-9427-c57bb896c1b7"
+    },
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     }
   }
 }

@@ -1,5 +1,16 @@
 import { supabase } from '@/lib/supabase';
-import { useEffect, useState } from 'react';
+import { debounce } from '@/utils/debounce';
+import { useEffect, useRef, useState } from 'react';
+
+const lastMessageTime = (chat: any): number => {
+    const msgs: any[] = chat?.chats?.messages || [];
+    let newest = chat?.chats?.created_at ? new Date(chat.chats.created_at).getTime() : 0;
+    for (const m of msgs) {
+        const t = new Date(m.created_at).getTime();
+        if (t > newest) newest = t;
+    }
+    return newest;
+};
 
 export function useChatsList() {
     const [chats, setChats] = useState<any[]>([]);
@@ -7,11 +18,13 @@ export function useChatsList() {
     const [refreshing, setRefreshing] = useState(false);
     const [myId, setMyId] = useState<string | null>(null);
 
+    const cancelledRef = useRef(false);
+
     const fetchChats = async (showLoading = true) => {
         try {
             if (showLoading) setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user || cancelledRef.current) return;
             setMyId(user.id);
 
             const { data, error } = await supabase
@@ -25,26 +38,28 @@ export function useChatsList() {
                     ),
                     profiles:user_id (id, username, avatar_config, avatar_url, public_key)
                 `)
-                .neq('user_id', user.id)
-                .order('created_at', { foreignTable: 'chats.messages', ascending: true });
+                .neq('user_id', user.id);
 
             if (error) throw error;
+            if (cancelledRef.current) return;
 
-            const sorted = (data || []).sort((a: any, b: any) => {
-                const aMessages = a.chats?.messages || [];
-                const bMessages = b.chats?.messages || [];
-                const lastMsgA = aMessages[aMessages.length - 1];
-                const lastMsgB = bMessages[bMessages.length - 1];
-                const dateA = lastMsgA ? lastMsgA.created_at : a.chats?.created_at;
-                const dateB = lastMsgB ? lastMsgB.created_at : b.chats?.created_at;
-                return new Date(dateB).getTime() - new Date(dateA).getTime();
+            const normalized = (data || []).map((row: any) => {
+                // Ordenamos los mensajes por fecha en el cliente: no dependemos del
+                // orden que devuelva PostgREST para el recurso embebido.
+                const msgs: any[] = row.chats?.messages || [];
+                msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                return row;
             });
-            setChats(sorted);
+
+            normalized.sort((a: any, b: any) => lastMessageTime(b) - lastMessageTime(a));
+            setChats(normalized);
         } catch (e) {
             console.error(e);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!cancelledRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     };
 
@@ -54,21 +69,25 @@ export function useChatsList() {
     };
 
     useEffect(() => {
+        cancelledRef.current = false;
         fetchChats();
 
+        // RLS limita el realtime a mis chats; el debounce evita un refetch por
+        // cada mensaje individual cuando llegan varios seguidos.
+        const debouncedRefetch = debounce(() => fetchChats(false), 700);
+
         const channel = supabase
-            .channel('list_updates')
+            .channel(`list_updates_${Date.now()}`)
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'messages' },
-                () => {
-                    if (__DEV__) console.log('🔄 [REALTIME] Cambio detectado en mensajes, actualizando lista...');
-                    fetchChats(false);
-                }
+                () => debouncedRefetch()
             )
             .subscribe();
 
         return () => {
+            cancelledRef.current = true;
+            debouncedRefetch.cancel();
             supabase.removeChannel(channel);
         };
     }, []);

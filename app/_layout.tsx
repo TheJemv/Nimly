@@ -48,10 +48,6 @@ function RootLayoutNav() {
     }, [isLoading]);
 
     useEffect(() => {
-        checkServerConnection();
-    }, []);
-
-    useEffect(() => {
         if (!isLoading && !isCheckingNetwork) {
             SplashScreen.hide();
             AppMetrics.markInteractive();
@@ -89,7 +85,7 @@ function RootLayoutNav() {
 function AppLayout() {
     return (
         <>
-            <StatusBar backgroundColor="#000000" />
+            <StatusBar backgroundColor="#000000" barStyle="light-content" />
             <ThemeProvider value={DarkTheme}>
                 <AuthProvider>
                     <ProfileProvider>

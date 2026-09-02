@@ -37,7 +37,6 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
         //  Information
         username,
         isOwner,
-        sessionToken,
 
         //  Actions
         handleDelete,
@@ -93,13 +92,10 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                     ) : null}
 
                     {/* Si hay media (imagen/video), la mostramos debajo del texto */}
-                    {isMedia && mediaUrl && sessionToken ? (
+                    {isMedia && mediaUrl ? (
                         <View style={styles.mediaFrame}>
                             <Image
-                                source={{
-                                    uri: mediaUrl,
-                                    headers: { Authorization: `Bearer ${sessionToken}` }
-                                }}
+                                source={{ uri: mediaUrl }}
                                 style={styles.image}
                                 contentFit="cover"
                                 transition={400}

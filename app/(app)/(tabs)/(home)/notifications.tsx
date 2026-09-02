@@ -122,13 +122,17 @@ export default function NotificationsScreen() {
                             .single();
 
                         if (isMounted) {
-                            setNotifications(prev => [{ ...payload.new, actor }, ...prev]);
+                            setNotifications(prev =>
+                                prev.some(n => n.id === payload.new.id)
+                                    ? prev
+                                    : [{ ...payload.new, actor }, ...prev]
+                            );
                         }
                     }
                 )
                 .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log("Canal de notificaciones conectado:", uniqueChannelName);
+                    if (status === 'SUBSCRIBED' && __DEV__) {
+                        console.log("Notifications channel connected:", uniqueChannelName);
                     }
                 });
 

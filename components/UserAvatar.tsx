@@ -1,7 +1,8 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
+import { Ionicons } from "@expo/vector-icons";
 import { createAvatar } from "@dicebear/core";
 import { useMemo } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
 import { useProfile } from "@/context/ProfileContext";
@@ -40,14 +41,10 @@ export default function UserAvatar({ avatar_config, size = 40 }: UserAvatarProps
         );
     }
 
+    // Fallback local (sin dependencias externas): ícono neutro sobre el fondo del contenedor.
     return (
         <View style={[styles.container, dimensionStyle]}>
-            <Image
-                style={styles.avatarImg}
-                source={{
-                    uri: "https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png",
-                }}
-            />
+            <Ionicons name="person" size={Math.round(size * 0.55)} color="#5A5A5E" />
         </View>
     );
 }
@@ -58,9 +55,5 @@ const styles = StyleSheet.create({
         backgroundColor: "#1C1C1E",
         justifyContent: "center",
         alignItems: "center",
-    },
-    avatarImg: {
-        width: "100%",
-        height: "100%",
     },
 });

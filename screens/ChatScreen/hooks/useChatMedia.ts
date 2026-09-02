@@ -3,6 +3,7 @@ import { vaultCrypto } from '@/utils/crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useState } from 'react';
+import { Alert } from 'react-native';
 
 export function useChatMedia(chatId: string, currentUserId: string) {
     const [isUploading, setIsUploading] = useState(false);
@@ -64,9 +65,10 @@ export function useChatMedia(chatId: string, currentUserId: string) {
                 is_viewed: false
             });
 
-            console.log(`Vault: ${type} E2EE sent perfectly and lightweight.`);
+            if (__DEV__) console.log(`Vault: ${type} sent (E2EE).`);
         } catch (e) {
             console.error("Media Service Error:", e);
+            Alert.alert("Media not sent", "Your photo could not be encrypted and sent. Please try again.");
         } finally {
             setIsUploading(false);
         }

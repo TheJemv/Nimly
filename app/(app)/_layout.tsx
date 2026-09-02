@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import VaultKeyGate from '@/components/VaultKeyGate';
 import { getThemeColor } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { registerForPushNotificationsAsync } from '@/hooks/notifications';
@@ -17,12 +18,11 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    registerForPushNotificationsAsync();
-    //  Feauture: Notification inner app like instagram.
-    // const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-    //   console.log('Notificación recibida en vivo:', notification);
-    // });
+    // El token solo tiene sentido con sesión iniciada.
+    if (session) registerForPushNotificationsAsync();
+  }, [session]);
 
+  useEffect(() => {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data as {
         type?: string;
@@ -31,19 +31,15 @@ export default function RootLayout() {
       };
 
       if (data?.type === "message") {
-        router.push("/(app)/(tabs)/(messages)")
+        router.push("/(app)/(tabs)/(messages)");
       }
     });
 
-    if (session) {
-      return () => {
-        // foregroundSubscription.remove();
-        responseSubscription.remove();
-      };
-    }
-  }, [session, router]);
+    return () => responseSubscription.remove();
+  }, [router]);
 
   return (
+    <VaultKeyGate>
     <Stack screenOptions={{
       headerShadowVisible: false,
       headerTintColor: getThemeColor("text"),
@@ -66,6 +62,8 @@ export default function RootLayout() {
           headerTitle: "Chat",
         }}
       />
+      <Stack.Screen name="chat-info" options={{ headerShown: true, headerTitle: "Chat Info" }} />
     </Stack>
+    </VaultKeyGate>
   );
 }

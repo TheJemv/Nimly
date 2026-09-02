@@ -1,9 +1,26 @@
-// api/notifications.ts
+// hooks/notifications.ts
 import { supabase } from '@/lib/supabase';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
-export async function registerForPushNotificationsAsync() {
-    let token;
+const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId;
+
+/**
+ * Pide permiso de notificaciones, registra el Expo push token y lo guarda en el
+ * perfil del usuario. Debe llamarse solo cuando hay sesión iniciada.
+ */
+export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
+    // Canal por defecto en Android (obligatorio para que se muestren).
+    if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.DEFAULT,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+        }).catch(() => { });
+    }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -14,15 +31,23 @@ export async function registerForPushNotificationsAsync() {
     }
 
     if (finalStatus !== 'granted') {
-        console.log('Failed to get push token for push notification!');
+        console.log('Push notifications permission not granted.');
         return;
     }
 
-    token = (await Notifications.getExpoPushTokenAsync({
-        projectId: "a641f4fb-5891-4c81-9427-c57bb896c1b7", // Debe ser algo como '868a1234-...'
-    })).data;
+    if (!projectId) {
+        console.warn('Missing EAS projectId; cannot fetch Expo push token.');
+        return;
+    }
 
-    // Guardar el token en tu base de datos de Ubuntu
+    let token: string;
+    try {
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    } catch (e) {
+        console.error('Failed to get Expo push token:', e);
+        return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
         await supabase

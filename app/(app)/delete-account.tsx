@@ -54,7 +54,7 @@ export default function DeleteAccountScreen() {
                     </View>
 
                     <ThemedText style={styles.finalWarning}>
-                        Once executed, Nymly will have NO WAY to recover your data. You will be erased from the network.
+                        Once executed, Nimly will have NO WAY to recover your data. You will be erased from the network.
                     </ThemedText>
                 </View>
 

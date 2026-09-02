@@ -24,10 +24,10 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
 
             const pingPromise = supabase.from('profiles').select('id').limit(1).maybeSingle();
             await Promise.race([pingPromise, timeoutPromise]);
-            console.log(`📡 [NETWORK_VAULT] Connection restored in ${Date.now() - startTime}ms`);
+            if (__DEV__) console.log(`Connection restored in ${Date.now() - startTime}ms`);
             onRetrySuccess();
         } catch {
-            console.log("❌ [NETWORK_VAULT] Server unreachable. Still offline.");
+            if (__DEV__) console.log("Server still unreachable.");
         } finally {
             setIsChecking(false);
         }

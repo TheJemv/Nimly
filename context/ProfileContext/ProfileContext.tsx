@@ -59,7 +59,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
                     filter: `id=eq.${session.user.id}`
                 },
                 (payload) => {
-                    console.log("Global profile updated!");
+                    if (__DEV__) console.log("Global profile updated");
                     setProfile(payload.new as Profile); // Actualización instantánea en memoria
                 }
             )

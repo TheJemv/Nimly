@@ -74,21 +74,14 @@ export function useStoriesFeed() {
         const userId = session?.user?.id;
         if (!userId) return; // 👈 sin sesión, no hay nada que cargar
 
-        const t0 = performance.now();
         try {
             if (showLoading) setLoadingStories(true);
 
-            const tFetchStart = performance.now();
             const rawStories = await storiesApi.getActiveFeed(session?.user);
-            const tFetchEnd = performance.now();
-            console.log(`⏱️ [Stories] getActiveFeed() (${rawStories.length} historias): ${(tFetchEnd - tFetchStart).toFixed(0)}ms`);
-
             const groups = formatStoriesToGroups(rawStories as Story[], userId);
             setStoryGroups(groups);
-
-            console.log(`⏱️ [Stories] TOTAL reloadStories(): ${(performance.now() - t0).toFixed(0)}ms`);
         } catch (error) {
-            console.error("Error cargando historias:", error);
+            console.error("Error loading stories:", error);
         } finally {
             if (showLoading) setLoadingStories(false);
         }
@@ -122,7 +115,7 @@ export function useStoriesFeed() {
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'story_likes' },
                     (payload) => { if (isMounted) reloadStories(false); })
                 .subscribe((status, err) => {
-                    console.log('🔌 Estado del canal de historias:', status, err);
+                    if (__DEV__) console.log('Stories channel status:', status, err);
 
                     if (status === 'SUBSCRIBED') {
                         retryCount = 0;
@@ -140,7 +133,7 @@ export function useStoriesFeed() {
                         if (!isMounted) return;
                         retryCount++;
                         const delay = Math.min(1000 * 2 ** retryCount, MAX_RETRY_DELAY);
-                        console.log(`⚠️ Canal de historias caído (${status}). Reintentando en ${delay}ms...`);
+                        if (__DEV__) console.log(`Stories channel down (${status}). Retrying in ${delay}ms...`);
 
                         if (retryTimeout) clearTimeout(retryTimeout);
                         retryTimeout = setTimeout(() => {
@@ -194,8 +187,8 @@ export function useStoriesFeed() {
             await storiesApi.createStory(uri, mediaType, false);
             await reloadStories(false);
         } catch (error) {
-            console.error("Error publicando historia:", error);
-            Alert.alert("Error", "No se pudo publicar la historia.");
+            console.error("Error publishing story:", error);
+            Alert.alert("Error", "Could not publish the story.");
         }
     };
 
@@ -209,8 +202,8 @@ export function useStoriesFeed() {
                 })).filter(group => group.stories.length > 0 || group.is_me)
             );
         } catch (error) {
-            console.error("Error eliminando historia:", error);
-            Alert.alert("Error", "No se pudo eliminar la historia.");
+            console.error("Error deleting story:", error);
+            Alert.alert("Error", "Could not delete the story.");
         }
     };
 

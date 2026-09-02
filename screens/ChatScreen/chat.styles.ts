@@ -62,4 +62,17 @@ export const styles = StyleSheet.create({
    },
    replyPreviewContent: { flex: 1, marginRight: 8 },
    replyPreviewLabel: { color: '#DC143C', fontSize: 12, fontWeight: '600', marginBottom: 2 },
+   keyChangeBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: 'rgba(230, 184, 0, 0.12)',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: 'rgba(230, 184, 0, 0.3)',
+   },
+   keyChangeText: { color: '#E6B800', fontSize: 12, lineHeight: 16, flex: 1 },
+   openedCapsule: { flexDirection: 'row', alignItems: 'center' },
+   openedCapsuleText: { color: '#888', fontStyle: 'italic', marginLeft: 8, fontSize: 14 },
 });
