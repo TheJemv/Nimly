@@ -30,7 +30,7 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUn
         content?.includes('/');
 
     if (isMediaContent) {
-        return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}📷 Multimedia Capsule</Text>;
+        return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}📷 Photo</Text>;
     }
 
     return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}{decryptedText}</Text>;
