@@ -13,72 +13,88 @@ import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
-export type VaultState = 'loading' | VaultIdentityState;
+// 'device_locked' → la cuenta ya está en uso en OTRO dispositivo. Nimly es de un
+// solo dispositivo: este equipo no puede entrar hasta que el otro cierre sesión
+// (o el usuario haga un "force takeover" con su contraseña).
+export type VaultState = 'loading' | 'device_locked' | VaultIdentityState;
 
-/** Identificador estable de este dispositivo (para detectar sesiones paralelas). */
+/** Identificador estable de este dispositivo (sobrevive reinstalación en el mismo equipo). */
 const buildDeviceId = () =>
     `${Device.deviceName}-${Device.modelId}-${Device.osInternalBuildId}`;
 
 export function useVaultSecurity() {
-    // Estado de la identidad E2EE en ESTE dispositivo.
     const [vaultState, setVaultState] = useState<VaultState>('loading');
-    // true si la cuenta ya tiene una identidad ANCLADA a otro dispositivo activo:
-    // este equipo no podrá leer el historial y continuar bloquea al otro.
-    const [otherDeviceActive, setOtherDeviceActive] = useState(false);
 
     // Evita que checkSession y onAuthStateChange corran el setup a la vez.
     const setupInFlight = useRef<Promise<VaultState> | null>(null);
-    // Canal de realtime que vigila sesiones concurrentes. Solo se abre cuando la
-    // bóveda está usable en ESTE dispositivo (así no expulsamos al otro equipo
-    // hasta que el usuario confirma que toma el control aquí).
+    // Canal de realtime que vigila que nadie más reclame la cuenta.
     const securityChannelRef = useRef<any>(null);
+    // userId cuyo "device lock" tenemos tomado (para soltarlo al cerrar sesión).
+    const ownedUserIdRef = useRef<string | null>(null);
+    // Evita que un runSetup disparado por el SIGNED_IN del re-login pise el
+    // "force takeover" en curso.
+    const takeoverInFlightRef = useRef(false);
 
-    const handleRemoteLogout = async () => {
+    const handleRemoteTakeover = async () => {
         Alert.alert(
-            "Sesión expirada",
-            "Se ha iniciado sesión en otro dispositivo. Por seguridad, la bóveda se reiniciará."
+            'Signed out',
+            'Your account is now active on another device. Nimly can only be used on one device at a time.'
         );
         await supabase.auth.signOut();
     };
 
-    const setupSecuritySync = async (userId: string) => {
+    const watchForTakeover = (userId: string, myDeviceId: string) => {
+        const channelName = `security_check_${userId}`;
+        supabase.removeChannel(supabase.channel(channelName));
+
+        return supabase
+            .channel(channelName)
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+                (payload) => {
+                    const latest = payload.new.current_device_id;
+                    if (latest && latest !== myDeviceId) handleRemoteTakeover();
+                }
+            )
+            .subscribe();
+    };
+
+    /** Marca este dispositivo como el activo de la cuenta y vigila cambios. */
+    const claimDevice = async (userId: string) => {
+        const myDeviceId = buildDeviceId();
         try {
-            const myDeviceId = buildDeviceId();
             await supabase.from('profiles').update({ current_device_id: myDeviceId }).eq('id', userId);
+            ownedUserIdRef.current = userId;
 
-            const channelName = `security_check_${userId}`;
-            await supabase.removeChannel(supabase.channel(channelName));
-
-            const securityChannel = supabase
-                .channel(channelName)
-                .on('postgres_changes',
-                    { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-                    (payload) => {
-                        const latestDeviceId = payload.new.current_device_id;
-                        if (latestDeviceId && latestDeviceId !== myDeviceId) handleRemoteLogout();
-                    }
-                )
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED' && __DEV__) console.log("Vault Security: monitoring concurrent sessions");
-                });
-
-            return securityChannel;
+            if (securityChannelRef.current) {
+                await supabase.removeChannel(securityChannelRef.current);
+            }
+            securityChannelRef.current = watchForTakeover(userId, myDeviceId);
         } catch (e) {
-            console.error("Security sync failed silently:", e);
-            return null;
+            console.error('claimDevice failed:', e);
         }
     };
 
-    /** Reclama este dispositivo como el activo y vigila cambios (expulsa a otros). */
-    const claimDevice = async (userId: string) => {
+    /** Suelta el lock del servidor SOLO si aún es nuestro (no pisamos a otro equipo). */
+    const releaseDevice = async () => {
+        const userId = ownedUserIdRef.current;
+        ownedUserIdRef.current = null;
         if (securityChannelRef.current) {
             await supabase.removeChannel(securityChannelRef.current);
             securityChannelRef.current = null;
         }
-        securityChannelRef.current = await setupSecuritySync(userId);
+        if (!userId) return;
+        try {
+            await supabase
+                .from('profiles')
+                .update({ current_device_id: null })
+                .eq('id', userId)
+                .eq('current_device_id', buildDeviceId());
+        } catch (e) {
+            console.error('releaseDevice failed:', e);
+        }
     };
 
-    // Limpieza al desmontar el provider (cierre de app).
     useEffect(() => {
         return () => {
             if (securityChannelRef.current) supabase.removeChannel(securityChannelRef.current);
@@ -87,7 +103,9 @@ export function useVaultSecurity() {
 
     const runSetup = useCallback(async (userSession: Session | null): Promise<VaultState> => {
         if (!userSession?.user) return 'loading';
+        if (takeoverInFlightRef.current) return 'loading';
         const currentUserId = userSession.user.id;
+        const myDeviceId = buildDeviceId();
 
         try {
             const storedOwnerId = await SecureStore.getItemAsync(OWNER_ID_STORE);
@@ -95,12 +113,27 @@ export function useVaultSecurity() {
 
             // Cambio de cuenta: las llaves del usuario anterior no sirven aquí.
             if (storedOwnerId && storedOwnerId !== currentUserId) {
-                if (__DEV__) console.log("Vault: account switch detected, removing foreign keys");
                 await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
                 localPrivateKey = null;
             }
 
-            // Camino feliz: ya hay identidad local para este usuario.
+            // ¿Qué dispositivo tiene la cuenta según el servidor?
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('current_device_id, public_key')
+                .eq('id', currentUserId)
+                .maybeSingle();
+
+            const lockedTo = profile?.current_device_id ?? null;
+            const heldByAnotherDevice = !!lockedTo && lockedTo !== myDeviceId;
+
+            // BLOQUEO DURO: otro dispositivo tiene la cuenta.
+            if (heldByAnotherDevice) {
+                setVaultState('device_locked');
+                return 'device_locked';
+            }
+
+            // Tenemos la identidad local y nadie más reclama la cuenta → listo.
             if (localPrivateKey && storedOwnerId === currentUserId) {
                 await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
                 await claimDevice(currentUserId);
@@ -108,40 +141,22 @@ export function useVaultSecurity() {
                 return 'ready';
             }
 
-            // No hay llave local. ¿El servidor ya tiene una identidad?
-            const state = await vaultIdentity.getIdentityState();
-
-            if (state === 'needs_new_identity') {
-                // ¿Hay OTRO dispositivo activo con las llaves de esta cuenta?
-                // (inicio de sesión ajeno / cuenta compartida) → aviso reforzado.
-                try {
-                    const { data } = await supabase
-                        .from('profiles')
-                        .select('current_device_id')
-                        .eq('id', currentUserId)
-                        .single();
-                    const other = data?.current_device_id;
-                    setOtherDeviceActive(!!other && other !== buildDeviceId());
-                } catch {
-                    setOtherDeviceActive(false);
-                }
-
-                // NUNCA regenerar en silencio: el usuario debe confirmar que
-                // acepta perder el historial cifrado anterior. Tampoco reclamamos
-                // el dispositivo todavía (no expulsamos al otro equipo).
+            // Sin llave local y libre. ¿El servidor ya tenía una identidad?
+            if (profile?.public_key) {
+                // Migración legítima (el otro dispositivo cerró sesión / se perdió):
+                // requiere confirmación explícita porque se pierde el historial.
                 setVaultState('needs_new_identity');
                 return 'needs_new_identity';
             }
 
-            // Primera vez de verdad: crear identidad.
+            // Primera identidad de la cuenta.
             await vaultIdentity.generateIdentity();
             await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
             await claimDevice(currentUserId);
             setVaultState('ready');
             return 'ready';
         } catch (error) {
-            console.error("Vault Initialization Error:", error);
-            // Ante la duda, no asumimos 'ready'.
+            console.error('Vault Initialization Error:', error);
             setVaultState('needs_new_identity');
             return 'needs_new_identity';
         }
@@ -155,9 +170,10 @@ export function useVaultSecurity() {
         return p;
     }, [runSetup]);
 
-    // El usuario confirma en un dispositivo sin llaves: nueva identidad,
-    // el historial cifrado anterior queda ilegible. Recién AQUÍ reclamamos el
-    // dispositivo (lo que expulsa al otro equipo con las llaves viejas).
+    /**
+     * Migración: dispositivo sin llaves y cuenta libre. Crea identidad nueva
+     * (el historial cifrado anterior queda ilegible) y reclama el dispositivo.
+     */
     const confirmNewIdentity = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         await vaultIdentity.createFreshIdentity();
@@ -165,30 +181,56 @@ export function useVaultSecurity() {
             await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
             await claimDevice(user.id);
         }
-        setOtherDeviceActive(false);
         setVaultState('ready');
     }, []);
 
-    const purgeVaultData = async () => {
-        if (__DEV__) console.log("Vault: signed out, purging local security keys");
-        if (securityChannelRef.current) {
-            await supabase.removeChannel(securityChannelRef.current);
-            securityChannelRef.current = null;
+    /**
+     * "Perdí mi otro dispositivo": exige la contraseña de la cuenta, libera el
+     * lock del servidor y toma el control aquí con una identidad nueva. Devuelve
+     * un mensaje de error o `null` si salió bien.
+     */
+    const forceTakeover = useCallback(async (password: string): Promise<string | null> => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) return 'Could not verify your account.';
+
+        takeoverInFlightRef.current = true;
+        try {
+            const { error: authError } = await supabase.auth.signInWithPassword({
+                email: user.email,
+                password,
+            });
+            if (authError) return 'Incorrect password.';
+
+            await supabase.from('profiles').update({ current_device_id: null }).eq('id', user.id);
+            await vaultIdentity.createFreshIdentity();
+            await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
+            await claimDevice(user.id);
+            setVaultState('ready');
+            return null;
+        } catch (e) {
+            console.error('forceTakeover failed:', e);
+            return 'Could not set up this device. Check your connection and try again.';
+        } finally {
+            takeoverInFlightRef.current = false;
         }
+    }, []);
+
+    const purgeVaultData = async () => {
+        if (__DEV__) console.log('Vault: signed out, purging local security keys');
+        await releaseDevice();
         await SecureStore.deleteItemAsync('nymly_vault_seed');
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await SecureStore.deleteItemAsync(OWNER_ID_STORE);
         purgeVaultRAM();
         purgeSharedSecrets();
-        setOtherDeviceActive(false);
         setVaultState('loading');
     };
 
     return {
         vaultState,
-        otherDeviceActive,
         setupVaultIdentity,
         confirmNewIdentity,
+        forceTakeover,
         purgeVaultData,
     };
 }

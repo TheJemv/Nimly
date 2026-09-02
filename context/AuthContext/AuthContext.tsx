@@ -23,9 +23,10 @@ interface AuthContextValue {
     isLoading: boolean;
     vault: {
         state: VaultState;
-        /** La cuenta ya tiene llaves en otro dispositivo activo. */
-        otherDeviceActive: boolean;
+        /** Migración legítima: crea identidad nueva en este dispositivo. */
         confirmNewIdentity: () => Promise<void>;
+        /** Cuenta bloqueada en otro dispositivo: toma el control con contraseña. */
+        forceTakeover: (password: string) => Promise<string | null>;
     };
 }
 
@@ -34,8 +35,8 @@ export const AuthContext = createContext<AuthContextValue>({
     isLoading: true,
     vault: {
         state: 'loading',
-        otherDeviceActive: false,
         confirmNewIdentity: async () => { },
+        forceTakeover: async () => 'not ready',
     },
 });
 
@@ -47,8 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setupVaultIdentity,
         purgeVaultData,
         vaultState,
-        otherDeviceActive,
         confirmNewIdentity,
+        forceTakeover,
     } = useVaultSecurity();
     useProtectedRoute(session, isLoading);
 
@@ -114,8 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 isLoading,
                 vault: {
                     state: vaultState,
-                    otherDeviceActive,
                     confirmNewIdentity,
+                    forceTakeover,
                 },
             }}
         >
