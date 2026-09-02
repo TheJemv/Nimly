@@ -1,7 +1,7 @@
 // app/(app)/settings.tsx
 import { ThemedText } from "@/components/themed-text";
 import { getThemeColor } from "@/constants/theme";
-import { supabase, supabaseUrl } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import * as Clipboard from "expo-clipboard";
 import Constants from "expo-constants";
 import { Stack, useRouter } from "expo-router";
@@ -40,10 +40,9 @@ export default function SettingsScreen() {
     const [otaStatus, setOtaStatus] = useState<string | null>(null);
     const [checkingOta, setCheckingOta] = useState(false);
 
-    // Huella de la config de backend (para diagnosticar env vars mal bundleadas).
+    // Huella de la anon key (para diagnosticar env vars mal bundleadas sin exponer el valor).
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
     const anonKeyFP = anonKey ? `…${anonKey.slice(-6)} (${anonKey.length})` : "MISSING";
-    const backendHost = (supabaseUrl || "—").replace(/^https?:\/\//, "");
 
     const appVersion = Constants.expoConfig?.version ?? "—";
     const runtimeVersion =
@@ -62,7 +61,6 @@ export default function SettingsScreen() {
         `Channel: ${otaChannel}\n` +
         `Update: ${otaId}\n` +
         `Published: ${otaDate}\n` +
-        `Backend: ${backendHost}\n` +
         `Anon key: ${anonKeyFP}\n` +
         `Platform: ${Platform.OS}`;
 
@@ -259,10 +257,6 @@ export default function SettingsScreen() {
                             <View style={styles.infoRow}>
                                 <ThemedText style={styles.infoKey}>Published</ThemedText>
                                 <ThemedText style={styles.infoVal} numberOfLines={1}>{otaDate}</ThemedText>
-                            </View>
-                            <View style={styles.infoRow}>
-                                <ThemedText style={styles.infoKey}>Backend</ThemedText>
-                                <ThemedText style={styles.infoVal} numberOfLines={1}>{backendHost}</ThemedText>
                             </View>
                             <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
                                 <ThemedText style={styles.infoKey}>Anon key</ThemedText>
