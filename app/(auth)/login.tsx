@@ -1,5 +1,5 @@
 import { getThemeColor } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -43,12 +43,17 @@ export default function LoginScreen() {
         });
 
         if (error) {
-            Alert.alert('Login Error', 'Invalid username or password');
+            const status = (error as any)?.status ? ` [${(error as any).status}]` : '';
+            Alert.alert('Login Error', `${error.message}${status}`);
             setLoading(false);
         } else {
             setLoading(false);
         }
     };
+
+    // Diagnóstico de backend (temporal): confirma qué env vars trae el bundle.
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const diagLine = `${(supabaseUrl || '—').replace(/^https?:\/\//, '')} · key ${anonKey ? `…${anonKey.slice(-6)}/${anonKey.length}` : 'MISSING'}`;
 
     return (
         <KeyboardAvoidingView
@@ -125,6 +130,10 @@ export default function LoginScreen() {
                             <Text style={{ color: accent, fontWeight: 'bold' }}>Join Now</Text>
                         </TouchableOpacity>
                     </View>
+
+                    <Text style={{ color: textSec, fontSize: 10, textAlign: 'center', opacity: 0.4, marginTop: 12 }}>
+                        {diagLine}
+                    </Text>
                 </View>
             </ScrollView>
         </KeyboardAvoidingView>
