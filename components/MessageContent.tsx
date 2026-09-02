@@ -16,7 +16,7 @@ export const MessageContent = memo(({ content, friendPublicKey }: MessageContent
 
     useEffect(() => {
         if (!friendPublicKey) {
-            setDecryptedText("🔒 Connecting Vault...");
+            setDecryptedText("🔒 Decrypting…");
             return;
         }
 
@@ -37,7 +37,7 @@ export const MessageContent = memo(({ content, friendPublicKey }: MessageContent
                     setDecryptedText(clearText);
                 }
             } catch {
-                if (isMounted) setDecryptedText("🔒 Locked Capsule");
+                if (isMounted) setDecryptedText("🔒 One-time photo");
             }
         };
 

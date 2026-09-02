@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
     let targetUserId = ""
-    let pushTitle = "Nimly Vault"
+    let pushTitle = "Nimly"
     let pushBody = "You have a new update"
 
     // CASE A: viene de la tabla MESSAGES
@@ -49,8 +49,8 @@ Deno.serve(async (req) => {
         .eq('id', record.sender_id)
         .maybeSingle()
 
-      pushTitle = `@${sender?.username || 'Someone'} in Nimly Vault`
-      pushBody = record.type === 'text' ? 'sent you an encrypted message' : 'sent you a one-time capsule'
+      pushTitle = `@${sender?.username || 'Someone'}`
+      pushBody = record.type === 'text' ? 'sent you a message' : 'sent you a photo'
     }
 
     // CASE B: viene de la tabla NOTIFICATIONS

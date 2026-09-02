@@ -40,8 +40,7 @@ export default function WelcomeScreen() {
                 {/* Welcome Message */}
                 <View style={styles.textContainer}>
                     <Text style={[styles.description, { color: textSec }]}>
-                        Absolute privacy. Exclusive connections.
-                        Your discreet space on the network.
+                        A private social space to share moments with the friends you choose.
                     </Text>
                 </View>
 
@@ -68,7 +67,14 @@ export default function WelcomeScreen() {
                     </TouchableOpacity>
 
                     <Text style={[styles.legal, { color: textSec }]}>
-                        By entering, you agree to Nimly's discretion terms.
+                        By continuing you agree to Nimly's{' '}
+                        <Text
+                            style={{ color: accent, fontWeight: '700', textDecorationLine: 'underline' }}
+                            onPress={() => router.push('/(auth)/terms')}
+                        >
+                            Terms of Use
+                        </Text>
+                        {' '}and its zero-tolerance policy for objectionable content and abusive behavior.
                     </Text>
                 </View>
             </View>

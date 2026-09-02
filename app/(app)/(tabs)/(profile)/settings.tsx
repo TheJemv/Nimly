@@ -165,7 +165,7 @@ export default function SettingsScreen() {
         >
             <Stack.Screen
                 options={{
-                    headerTitle: "Vault Settings",
+                    headerTitle: "Settings",
                     headerLargeTitle: true,
                     headerStyle: { backgroundColor: bg },
                     headerTintColor: getThemeColor('text'),

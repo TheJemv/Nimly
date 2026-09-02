@@ -34,7 +34,7 @@ export const ReplyQuote = memo(({ content, senderUsername, friendPublicKey, isMi
                     setDecryptedText(clearText);
                 }
             } catch {
-                if (isMounted) setDecryptedText("🔒 Locked Capsule");
+                if (isMounted) setDecryptedText("🔒 One-time photo");
             }
         })();
 

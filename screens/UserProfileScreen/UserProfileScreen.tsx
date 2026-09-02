@@ -2,6 +2,7 @@ import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
 import { ThemedText } from '@/components/themed-text';
 import ZoomableAvatar from "@/components/ZoomableAvatar";
+import { useAuth } from "@/context/AuthContext";
 import { getThemeColor } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
@@ -15,6 +16,8 @@ import { styles } from './UserProfileScreen.styles';
 
 export default function UserProfileScreen() {
     const { id, user: userParam } = useLocalSearchParams<{ id: string; user?: string }>();
+    const { session } = useAuth();
+    const isSelf = !!session?.user?.id && session.user.id === id;
 
     const bottomSheetModalRef = useRef<BottomSheetModal>(null);
     const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -81,15 +84,17 @@ export default function UserProfileScreen() {
                     headerTintColor: "#fff",
                     headerTransparent: false,
                     headerRight: () => (
-                        <ProfileHeaderMenu
-                            isAccepted={isAccepted}
-                            iBlockedThem={iBlockedThem}
-                            onCopyUsername={handleCopyUsername}
-                            onReportUser={handleReportUser}
-                            onSeverConnection={handleSeverConnection}
-                            onBlockUser={handleBlockUser}
-                            onUnblockUser={handleUnblockUser}
-                        />
+                        isSelf ? null : (
+                            <ProfileHeaderMenu
+                                isAccepted={isAccepted}
+                                iBlockedThem={iBlockedThem}
+                                onCopyUsername={handleCopyUsername}
+                                onReportUser={handleReportUser}
+                                onSeverConnection={handleSeverConnection}
+                                onBlockUser={handleBlockUser}
+                                onUnblockUser={handleUnblockUser}
+                            />
+                        )
                     ),
                 }}
             />
@@ -171,7 +176,7 @@ export default function UserProfileScreen() {
                                     color={isPending ? '#fbbf24' : accent}
                                 />
                                 <ThemedText style={styles.lockedTitle}>
-                                    {isPending ? (amIReceiver ? "Action Required" : "Pending Approval") : "Vault Locked"}
+                                    {isPending ? (amIReceiver ? "Action Required" : "Pending Approval") : "Private profile"}
                                 </ThemedText>
                                 <TouchableOpacity
                                     style={[
@@ -183,7 +188,7 @@ export default function UserProfileScreen() {
                                 >
                                     {sending ? <ActivityIndicator color="#fff" /> :
                                         <Text style={styles.btnText}>
-                                            {isPending ? (amIReceiver ? "ESTABLISH ACCESS" : "REQUEST SENT") : "CONNECT TO VAULT"}
+                                            {isPending ? (amIReceiver ? "ACCEPT REQUEST" : "REQUEST SENT") : "CONNECT"}
                                         </Text>
                                     }
                                 </TouchableOpacity>

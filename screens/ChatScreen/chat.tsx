@@ -162,7 +162,7 @@ export default function ChatScreen() {
       if (!cleanedMessage || !chatId || !currentUserId) return;
 
       if (!pubKey) {
-         Alert.alert("Vault not ready", "Still establishing the secure channel with this contact. Try again in a moment.");
+         Alert.alert("Not ready yet", "Still setting up the secure connection with this contact. Try again in a moment.");
          return;
       }
 
@@ -282,19 +282,19 @@ export default function ChatScreen() {
    const handleBurnHistory = () => {
       if (!chatId) return;
       Alert.alert(
-         "Burn Chat History",
-         "Are you sure? This will permanently destroy all messages and media for both of you.",
+         "Clear Chat History",
+         "Are you sure? This permanently deletes all messages and media for both of you.",
          [
             { text: "Cancel", style: "cancel" },
             {
-               text: "Burn it",
+               text: "Clear",
                style: "destructive",
                onPress: async () => {
                   try {
                      await chatApi.burnChatHistory(chatId);
                      setMessages([]);
                   } catch {
-                     alert("Failed to burn history.");
+                     alert("Could not clear the chat history.");
                   }
                }
             }
@@ -394,7 +394,7 @@ export default function ChatScreen() {
          {isUploading && (
             <View style={styles.uploadIndicator}>
                <ActivityIndicator size="small" color={getThemeColor("tint")} />
-               <Text style={styles.uploadText}>Encrypting Vault...</Text>
+               <Text style={styles.uploadText}>Encrypting…</Text>
             </View>
          )}
 
@@ -451,7 +451,7 @@ export default function ChatScreen() {
                   const finalType = option || type;
                   sendCapturedImage(uri, finalType, pubKey);
                } else {
-                  alert("Connecting Vault. Please wait a second.");
+                  alert("Connecting. Please wait a second.");
                }
             }}
          />

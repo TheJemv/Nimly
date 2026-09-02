@@ -276,7 +276,7 @@ export const vaultCrypto = {
 
             return packet; // texto plano por error de un cliente antiguo
         } catch {
-            return "🔒 Locked Capsule";
+            return "🔒 One-time photo";
         }
     }
 };

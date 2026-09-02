@@ -10,7 +10,7 @@ export function useDecryptedMessage(content: string, friendPublicKey?: string) {
 
     useEffect(() => {
         if (!friendPublicKey) {
-            setDecryptedText("🔒 Syncing Vault...");
+            setDecryptedText("🔒 Decrypting…");
             return;
         }
 

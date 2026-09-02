@@ -23,14 +23,14 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
     const handleCopyUsername = async () => {
         if (username) {
             await Clipboard.setStringAsync(`@${username}`);
-            Alert.alert("Link Copied", "Username stored in your secure vault.");
+            Alert.alert("Copied", "Username copied to clipboard.");
         }
     };
 
     const handleSeverConnection = () => {
         Alert.alert(
-            "Sever Connection",
-            `This will terminate all encrypted access with @${username}. Are you sure?`,
+            "Remove Connection",
+            `This will remove your connection with @${username}. Are you sure?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -81,7 +81,7 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
                                 Alert.alert("Note", "You have already blocked this user.");
                             } else {
                                 unblockLocally(id);
-                                Alert.alert("Error", "Action could not be completed.");
+                                Alert.alert("Error", __DEV__ ? String(e?.message || e) : "Action could not be completed.");
                             }
                         } finally {
                             setLoading(false);

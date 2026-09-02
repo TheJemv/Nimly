@@ -17,6 +17,7 @@ export const blocksApi = {
         const { data: userData } = await supabase.auth.getUser();
         const blockerId = userData.user?.id;
         if (!blockerId) throw new Error('NotAuthenticated');
+        if (blockerId === blockedId) throw new Error("You can't block yourself.");
 
         // Check if already blocked
         const { data: existing } = await supabase

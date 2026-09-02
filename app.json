@@ -14,9 +14,9 @@
       "appleTeamId": "B88RJAR9J7",
       "infoPlist": {
         "UIUserInterfaceStyle": "Dark",
-        "NSPhotoLibraryUsageDescription": "Needed to upload photos to your vault.",
-        "NSCameraUsageDescription": "Needed to capture secure photos for the vault.",
-        "NSMicrophoneUsageDescription": "Needed for video recording within the vault.",
+        "NSPhotoLibraryUsageDescription": "Nimly needs access to your photo library so you can share photos with your friends.",
+        "NSCameraUsageDescription": "Nimly needs camera access so you can take photos and videos to share with your friends.",
+        "NSMicrophoneUsageDescription": "Nimly needs microphone access so you can record videos to share with your friends.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },

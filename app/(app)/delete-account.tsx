@@ -27,34 +27,34 @@ export default function DeleteAccountScreen() {
             await supabase.auth.signOut();
             router.replace("/(auth)");
         } catch (e: any) {
-            Alert.alert("Purge Failed", e.message);
+            Alert.alert("Could not delete account", e.message);
             setLoading(false);
         }
     };
 
     return (
         <View style={styles.container}>
-            <Stack.Screen options={{ headerTitle: "Account Purge", headerTransparent: true, headerTintColor: '#fff' }} />
+            <Stack.Screen options={{ headerTitle: "Delete Account", headerTransparent: true, headerTintColor: '#fff' }} />
 
             <View style={styles.content}>
                 <SymbolView name="exclamationmark.shield.fill" size={60} tintColor={accent} />
 
-                <ThemedText style={styles.title}>PERMANENT PURGE</ThemedText>
+                <ThemedText style={styles.title}>DELETE ACCOUNT</ThemedText>
 
                 <View style={styles.warningBox}>
                     <ThemedText style={styles.warningText}>
-                        You are about to initiate a mathematical destruction of your identity. This process is irreversible and includes:
+                        This permanently deletes your account. This can't be undone and includes:
                     </ThemedText>
 
                     <View style={styles.list}>
-                        <ThemedText style={styles.listItem}>• All encrypted messages and vaults.</ThemedText>
-                        <ThemedText style={styles.listItem}>• Your digital identity and public username.</ThemedText>
+                        <ThemedText style={styles.listItem}>• All your messages and shared media.</ThemedText>
+                        <ThemedText style={styles.listItem}>• Your profile and username.</ThemedText>
                         <ThemedText style={styles.listItem}>• All connections, friend requests, and history.</ThemedText>
-                        <ThemedText style={styles.listItem}>• All media capsules and metadata.</ThemedText>
+                        <ThemedText style={styles.listItem}>• Your posts and stories.</ThemedText>
                     </View>
 
                     <ThemedText style={styles.finalWarning}>
-                        Once executed, Nimly will have NO WAY to recover your data. You will be erased from the network.
+                        Once deleted, Nimly cannot recover your data.
                     </ThemedText>
                 </View>
 
@@ -67,13 +67,13 @@ export default function DeleteAccountScreen() {
                         <ActivityIndicator color={accent} />
                     ) : (
                         <ThemedText style={[styles.buttonText, { color: seconds > 0 ? '#333' : accent }]}>
-                            {seconds > 0 ? `Wait ${seconds}s...` : "PURGE IDENTITY"}
+                            {seconds > 0 ? `Wait ${seconds}s...` : "DELETE MY ACCOUNT"}
                         </ThemedText>
                     )}
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={() => router.back()} disabled={loading}>
-                    <ThemedText style={styles.cancelText}>Cancel and return to Vault</ThemedText>
+                    <ThemedText style={styles.cancelText}>Cancel</ThemedText>
                 </TouchableOpacity>
             </View>
         </View>

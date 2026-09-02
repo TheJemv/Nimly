@@ -121,7 +121,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             console.error("view-once consume failed:", e);
             Alert.alert(
                 "Still available",
-                "We couldn't mark this capsule as opened. It will stay available until you open it again with a connection."
+                "We couldn't mark this photo as opened. It will stay available until you open it again."
             );
         }
     };
@@ -138,7 +138,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     if (isLocked) {
         return (
             <View style={styles.lockedContainer}>
-                <Text style={styles.lockedText}>🔒 Locked Capsule</Text>
+                <Text style={styles.lockedText}>🔒 One-time photo</Text>
             </View>
         );
     }
@@ -191,7 +191,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         return (
             <View style={styles.senderVO}>
                 <SymbolView name="eye.fill" size={14} tintColor="#fff" />
-                <Text style={styles.senderVOText}>View-once Capsule sent</Text>
+                <Text style={styles.senderVOText}>One-time photo sent</Text>
             </View>
         );
     }

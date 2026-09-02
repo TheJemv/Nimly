@@ -41,9 +41,9 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
                     <SymbolView name="wifi.exclamationmark" size={36} tintColor={getThemeColor('tint')} />
                 </View>
 
-                <Text style={styles.title}>Secure Connection Lost</Text>
+                <Text style={styles.title}>Connection Lost</Text>
                 <Text style={styles.subtitle}>
-                    The cryptographic vault cannot sync with the server. Please check your signal and try again.
+                    Nimly can't reach the server right now. Please check your connection and try again.
                 </Text>
 
                 {/* BOTÓN CON ANIMACIÓN DE CARGA INTEGRADA */}
@@ -56,7 +56,7 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
                     {isChecking ? (
                         <ActivityIndicator color="#000" size="small" />
                     ) : (
-                        <Text style={styles.confirmText}>Connect Vault</Text>
+                        <Text style={styles.confirmText}>Try Again</Text>
                     )}
                 </TouchableOpacity>
             </View>

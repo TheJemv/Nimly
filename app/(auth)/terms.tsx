@@ -35,12 +35,13 @@ export default function TermsModal() {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={[styles.lastUpdated, { color: textSec }]}>Last updated: June 2026</Text>
+                <Text style={[styles.lastUpdated, { color: textSec }]}>Last updated: September 2026</Text>
 
                 <View style={[styles.card, { backgroundColor: surface, borderColor: glassBorder }]}>
                     <Text style={[styles.cardText, { color: textSec }]}>
-                        By creating an account on Nimly, you agree to these Terms of Use.
-                        Anonymity does not mean freedom from responsibility — you are accountable for what you post.
+                        By creating an account on Nimly, you agree to these Terms of Use and to a
+                        zero-tolerance policy for objectionable content and abusive users. You are
+                        accountable for everything you post.
                     </Text>
                 </View>
 
@@ -50,10 +51,10 @@ export default function TermsModal() {
                     </Body>
                 </Section>
 
-                <Section title="2. Anonymous Use" accent={accent}>
+                <Section title="2. Your Account" accent={accent}>
                     <Body color={textSec}>
-                        Nimly allows anonymous participation. However, anonymity does not grant immunity from these Terms.
-                        You are responsible for all content you post, regardless of your identity.
+                        You sign up with a username. Using a username instead of your legal name does not
+                        grant immunity from these Terms — you are responsible for all content you post.
                     </Body>
                 </Section>
 
@@ -61,13 +62,16 @@ export default function TermsModal() {
                     <Body color={textSec}>You agree NOT to use Nimly to:</Body>
                     <BulletList color={textSec} items={[
                         'Harass, threaten, or abuse other users',
-                        'Post illegal content of any kind',
+                        'Post illegal, sexually explicit, or otherwise objectionable content',
                         'Share content promoting violence, self-harm, or discrimination',
                         'Impersonate another person or entity',
-                        'Attempt to de-anonymize other users',
                         'Spam or post repetitive low-quality content',
                         'Exploit, hack, or disrupt the platform',
                     ]} />
+                    <Body color={textSec}>
+                        There is no tolerance for objectionable content or abusive behavior. Violations
+                        lead to content removal and account termination.
+                    </Body>
                 </Section>
 
                 <Section title="4. Content Ownership" accent={accent}>

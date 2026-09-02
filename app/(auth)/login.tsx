@@ -48,7 +48,7 @@ export default function LoginScreen() {
             const status = (error as any)?.status;
             const msg = status === 400
                 ? 'Invalid username or password'
-                : 'Could not reach the vault. Check your connection and try again.';
+                : 'Could not reach Nimly. Check your connection and try again.';
             Alert.alert('Login Error', msg);
             setLoading(false);
         } else {
@@ -71,7 +71,7 @@ export default function LoginScreen() {
                     <View style={styles.header}>
                         <Text style={[styles.title, { color: textMain }]}>Welcome Back</Text>
                         <Text style={[styles.subtitle, { color: textSec }]}>
-                            Access your private vault and stay connected.
+                            Sign in to catch up with your friends.
                         </Text>
                     </View>
 
