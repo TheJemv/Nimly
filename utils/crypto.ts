@@ -169,6 +169,15 @@ export const contactKeys = {
 // --- CREADOR DE LLAVE COMPARTIDA (DIFFIE-HELLMAN) ---
 // Mezcla mi llave privada con la pública de mi amigo para crear el secreto ECDH
 // (Curve25519) que solo ambos pueden calcular.
+//
+// El secreto por contacto es SIEMPRE el mismo, así que lo cacheamos: recalcular
+// `nacl.box.before` (~1-2 ms JS) + leer SecureStore en disco por cada mensaje
+// hacía que descifrar una página entera trabara el scroll.
+const sharedSecretCache = new Map<string, Uint8Array>();
+
+/** Vacía la caché de secretos ECDH (al cerrar sesión / rotar identidad). */
+export const purgeSharedSecrets = () => sharedSecretCache.clear();
+
 const getSharedSecret = async (friendPublicKeyBase64: string): Promise<Uint8Array> => {
     if (!friendPublicKeyBase64) {
         throw new Error("No public key provided");
@@ -178,6 +187,9 @@ const getSharedSecret = async (friendPublicKeyBase64: string): Promise<Uint8Arra
         throw new Error("Legacy UUID detected. Not a valid E2EE key.");
     }
 
+    const cached = sharedSecretCache.get(friendPublicKeyBase64);
+    if (cached) return cached;
+
     const myPrivateKeyBase64 = await SecureStore.getItemAsync(PRIVATE_KEY_STORE);
     if (!myPrivateKeyBase64) {
         throw new Error("Private Key missing. Device compromised or new login.");
@@ -186,7 +198,9 @@ const getSharedSecret = async (friendPublicKeyBase64: string): Promise<Uint8Arra
     try {
         const mySecretKey = decodeBase64(myPrivateKeyBase64);
         const friendPublicKey = decodeBase64(friendPublicKeyBase64);
-        return nacl.box.before(friendPublicKey, mySecretKey); // 32 bytes
+        const secret = nacl.box.before(friendPublicKey, mySecretKey); // 32 bytes
+        sharedSecretCache.set(friendPublicKeyBase64, secret);
+        return secret;
     } catch {
         throw new Error("Base64 decoding failed. Corrupted keys.");
     }

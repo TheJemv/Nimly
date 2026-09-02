@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import {
     OWNER_ID_STORE,
     PRIVATE_KEY_STORE,
+    purgeSharedSecrets,
     purgeVaultRAM,
     vaultIdentity,
     VaultIdentityState,
@@ -123,6 +124,7 @@ export function useVaultSecurity() {
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await SecureStore.deleteItemAsync(OWNER_ID_STORE);
         purgeVaultRAM();
+        purgeSharedSecrets();
         setVaultState('loading');
     };
 

@@ -61,6 +61,16 @@ export default function ChatScreen() {
    const [isCameraVisible, setCameraVisible] = useState(false);
    const [replyingTo, setReplyingTo] = useState<any>(null);
 
+   // Parsear el objeto user que viene por parámetro de ruta (si existe).
+   const routeUser = useMemo(() => {
+      if (!routeUserParam) return null;
+      try {
+         return typeof routeUserParam === 'string' ? JSON.parse(routeUserParam) : routeUserParam;
+      } catch {
+         return null;
+      }
+   }, [routeUserParam]);
+
    // Ids of messages that can't be decrypted on this device. They're removed
    // from the thread and replaced with a single in-chat notice.
    const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -87,7 +97,7 @@ export default function ChatScreen() {
       currentUserId,
       loadMoreMessages,
       sendText
-   } = useChatSync(targetFriendId);
+   } = useChatSync(targetFriendId, routeUser?.public_key);
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
 
@@ -157,16 +167,6 @@ export default function ChatScreen() {
       }
       return max || null;
    }, [messages, hiddenIds]);
-
-   // Parsear el objeto user que viene por parámetro de ruta (si existe)
-   const routeUser = useMemo(() => {
-      if (!routeUserParam) return null;
-      try {
-         return typeof routeUserParam === 'string' ? JSON.parse(routeUserParam) : routeUserParam;
-      } catch {
-         return null;
-      }
-   }, [routeUserParam]);
 
    // Prioridad: Perfil de BD > Parámetro de ruta > 'User'
    const displayName = friendProfile?.username || routeUser?.username || 'User';
@@ -244,6 +244,11 @@ export default function ChatScreen() {
       return lastRead ? lastRead.id : null;
    }, [messages, currentUserId]);
 
+   const scrollToBottom = useCallback((animated = true) => {
+      // Inverted list: the newest message is at offset 0.
+      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated }));
+   }, []);
+
    const handleSendText = async () => {
       const draft = newMessage;
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
@@ -259,6 +264,10 @@ export default function ChatScreen() {
       const reply = replyingTo;
       setNewMessage("");
       setReplyingTo(null);
+
+      // Jump to the newest message (inverted list -> offset 0), even if we were
+      // scrolled up reading history.
+      scrollToBottom();
 
       const res = await sendText(draft, pubKey, reply);
 
@@ -494,12 +503,16 @@ export default function ChatScreen() {
                         loadMoreMessages();
                      }
                   }}
-                  onEndReachedThreshold={0.2}
+                  onEndReachedThreshold={0.4}
                   contentContainerStyle={{ padding: 16 }}
                   removeClippedSubviews={Platform.OS === 'android'}
-                  maxToRenderPerBatch={10}
-                  windowSize={5}
-                  ListFooterComponent={() => loadingMore ? <ActivityIndicator style={{ margin: 10 }} color={getThemeColor("tint")} /> : null}
+                  initialNumToRender={15}
+                  maxToRenderPerBatch={8}
+                  updateCellsBatchingPeriod={40}
+                  windowSize={7}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  ListFooterComponent={loadingMore ? <ActivityIndicator style={{ margin: 10 }} color={getThemeColor("tint")} /> : null}
                />
             </GestureDetector>
          )}
@@ -580,6 +593,7 @@ export default function ChatScreen() {
                if (pubKey) {
                   const finalType = option || type;
                   sendCapturedImage(uri, finalType, pubKey);
+                  scrollToBottom();
                } else {
                   alert("Connecting. Please wait a second.");
                }

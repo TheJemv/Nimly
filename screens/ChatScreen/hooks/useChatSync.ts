@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { contactKeys, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { randomUUID } from "expo-crypto";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PAGE_SIZE = 30;
 
@@ -16,7 +16,30 @@ const REPLY_SELECT = `
 
 export type SendResult = { ok: true } | { ok: false; reason: "invalid" | "no-key" | "send-failed" };
 
-export function useChatSync(targetFriendId: string | undefined) {
+const isPlainTextMsg = (m: any) =>
+    (m.type === 'text' || !m.type) && !!m.content && m.content !== 'OPENED_CAPSULE';
+
+/**
+ * Descifra en paralelo el texto de una tanda de mensajes y lo deja caliente en
+ * la RAM cache ANTES de pintarlos. Así cada burbuja se renderiza ya con su
+ * altura final: no hay "Decrypting…", ni saltos de scroll al paginar.
+ */
+async function hydrateTextMessages(rows: any[], friendPublicKey: string | undefined) {
+    if (!friendPublicKey || rows.length === 0) return;
+    await Promise.all(
+        rows.map(async (m) => {
+            if (!isPlainTextMsg(m)) return;
+            const cached = vaultRAMCache[m.content];
+            if (cached && !cached.startsWith('🔒')) return;
+            try {
+                const clear = await vaultCrypto.decryptMessage(m.content, friendPublicKey);
+                if (!clear.startsWith('🔒')) vaultRAMCache[m.content] = clear;
+            } catch { /* lo detecta el probe de undecryptable */ }
+        })
+    );
+}
+
+export function useChatSync(targetFriendId: string | undefined, routeUserPublicKey?: string) {
     const [chatId, setChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,6 +52,8 @@ export function useChatSync(targetFriendId: string | undefined) {
     // Se incrementa al volver de segundo plano para forzar la reconexión del
     // canal de realtime (iOS mata el WebSocket mientras la app está fuera).
     const [resyncNonce, setResyncNonce] = useState(0);
+    // Última public key conocida del contacto, para descifrar al paginar / en realtime.
+    const pubKeyRef = useRef<string | undefined>(routeUserPublicKey);
 
     // Marcar mensajes como leídos
     const markMessagesAsRead = useCallback(async (cId: string) => {
@@ -36,15 +61,11 @@ export function useChatSync(targetFriendId: string | undefined) {
         await chatApi.markAsRead(cId, targetFriendId);
     }, [targetFriendId]);
 
-    const fetchMessages = useCallback(async (cId: string, offset: number) => {
+    const fetchMessages = useCallback(async (cId: string, offset: number, keyOverride?: string) => {
         try {
             const { data, error } = await supabase
                 .from('messages')
-                .select(`
-                    *,
-                    reply_to:reply_to_id (id, content, sender_id, type),
-                    reply_to_story:reply_to_story_id (id, media_url, user_id)
-                `)
+                .select(REPLY_SELECT)
                 .eq('chat_id', cId)
                 .order('created_at', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
@@ -56,6 +77,9 @@ export function useChatSync(targetFriendId: string | undefined) {
             if (fetchedData.length < PAGE_SIZE) {
                 setHasMore(false);
             }
+
+            // Descifrar ANTES de pintar: sin flash de "Decrypting…" ni saltos.
+            await hydrateTextMessages(fetchedData, keyOverride ?? pubKeyRef.current);
 
             setMessages(prev => offset === 0 ? fetchedData : [...prev, ...fetchedData]);
 
@@ -71,16 +95,14 @@ export function useChatSync(targetFriendId: string | undefined) {
         try {
             const { data } = await supabase
                 .from('messages')
-                .select(`
-                    *,
-                    reply_to:reply_to_id (id, content, sender_id, type),
-                    reply_to_story:reply_to_story_id (id, media_url, user_id)
-                `)
+                .select(REPLY_SELECT)
                 .eq('chat_id', cId)
                 .order('created_at', { ascending: false })
                 .limit(PAGE_SIZE);
 
             if (!data || data.length === 0) return;
+
+            await hydrateTextMessages(data, pubKeyRef.current);
 
             let addedFromFriend = false;
             setMessages((prev) => {
@@ -118,26 +140,29 @@ export function useChatSync(targetFriendId: string | undefined) {
                 if (!user) return;
                 if (isMounted) setCurrentUserId(user.id);
 
-                const cId = await chatApi.getOrCreateChat(targetFriendId);
+                // El perfil (y su public key) no depende del chatId, así que van
+                // en paralelo. Necesitamos la key para descifrar antes de pintar.
+                const [cId, profRes] = await Promise.all([
+                    chatApi.getOrCreateChat(targetFriendId),
+                    // maybeSingle: si el perfil aún no existe no queremos que lance y
+                    // deje el chat bloqueado; se usa `routeUser` como respaldo.
+                    supabase.from('profiles').select('*').eq('id', targetFriendId).maybeSingle(),
+                ]);
                 if (!cId) return;
                 if (isMounted) setChatId(cId);
 
-                await markMessagesAsRead(cId);
-
-                const [, profRes] = await Promise.all([
-                    fetchMessages(cId, 0),
-                    // maybeSingle: si el perfil aún no existe no queremos que lance y
-                    // deje el chat bloqueado; se usa `routeUser` como respaldo.
-                    supabase.from('profiles').select('*').eq('id', targetFriendId).maybeSingle()
-                ]);
+                const pubKey = profRes.data?.public_key ?? routeUserPublicKey;
+                pubKeyRef.current = pubKey;
 
                 if (isMounted && profRes.data) {
                     setFriendProfile(profRes.data);
-
                     // Detección local de cambio de llave (estilo "safety number changed").
                     const { changed } = await contactKeys.record(targetFriendId, profRes.data.public_key ?? null);
                     if (isMounted) setFriendKeyChanged(changed);
                 }
+
+                await markMessagesAsRead(cId);
+                await fetchMessages(cId, 0, pubKey);
             } catch (e) {
                 console.error("❌ [INIT] Chat Init Error:", e);
             } finally {
@@ -146,7 +171,12 @@ export function useChatSync(targetFriendId: string | undefined) {
         };
         init();
         return () => { isMounted = false; };
-    }, [targetFriendId, markMessagesAsRead, fetchMessages]);
+    }, [targetFriendId, routeUserPublicKey, markMessagesAsRead, fetchMessages]);
+
+    // Mantener la key fresca si el perfil llega/cambia después del init.
+    useEffect(() => {
+        pubKeyRef.current = friendProfile?.public_key ?? routeUserPublicKey;
+    }, [friendProfile?.public_key, routeUserPublicKey]);
 
     useEffect(() => {
         if (!chatId) return;
@@ -174,6 +204,9 @@ export function useChatSync(targetFriendId: string | undefined) {
 
                                 if (data) finalMsg = data;
                             }
+
+                            // Descifrar antes de pintar para que no aparezca vacío.
+                            await hydrateTextMessages([finalMsg], pubKeyRef.current);
 
                             setMessages((prev) => {
                                 const hasTemp = clientId != null && prev.some((m) => m.id === clientId);
