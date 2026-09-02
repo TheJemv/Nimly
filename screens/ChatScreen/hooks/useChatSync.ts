@@ -1,9 +1,19 @@
 import { chatApi } from "@/api/chat";
 import { supabase } from "@/lib/supabase";
-import { contactKeys } from "@/utils/crypto";
+import { cleanChatMessage } from "@/utils/chatUtils";
+import { contactKeys, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
+import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useState } from "react";
 
 const PAGE_SIZE = 30;
+
+const REPLY_SELECT = `
+    *,
+    reply_to:reply_to_id (id, content, sender_id, type),
+    reply_to_story:reply_to_story_id (id, media_url, user_id)
+`;
+
+export type SendResult = { ok: true } | { ok: false; reason: "invalid" | "no-key" | "send-failed" };
 
 export function useChatSync(targetFriendId: string | undefined) {
     const [chatId, setChatId] = useState<string | null>(null);
@@ -100,6 +110,9 @@ export function useChatSync(targetFriendId: string | undefined) {
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const rawMsg = payload.new;
+                        // Eco de un mensaje propio que ya pintamos en gris: la
+                        // burbuja optimista usa el client_id como id temporal.
+                        const clientId: string | null = rawMsg.client_id ?? null;
 
                         const handleNewMessage = async () => {
                             let finalMsg = rawMsg;
@@ -107,10 +120,7 @@ export function useChatSync(targetFriendId: string | undefined) {
                             if (rawMsg.reply_to_id) {
                                 const { data } = await supabase
                                     .from('messages')
-                                    .select(`
-                                        *,
-                                        reply_to:reply_to_id (id, content, sender_id, type)
-                                    `)
+                                    .select(REPLY_SELECT)
                                     .eq('id', rawMsg.id)
                                     .single();
 
@@ -118,7 +128,13 @@ export function useChatSync(targetFriendId: string | undefined) {
                             }
 
                             setMessages((prev) => {
-                                if (prev.some((m) => m.id === finalMsg.id)) return prev;
+                                const hasTemp = clientId != null && prev.some((m) => m.id === clientId);
+                                if (prev.some((m) => m.id === finalMsg.id)) {
+                                    return hasTemp ? prev.filter((m) => m.id !== clientId) : prev;
+                                }
+                                if (hasTemp) {
+                                    return prev.map((m) => (m.id === clientId ? finalMsg : m));
+                                }
                                 return [finalMsg, ...prev];
                             });
 
@@ -157,6 +173,115 @@ export function useChatSync(targetFriendId: string | undefined) {
         }
     };
 
+    /**
+     * Envío optimista de texto: pinta la burbuja al instante (en gris, estado
+     * "sending"), cifra + guarda en el backend y luego reconcilia la copia
+     * temporal con la fila real (por realtime o por la respuesta del insert,
+     * lo que llegue primero). Si algo falla la burbuja queda como "failed".
+     *
+     * La correlación temp <-> fila real es por `client_id` (uuid generado en el
+     * cliente, con índice único en la tabla). Reintentar reusa el mismo
+     * client_id, así que el índice único hace el envío idempotente: si un
+     * intento anterior sí llegó, el upsert no duplica y recuperamos esa fila.
+     */
+    const sendText = useCallback(
+        async (
+            plainText: string,
+            friendPublicKey: string | undefined,
+            replyTo: any | null,
+            existingClientId?: string
+        ): Promise<SendResult> => {
+            const text = cleanChatMessage(plainText);
+            if (!text || !chatId || !currentUserId) return { ok: false, reason: "invalid" };
+            if (!friendPublicKey) return { ok: false, reason: "no-key" };
+
+            const clientId = existingClientId ?? randomUUID();
+            const replyToId = replyTo?.id ?? null;
+
+            const optimistic = {
+                id: clientId,
+                client_id: clientId,
+                chat_id: chatId,
+                sender_id: currentUserId,
+                content: text,
+                type: "text",
+                is_read: false,
+                created_at: new Date().toISOString(),
+                reply_to_id: replyToId,
+                reply_to: replyTo
+                    ? { id: replyTo.id, content: replyTo.content, sender_id: replyTo.sender_id, type: replyTo.type ?? null }
+                    : null,
+                reply_to_story: null,
+                __status: "sending" as const,
+                __plain: text,
+            };
+
+            // Alta nueva -> se prepende; reintento -> vuelve a "sending" en su sitio.
+            setMessages((prev) =>
+                prev.some((m) => m.id === clientId)
+                    ? prev.map((m) => (m.id === clientId ? { ...m, __status: "sending" as const } : m))
+                    : [optimistic, ...prev]
+            );
+
+            try {
+                const encryptedContent = await vaultCrypto.encryptMessage(text, friendPublicKey);
+                if (!encryptedContent) throw new Error("Encryption failed");
+
+                vaultRAMCache[encryptedContent] = text;
+
+                let { data, error } = await supabase
+                    .from("messages")
+                    .upsert(
+                        {
+                            chat_id: chatId,
+                            sender_id: currentUserId,
+                            content: encryptedContent,
+                            type: "text",
+                            is_read: false,
+                            reply_to_id: replyToId,
+                            client_id: clientId,
+                        },
+                        { onConflict: "client_id", ignoreDuplicates: true }
+                    )
+                    .select(REPLY_SELECT)
+                    .maybeSingle();
+
+                // Sin fila devuelta => ya existía (un intento previo sí llegó): la traemos.
+                if (!error && !data) {
+                    ({ data, error } = await supabase
+                        .from("messages")
+                        .select(REPLY_SELECT)
+                        .eq("client_id", clientId)
+                        .maybeSingle());
+                }
+
+                if (error) throw error;
+                if (!data) throw new Error("Insert returned no row");
+
+                const real = data;
+                // Realtime pudo haber hecho el swap ya; evitamos duplicados.
+                setMessages((prev) => {
+                    const hasTemp = prev.some((m) => m.id === clientId);
+                    if (prev.some((m) => m.id === real.id)) {
+                        return hasTemp ? prev.filter((m) => m.id !== clientId) : prev;
+                    }
+                    return hasTemp
+                        ? prev.map((m) => (m.id === clientId ? real : m))
+                        : [real, ...prev];
+                });
+
+                return { ok: true };
+            } catch (e) {
+                console.error("❌ [SEND] Vault Send Error:", e);
+                setMessages((prev) =>
+                    prev.map((m) => (m.id === clientId ? { ...m, __status: "failed" as const } : m))
+                );
+                return { ok: false, reason: "send-failed" };
+            }
+        },
+        [chatId, currentUserId]
+    );
+
     return {
         chatId,
         messages,
@@ -168,6 +293,7 @@ export function useChatSync(targetFriendId: string | undefined) {
         friendKeyChanged,
         currentUserId,
         loadMoreMessages,
-        markMessagesAsRead
+        markMessagesAsRead,
+        sendText
     };
 }

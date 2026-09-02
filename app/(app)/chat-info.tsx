@@ -22,10 +22,6 @@ import { reportsApi } from "@/api/reports";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { promptReportReason } from "@/utils/moderation";
 
-// "Media" = mensajes con contenido multimedia. Los view-once ya consumidos
-// pasan a `type: 'text'` (ver MediaMessageBubble) → dejan de contar aquí.
-const MEDIA_TYPES = ["image", "video", "image-view-once"];
-
 const accent = getThemeColor("tint");
 
 type FriendKeyInfo = {
@@ -74,12 +70,14 @@ export default function ChatInfoScreen() {
                     chatId
                         ? supabase.from("messages").select("*", { count: "exact", head: true }).eq("chat_id", chatId)
                         : Promise.resolve({ count: 0 } as any),
+                    // "Media" = todo mensaje cuyo type no sea 'text' (image, etc.).
+                    // Los view-once consumidos pasan a 'text' → dejan de contar, correcto.
                     chatId
                         ? supabase
                             .from("messages")
                             .select("*", { count: "exact", head: true })
                             .eq("chat_id", chatId)
-                            .in("type", MEDIA_TYPES)
+                            .neq("type", "text")
                         : Promise.resolve({ count: 0 } as any),
                 ]);
                 if (!active) return;

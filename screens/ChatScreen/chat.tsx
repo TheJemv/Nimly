@@ -30,6 +30,7 @@ import { getThemeColor } from "@/constants/theme";
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import { MessageContent } from "@/components/MessageContent";
 import NymlyCamera from "@/components/NymlyCamera";
+import { ReplyPreview } from "@/components/ReplyPreview";
 import { ReplyStory } from "@/components/ReplyStory";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -37,12 +38,12 @@ import UserAvatar from "@/components/UserAvatar";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { prefetchChatMedia } from "@/utils/mediaPrefetch";
+import { ChatSystemNotice } from "./components/ChatSystemNotice";
 import { DateSeparator } from "./components/DateSeparator";
 import { cornerRadius, decorateMessages, formatBubbleTime, type DecoratedMessage } from "./utils/messageGrouping";
 
 // More
 import { chatApi } from "@/api/chat";
-import { supabase } from "@/lib/supabase";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
 
@@ -57,6 +58,20 @@ export default function ChatScreen() {
    const [isCameraVisible, setCameraVisible] = useState(false);
    const [replyingTo, setReplyingTo] = useState<any>(null);
 
+   // Ids of messages that can't be decrypted on this device. They're removed
+   // from the thread and replaced with a single in-chat notice.
+   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+   const probedRef = useRef<Set<string>>(new Set());
+
+   const markLocked = useCallback((id: string) => {
+      setHiddenIds(prev => {
+         if (prev.has(id)) return prev;
+         const next = new Set(prev);
+         next.add(id);
+         return next;
+      });
+   }, []);
+
    const {
       chatId,
       messages,
@@ -67,7 +82,8 @@ export default function ChatScreen() {
       friendProfile,
       friendKeyChanged,
       currentUserId,
-      loadMoreMessages
+      loadMoreMessages,
+      sendText
    } = useChatSync(targetFriendId);
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
@@ -101,7 +117,8 @@ export default function ChatScreen() {
    const decoratedCache = useRef<Map<string, DecoratedMessage>>(new Map());
    const decoratedMessages = useMemo(() => {
       const next = new Map<string, DecoratedMessage>();
-      const result = decorateMessages(messages, hasMore).map((d) => {
+      const source = hiddenIds.size > 0 ? messages.filter(m => !hiddenIds.has(m.id)) : messages;
+      const result = decorateMessages(source, hasMore).map((d) => {
          const prev = decoratedCache.current.get(d.id);
          if (
             prev &&
@@ -111,6 +128,7 @@ export default function ChatScreen() {
             prev.content === d.content &&
             prev.is_read === d.is_read &&
             prev.type === d.type &&
+            prev.__status === d.__status &&
             prev.reply_to === d.reply_to &&
             prev.reply_to_story === d.reply_to_story
          ) {
@@ -122,7 +140,20 @@ export default function ChatScreen() {
       });
       decoratedCache.current = next;
       return result;
-   }, [messages, hasMore]);
+   }, [messages, hasMore, hiddenIds]);
+
+   // Timestamp of the most recent hidden message — the in-chat key-change notice
+   // is dropped in just before it.
+   const newestHiddenAt = useMemo(() => {
+      if (hiddenIds.size === 0) return null;
+      let max = 0;
+      for (const m of messages) {
+         if (!hiddenIds.has(m.id)) continue;
+         const t = new Date(m.created_at).getTime();
+         if (t > max) max = t;
+      }
+      return max || null;
+   }, [messages, hiddenIds]);
 
    // Parsear el objeto user que viene por parámetro de ruta (si existe)
    const routeUser = useMemo(() => {
@@ -139,6 +170,20 @@ export default function ChatScreen() {
    const avatarConfig = friendProfile?.avatar_config || routeUser?.avatar_config;
    const avatarUrl = friendProfile?.avatar_url || routeUser?.avatar_url;
 
+   const keyChangeNotice = friendKeyChanged
+      ? `@${displayName}'s encryption keys changed · earlier messages can't be opened`
+      : `Some earlier messages can't be opened on this device`;
+
+   // Final FlatList data: decorated (visible) messages with the key-change
+   // notice spliced in at the boundary. List is inverted, so index 0 = newest.
+   const listData = useMemo(() => {
+      if (!newestHiddenAt) return decoratedMessages;
+      const notice = { __system: true, id: 'sys-key-change', __label: keyChangeNotice } as any;
+      const idx = decoratedMessages.findIndex(m => new Date(m.created_at).getTime() <= newestHiddenAt);
+      if (idx === -1) return [...decoratedMessages, notice];
+      return [...decoratedMessages.slice(0, idx), notice, ...decoratedMessages.slice(idx)];
+   }, [decoratedMessages, newestHiddenAt, keyChangeNotice]);
+
    useEffect(() => {
       if (!friendProfile?.public_key && !routeUser?.public_key || messages.length === 0) return;
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
@@ -150,6 +195,46 @@ export default function ChatScreen() {
       if (mediaItems.length > 0) prefetchChatMedia(mediaItems);
    }, [messages, friendProfile?.public_key, routeUser?.public_key]);
 
+   // Pre-decrypt text messages so undecryptable ones (e.g. from before the
+   // contact rotated keys) are filtered out *before* they flash on screen. The
+   // successful ones are warmed into the RAM cache so bubbles render instantly.
+   useEffect(() => {
+      const pubKey = friendProfile?.public_key || routeUser?.public_key;
+      if (!pubKey || messages.length === 0) return;
+
+      let cancelled = false;
+      (async () => {
+         const locked: string[] = [];
+         for (const m of messages) {
+            if (probedRef.current.has(m.id) || m.__status) continue; // skip optimistic bubbles
+            const isTextMsg = (m.type === 'text' || !m.type) && m.content && m.content !== 'OPENED_CAPSULE';
+            if (!isTextMsg) continue;
+
+            const cached = vaultRAMCache[m.content];
+            if (cached && !cached.startsWith('🔒')) { probedRef.current.add(m.id); continue; }
+
+            try {
+               const clear = await vaultCrypto.decryptMessage(m.content, pubKey);
+               if (clear.startsWith('🔒')) locked.push(m.id);
+               else vaultRAMCache[m.content] = clear;
+            } catch {
+               locked.push(m.id);
+            }
+            probedRef.current.add(m.id);
+         }
+
+         if (!cancelled && locked.length > 0) {
+            setHiddenIds(prev => {
+               const next = new Set(prev);
+               locked.forEach(id => next.add(id));
+               return next;
+            });
+         }
+      })();
+
+      return () => { cancelled = true; };
+   }, [messages, friendProfile?.public_key, routeUser?.public_key]);
+
    const lastReadMessageId = useMemo(() => {
       if (!currentUserId) return null;
       const lastRead = messages.find(m => m.sender_id === currentUserId && m.is_read === true);
@@ -157,48 +242,43 @@ export default function ChatScreen() {
    }, [messages, currentUserId]);
 
    const handleSendText = async () => {
-      const cleanedMessage = cleanChatMessage(newMessage);
+      const draft = newMessage;
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
-      if (!cleanedMessage || !chatId || !currentUserId) return;
+      if (!cleanChatMessage(draft) || !chatId || !currentUserId) return;
 
       if (!pubKey) {
          Alert.alert("Not ready yet", "Still setting up the secure connection with this contact. Try again in a moment.");
          return;
       }
 
-      const replyToId = replyingTo?.id || null;
-      // Optimistically clear the composer, but keep what we need to restore on failure.
+      // Clear the composer right away; the message shows instantly as a pending
+      // (grey) bubble and reconciles itself once the backend confirms it.
+      const reply = replyingTo;
       setNewMessage("");
       setReplyingTo(null);
 
-      const restoreComposer = () => {
-         setNewMessage(cleanedMessage);
-         if (replyingTo) setReplyingTo(replyingTo);
-      };
+      const res = await sendText(draft, pubKey, reply);
 
-      try {
-         const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, pubKey);
-         if (!encryptedContent) throw new Error("Encryption failed");
-
-         vaultRAMCache[encryptedContent] = cleanedMessage;
-
-         const { error } = await supabase.from('messages').insert({
-            chat_id: chatId,
-            sender_id: currentUserId,
-            content: encryptedContent,
-            type: 'text',
-            is_read: false,
-            reply_to_id: replyToId,
-         });
-         if (error) throw error;
-      } catch (e) {
-         console.error("❌ [SEND] Vault Send Error:", e);
-         restoreComposer();
-         Alert.alert("Message not sent", "Your message could not be secured and sent. It has been restored to the text box.");
+      // A pending bubble that fails stays in the thread as "Tap to retry", so we
+      // only bounce the text back to the composer for pre-send problems.
+      if (!res.ok && res.reason !== "send-failed") {
+         setNewMessage(draft);
+         if (reply) setReplyingTo(reply);
       }
    };
 
+   const retrySend = useCallback((item: any) => {
+      const pubKey = friendProfile?.public_key || routeUser?.public_key;
+      if (!pubKey) return;
+      // Reuse the same client_id so the unique index keeps the retry idempotent.
+      sendText(item.__plain ?? "", pubKey, item.reply_to ?? null, item.id);
+   }, [friendProfile, routeUser, sendText]);
+
    const renderItem = useCallback(({ item }: { item: any }) => {
+      if (item.__system) {
+         return <ChatSystemNotice text={item.__label} />;
+      }
+
       const mine = item.sender_id === currentUserId;
       const keyToUse = friendProfile?.public_key || routeUser?.public_key || "";
       const showReadReceipt = item.id === lastReadMessageId;
@@ -213,6 +293,9 @@ export default function ChatScreen() {
       const isMedia = !(isText || isViewOnceSender || isOpenedCapsule);
       const corners = cornerRadius(mine, item.__groupPosition);
 
+      const pending = item.__status === 'sending';
+      const failed = item.__status === 'failed';
+
       return (
          <View>
             {item.__separatorLabel ? <DateSeparator label={item.__separatorLabel} /> : null}
@@ -226,40 +309,66 @@ export default function ChatScreen() {
                )}
 
                <View style={styles.revealRow}>
-                  <Animated.View style={mine ? bubbleShiftStyle : undefined}>
+                  <Animated.View style={[
+                     styles.bubbleColumn,
+                     mine ? styles.bubbleColumnMine : styles.bubbleColumnTheirs,
+                     mine ? bubbleShiftStyle : undefined,
+                  ]}>
+                     {replyData && !isOpenedCapsule && (
+                        <ReplyPreview
+                           reply={replyData}
+                           isMine={mine}
+                           friendName={displayName}
+                           currentUserId={currentUserId}
+                           friendPublicKey={keyToUse}
+                        />
+                     )}
+
                      <TouchableOpacity
                         activeOpacity={0.85}
-                        onPress={() => isText && setReplyingTo(item)}
+                        onPress={() => {
+                           if (failed) return retrySend(item);
+                           if (pending) return;
+                           if (isText) setReplyingTo(item);
+                        }}
                         style={[
                            isMedia ? styles.bubbleImage : styles.bubble,
                            mine ? styles.myBubble : styles.theirBubble,
-                           corners
+                           corners,
+                           pending && styles.bubblePending,
                         ]}
                      >
-                        {replyData && !isOpenedCapsule && (
-                           <View style={{ marginBottom: 4 }}>
-                              <Text style={{ color: '#aaa', fontSize: 11 }}>
-                                 Replying to {replyData.sender_id === currentUserId ? "yourself" : displayName}
-                              </Text>
-                           </View>
-                        )}
-
                         {isOpenedCapsule ? (
                            <View style={styles.openedCapsule}>
                               <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
                               <Text style={styles.openedCapsuleText}>Opened</Text>
                            </View>
                         ) : isText ? (
-                           <MessageContent content={item.content} friendPublicKey={keyToUse} />
+                           item.__plain != null ? (
+                              <Text style={styles.plainBubbleText}>{item.__plain}</Text>
+                           ) : (
+                              <MessageContent
+                                 content={item.content}
+                                 friendPublicKey={keyToUse}
+                                 onLocked={() => markLocked(item.id)}
+                              />
+                           )
                         ) : (
                            <MediaMessageBubble
                               filePath={item.content}
                               friendPublicKey={keyToUse}
                               isViewOnce={item.type === 'image-view-once'}
                               isMine={mine}
+                              onLocked={() => markLocked(item.id)}
                            />
                         )}
                      </TouchableOpacity>
+
+                     {(pending || failed) && (
+                        <Text style={[styles.sendStatusText, failed && styles.sendStatusFailed]}>
+                           {failed ? 'Not sent · Tap to retry' : 'Sending…'}
+                        </Text>
+                     )}
                   </Animated.View>
 
                   <Animated.View style={[styles.timeReveal, timeFadeStyle]} pointerEvents="none">
@@ -277,7 +386,7 @@ export default function ChatScreen() {
             </View>
          </View>
       );
-   }, [currentUserId, friendProfile, routeUser, lastReadMessageId, displayName, avatarUrl, avatarConfig, bubbleShiftStyle, timeFadeStyle]);
+   }, [currentUserId, friendProfile, routeUser, lastReadMessageId, displayName, avatarUrl, avatarConfig, bubbleShiftStyle, timeFadeStyle, markLocked, retrySend]);
 
    const handleBurnHistory = () => {
       if (!chatId) return;
@@ -373,7 +482,7 @@ export default function ChatScreen() {
                <FlatList
                   ref={listRef}
                   inverted
-                  data={decoratedMessages}
+                  data={listData}
                   keyExtractor={(item) => item.id}
                   renderItem={renderItem}
                   onEndReached={() => {
@@ -400,14 +509,27 @@ export default function ChatScreen() {
 
          {replyingTo && (
             <View style={styles.replyPreviewBar}>
+               <View style={styles.replyAccent} />
                <View style={styles.replyPreviewContent}>
-                  <Text style={styles.replyPreviewLabel}>
-                     Replying to {replyingTo.sender_id === currentUserId ? "yourself" : displayName}
+                  <Text style={styles.replyPreviewLabel} numberOfLines={1}>
+                     Replying to {replyingTo.sender_id === currentUserId ? "yourself" : `@${displayName}`}
                   </Text>
-                  <MessageContent content={replyingTo.content} friendPublicKey={friendProfile?.public_key || routeUser?.public_key} />
+                  {replyingTo.type === 'image' || replyingTo.type === 'image-view-once' || replyingTo.content === 'OPENED_CAPSULE' ? (
+                     <View style={styles.replyPhotoRow}>
+                        <SymbolView name="photo.fill" size={12} tintColor="#8E8E93" />
+                        <Text style={styles.replyPreviewText}>Photo</Text>
+                     </View>
+                  ) : (
+                     <MessageContent
+                        content={replyingTo.content}
+                        friendPublicKey={friendProfile?.public_key || routeUser?.public_key}
+                        style={styles.replyPreviewText}
+                        numberOfLines={1}
+                     />
+                  )}
                </View>
-               <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                  <SymbolView name="xmark.circle.fill" size={20} tintColor="#666" />
+               <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={8}>
+                  <SymbolView name="xmark.circle.fill" size={22} tintColor="#666" />
                </TouchableOpacity>
             </View>
          )}

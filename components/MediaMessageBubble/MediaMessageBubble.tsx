@@ -9,13 +9,19 @@ import { ActivityIndicator, Alert, Image, Text, TouchableOpacity, View } from 'r
 import FullscreenImageViewer from './FullscreenImageViewer';
 import { styles } from "./MediaMessageBubble.styles";
 
-export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine }: { filePath: string, friendPublicKey: string, isViewOnce: boolean, isMine: boolean }) {
+export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine, onLocked }: { filePath: string, friendPublicKey: string, isViewOnce: boolean, isMine: boolean, onLocked?: () => void }) {
     const [imageUri, setImageUri] = useState<string | null>(vaultRAMCache[filePath] || null);
     const [isLoading, setIsLoading] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
+
+    // Let the chat screen hide media that can't be decrypted on this device
+    // (e.g. sent before the contact's keys changed).
+    useEffect(() => {
+        if (isLocked) onLocked?.();
+    }, [isLocked, onLocked]);
 
     // AUTO-DESCARGA SEGURA PARA FOTOS NORMALES
     useEffect(() => {
