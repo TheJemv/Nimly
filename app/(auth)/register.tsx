@@ -39,7 +39,7 @@ export default function RegisterScreen() {
         }
 
         if (!termsAccepted) {
-            Alert.alert('Terms Required', 'You must accept the Terms of Use to create an account.');
+            Alert.alert('Confirmation required', 'You must be 18 or older and accept the Terms of Use to create an account.');
             return;
         }
 
@@ -145,13 +145,14 @@ export default function RegisterScreen() {
                             </View>
 
                             <Text style={[styles.termsText, { color: textSec }]}>
-                                I have read and accept the{' '}
+                                I am 18 or older and I have read and accept the{' '}
                                 <Text
                                     style={[styles.termsLink, { color: accent }]}
                                     onPress={() => router.push('/(auth)/terms')}
                                 >
                                     Terms of Use
                                 </Text>
+                                , including the zero-tolerance policy for objectionable content and abusive behavior.
                             </Text>
                         </TouchableOpacity>
 

@@ -67,7 +67,7 @@ export default function WelcomeScreen() {
                     </TouchableOpacity>
 
                     <Text style={[styles.legal, { color: textSec }]}>
-                        By continuing you agree to Nimly's{' '}
+                        You must be 18+ to use Nimly. By continuing you agree to the{' '}
                         <Text
                             style={{ color: accent, fontWeight: '700', textDecorationLine: 'underline' }}
                             onPress={() => router.push('/(auth)/terms')}

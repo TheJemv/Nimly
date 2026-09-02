@@ -47,7 +47,7 @@ export default function TermsModal() {
 
                 <Section title="1. Eligibility" accent={accent}>
                     <Body color={textSec}>
-                        You must be at least 17 years old to use Nimly. By registering, you confirm that you meet this requirement.
+                        You must be at least 18 years old to use Nimly. By registering, you confirm that you are 18 or older.
                     </Body>
                 </Section>
 
