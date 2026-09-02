@@ -1,4 +1,5 @@
 import { chatApi } from "@/api/chat";
+import { useAppForeground } from "@/hooks/useAppForeground";
 import { supabase } from "@/lib/supabase";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { contactKeys, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
@@ -25,6 +26,9 @@ export function useChatSync(targetFriendId: string | undefined) {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     // true si la public key del contacto cambió respecto a la última vista en este dispositivo
     const [friendKeyChanged, setFriendKeyChanged] = useState(false);
+    // Se incrementa al volver de segundo plano para forzar la reconexión del
+    // canal de realtime (iOS mata el WebSocket mientras la app está fuera).
+    const [resyncNonce, setResyncNonce] = useState(0);
 
     // Marcar mensajes como leídos
     const markMessagesAsRead = useCallback(async (cId: string) => {
@@ -54,12 +58,56 @@ export function useChatSync(targetFriendId: string | undefined) {
             }
 
             setMessages(prev => offset === 0 ? fetchedData : [...prev, ...fetchedData]);
-            
+
             return fetchedData;
         } catch (e) {
             console.error('❌ [FETCH] Error:', e);
         }
     }, []);
+
+    // Trae los mensajes recientes y fusiona los que falten, sin tocar la
+    // paginación ni las burbujas optimistas. Se usa al volver de segundo plano.
+    const catchUpMessages = useCallback(async (cId: string) => {
+        try {
+            const { data } = await supabase
+                .from('messages')
+                .select(`
+                    *,
+                    reply_to:reply_to_id (id, content, sender_id, type),
+                    reply_to_story:reply_to_story_id (id, media_url, user_id)
+                `)
+                .eq('chat_id', cId)
+                .order('created_at', { ascending: false })
+                .limit(PAGE_SIZE);
+
+            if (!data || data.length === 0) return;
+
+            let addedFromFriend = false;
+            setMessages((prev) => {
+                const known = new Set(prev.map((m) => m.id));
+                const missing = data.filter((m) => !known.has(m.id));
+                // Reconcilia también updates (is_read, OPENED_CAPSULE, …) de filas ya conocidas.
+                const byId = new Map(data.map((m) => [m.id, m]));
+                const reconciled = prev.map((m) => (byId.has(m.id) && !m.__status ? { ...m, ...byId.get(m.id) } : m));
+                if (missing.length === 0) return reconciled;
+
+                addedFromFriend = missing.some((m) => m.sender_id === targetFriendId);
+                return [...missing, ...reconciled].sort(
+                    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+            });
+
+            if (addedFromFriend) markMessagesAsRead(cId);
+        } catch (e) {
+            console.error('❌ [CATCHUP] Error:', e);
+        }
+    }, [targetFriendId, markMessagesAsRead]);
+
+    // Al volver a primer plano: reabrir canal (nonce) + traer lo que se perdió.
+    useAppForeground(() => {
+        setResyncNonce((n) => n + 1);
+        if (chatId) catchUpMessages(chatId);
+    });
 
     useEffect(() => {
         let isMounted = true;
@@ -161,7 +209,7 @@ export function useChatSync(targetFriendId: string | undefined) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [chatId, targetFriendId, markMessagesAsRead]);
+    }, [chatId, targetFriendId, markMessagesAsRead, resyncNonce]);
 
     const loadMoreMessages = async () => {
         if (loadingMore || !hasMore || !chatId) return;

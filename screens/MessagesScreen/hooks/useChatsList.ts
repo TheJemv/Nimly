@@ -1,3 +1,4 @@
+import { useAppForeground } from '@/hooks/useAppForeground';
 import { supabase } from '@/lib/supabase';
 import { debounce } from '@/utils/debounce';
 import { useEffect, useRef, useState } from 'react';
@@ -19,6 +20,8 @@ export function useChatsList() {
     const [myId, setMyId] = useState<string | null>(null);
 
     const cancelledRef = useRef(false);
+    // Se incrementa al volver de segundo plano para recrear el canal de realtime.
+    const [resyncNonce, setResyncNonce] = useState(0);
 
     const fetchChats = async (showLoading = true) => {
         try {
@@ -70,7 +73,8 @@ export function useChatsList() {
 
     useEffect(() => {
         cancelledRef.current = false;
-        fetchChats();
+        if (resyncNonce === 0) fetchChats();
+        else fetchChats(false); // al reconectar no mostramos el spinner de carga
 
         // RLS limita el realtime a mis chats; el debounce evita un refetch por
         // cada mensaje individual cuando llegan varios seguidos.
@@ -90,7 +94,10 @@ export function useChatsList() {
             debouncedRefetch.cancel();
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [resyncNonce]);
+
+    // Al volver a primer plano: recrear canal + refetch (el WS pudo morir).
+    useAppForeground(() => setResyncNonce((n) => n + 1));
 
     return { chats, loading, refreshing, myId, onRefresh };
 }

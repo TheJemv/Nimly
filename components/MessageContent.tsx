@@ -13,8 +13,10 @@ interface MessageContentProps {
     onLocked?: () => void;
 }
 
+/** Transient placeholder shown while the packet is still being decrypted. */
+const isDecrypting = (t: string) => t.startsWith("🔒") && t.includes("Decrypting");
 /** A decrypted string still showing the lock glyph means it never opened. */
-const isLockedText = (t: string) => t.startsWith("🔒") && !t.includes("Decrypting");
+const isLockedText = (t: string) => t.startsWith("🔒") && !isDecrypting(t);
 
 export const MessageContent = memo(({ content, friendPublicKey, style, numberOfLines, onLocked }: MessageContentProps) => {
     const initialText = vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")
@@ -57,6 +59,9 @@ export const MessageContent = memo(({ content, friendPublicKey, style, numberOfL
     useEffect(() => {
         if (isLockedText(decryptedText)) onLocked?.();
     }, [decryptedText, onLocked]);
+
+    // Don't flash a "Decrypting…" placeholder — render nothing until it resolves.
+    if (isDecrypting(decryptedText)) return null;
 
     return (
         <Text style={[styles.messageText, style]} numberOfLines={numberOfLines}>

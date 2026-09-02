@@ -12,13 +12,16 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+   FadeInDown,
+   FadeInUp,
+   FadeOutDown,
    useAnimatedStyle,
    useSharedValue,
    withSpring
 } from "react-native-reanimated";
 
 // Expo
-import { Button, ContextMenu, Host, Image as SwiftImage } from "@expo/ui/swift-ui";
+import { Button, Host, Menu, Image as SwiftImage } from "@expo/ui/swift-ui";
 import { GlassView } from "expo-glass-effect";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -378,9 +381,13 @@ export default function ChatScreen() {
                   </Animated.View>
 
                   {showReadReceipt && (
-                     <View style={styles.readReceiptContainer}>
+                     <Animated.View
+                        entering={FadeInUp.duration(260)}
+                        exiting={FadeOutDown.duration(200)}
+                        style={styles.readReceiptContainer}
+                     >
                         <UserAvatar size={16} avatar_url={avatarUrl} avatar_config={avatarConfig} />
-                     </View>
+                     </Animated.View>
                   )}
                </View>
             </View>
@@ -445,15 +452,12 @@ export default function ChatScreen() {
                headerRight: () => (
                   Platform.OS === 'ios' ? (
                      <Host style={{ width: 35, height: 35 }}>
-                        <ContextMenu>
-                           <ContextMenu.Items>
-                              <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
-                              <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
-                           </ContextMenu.Items>
-                           <ContextMenu.Trigger>
-                              <SwiftImage systemName="ellipsis" />
-                           </ContextMenu.Trigger>
-                        </ContextMenu>
+                        {/* Menu opens on a single tap; ContextMenu needed a
+                            long-press that often got stuck racing the list. */}
+                        <Menu label={<SwiftImage systemName="ellipsis" />}>
+                           <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
+                           <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
+                        </Menu>
                      </Host>
                   ) : (
                      <TouchableOpacity onPress={handleBurnHistory} style={{ padding: 8 }}>
@@ -508,7 +512,11 @@ export default function ChatScreen() {
          )}
 
          {replyingTo && (
-            <View style={styles.replyPreviewBar}>
+            <Animated.View
+               entering={FadeInDown.duration(200)}
+               exiting={FadeOutDown.duration(160)}
+               style={styles.replyPreviewBar}
+            >
                <View style={styles.replyAccent} />
                <View style={styles.replyPreviewContent}>
                   <Text style={styles.replyPreviewLabel} numberOfLines={1}>
@@ -531,7 +539,7 @@ export default function ChatScreen() {
                <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={8}>
                   <SymbolView name="xmark.circle.fill" size={22} tintColor="#666" />
                </TouchableOpacity>
-            </View>
+            </Animated.View>
          )}
 
          <View style={styles.inputBar}>
