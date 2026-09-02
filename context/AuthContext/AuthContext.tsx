@@ -23,6 +23,8 @@ interface AuthContextValue {
     isLoading: boolean;
     vault: {
         state: VaultState;
+        /** La cuenta ya tiene llaves en otro dispositivo activo. */
+        otherDeviceActive: boolean;
         confirmNewIdentity: () => Promise<void>;
     };
 }
@@ -32,6 +34,7 @@ export const AuthContext = createContext<AuthContextValue>({
     isLoading: true,
     vault: {
         state: 'loading',
+        otherDeviceActive: false,
         confirmNewIdentity: async () => { },
     },
 });
@@ -41,16 +44,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     const {
-        setupSecuritySync,
         setupVaultIdentity,
         purgeVaultData,
         vaultState,
+        otherDeviceActive,
         confirmNewIdentity,
     } = useVaultSecurity();
     useProtectedRoute(session, isLoading);
 
     useEffect(() => {
-        let securitySubscription: any = null;
         let isMounted = true;
         let hasChecked = false;
 
@@ -68,10 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setSession(currentSession);
                 setIsLoading(false);
 
-                if (currentSession) {
-                    setupVaultIdentity(currentSession);
-                    securitySubscription = await setupSecuritySync(currentSession.user.id);
-                }
+                // El vault decide por sí mismo cuándo reclamar el dispositivo
+                // (solo si la bóveda queda usable aquí, no en 'needs_new_identity').
+                if (currentSession) setupVaultIdentity(currentSession);
             } catch (e) {
                 console.error("Session check failed:", e);
                 if (isMounted) {
@@ -89,15 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setSession(currentSession);
                 if (currentSession) {
                     setupVaultIdentity(currentSession);
-                    if (!securitySubscription) {
-                        securitySubscription = await setupSecuritySync(currentSession.user.id);
-                    }
                 } else if (event === 'SIGNED_OUT') {
                     await purgeVaultData();
-                    if (securitySubscription) {
-                        supabase.removeChannel(securitySubscription);
-                        securitySubscription = null;
-                    }
                 }
             } catch (e) {
                 console.error("Auth state change handler failed:", e);
@@ -110,7 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => {
             isMounted = false;
             authListener.subscription.unsubscribe();
-            if (securitySubscription) supabase.removeChannel(securitySubscription);
         };
     }, []);
 
@@ -121,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 isLoading,
                 vault: {
                     state: vaultState,
+                    otherDeviceActive,
                     confirmNewIdentity,
                 },
             }}
