@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
+import { buildDefaultAvatarConfig, buildDefaultAvatarUrl } from '@/constants/dicebear';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { User as Profile } from '@/types/types';
@@ -32,7 +33,23 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
                 .single();
 
             if (error) throw error;
-            setProfile(data);
+
+            // Red de seguridad: si por alguna razón el perfil quedó sin avatar
+            // (trigger no aplicado, cuenta antigua, etc.) generamos uno a partir
+            // del username y lo persistimos una sola vez.
+            if (data && !data.avatar_config && data.username) {
+                const avatar_config = buildDefaultAvatarConfig(data.username);
+                const avatar_url = buildDefaultAvatarUrl(data.username);
+                setProfile({ ...data, avatar_config, avatar_url });
+
+                const { error: patchError } = await supabase
+                    .from('profiles')
+                    .update({ avatar_config, avatar_url })
+                    .eq('id', session.user.id);
+                if (patchError && __DEV__) console.warn('No se pudo guardar el avatar por defecto:', patchError.message);
+            } else {
+                setProfile(data);
+            }
         } catch (error) {
             console.error("Error loading global profile:", error);
         } finally {

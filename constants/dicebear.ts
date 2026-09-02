@@ -23,6 +23,30 @@ import * as pixelArtNeutral from '@dicebear/pixel-art-neutral';
 
 export const COLORES_FONDO = ["DC143C", "D27D46", "76C2D9", "E5A0A0", "B2A4D4", "94C9A9", "E6C975", "161616"];
 
+/**
+ * Avatar por defecto derivado del username. Debe coincidir con lo que genera el
+ * trigger `handle_new_user_profile` en la base de datos, para que un perfil
+ * creado por el trigger y uno reparado desde el cliente se vean idénticos.
+ */
+export const DEFAULT_AVATAR_STYLE_ID = "adventurer";
+export const DEFAULT_AVATAR_BG = "b6e3f4";
+
+export function buildDefaultAvatarConfig(username: string) {
+    const seed = (username || "user").trim() || "user";
+    return {
+        styleId: DEFAULT_AVATAR_STYLE_ID,
+        options: {
+            seed,
+            backgroundColor: [DEFAULT_AVATAR_BG],
+        },
+    };
+}
+
+export function buildDefaultAvatarUrl(username: string) {
+    const seed = encodeURIComponent((username || "user").trim() || "user");
+    return `https://api.dicebear.com/7.x/${DEFAULT_AVATAR_STYLE_ID}/svg?seed=${seed}&backgroundColor=${DEFAULT_AVATAR_BG}`;
+}
+
 export const ESTILOS_DICEBEAR = [
     { id: "adventurer", name: "Adventurer", collection: adventurer },
     { id: "adventurerNeutral", name: "Adventurer N", collection: adventurerNeutral },

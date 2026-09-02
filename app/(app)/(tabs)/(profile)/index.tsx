@@ -13,7 +13,7 @@ import { friendsApi } from "@/api/friends";
 import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
 import { ThemedText } from "@/components/themed-text";
-import UserAvatar from "@/components/UserAvatar";
+import ZoomableAvatar from "@/components/ZoomableAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useProfile } from "@/context/ProfileContext";
 
@@ -119,9 +119,14 @@ export default function ProfileScreen() {
             >
                 <View style={styles.topContainerMain}>
                     <View style={styles.topContainer}>
-                        <TouchableOpacity onPress={openAvatarSelect} style={styles.avatarContainer}>
-                            <UserAvatar size={88} />
-                        </TouchableOpacity>
+                        <View style={styles.avatarContainer}>
+                            <ZoomableAvatar
+                                size={88}
+                                avatar_config={profile?.avatar_config}
+                                avatar_url={profile?.avatar_url}
+                                onPress={openAvatarSelect}
+                            />
+                        </View>
 
                         <View style={styles.statsRow}>
                             <TouchableOpacity style={styles.statItem} onPress={openFriendsList}>

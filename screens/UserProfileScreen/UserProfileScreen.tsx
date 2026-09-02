@@ -1,7 +1,7 @@
 import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
 import { ThemedText } from '@/components/themed-text';
-import UserAvatar from "@/components/UserAvatar";
+import ZoomableAvatar from "@/components/ZoomableAvatar";
 import { getThemeColor } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
@@ -122,7 +122,7 @@ export default function UserProfileScreen() {
                     <View style={styles.headerSection}>
                         <View style={styles.topRow}>
                             <View style={[styles.avatarWrapper, { borderColor: isAccepted ? '#4ade80' : glassBorder, display: "flex", alignItems: "center", justifyContent: "center" }]}>
-                                <UserAvatar avatar_url={displayAvatarUrl} avatar_config={displayAvatarConfig} size={94} />
+                                <ZoomableAvatar avatar_url={displayAvatarUrl} avatar_config={displayAvatarConfig} size={94} />
                             </View>
 
                             {/* Solo muestra los stats cuando ya terminó de cargar */}
