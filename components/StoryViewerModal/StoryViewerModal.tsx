@@ -12,7 +12,7 @@ import {
     Animated,
     FlatList,
     Image,
-    KeyboardAvoidingView,
+    Keyboard,
     Modal,
     PanResponder,
     Platform,
@@ -26,6 +26,7 @@ import {
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CenterToast } from "../CenterToast";
 import UserAvatar from "../UserAvatar";
 import { styles } from "./StoryViewerModal.styles";
 
@@ -57,8 +58,47 @@ export default function StoryViewerModal({
 }: StoryViewerModalProps) {
     const insets = useSafeAreaInsets();
     const { blockLocally, unblockLocally } = useBlockedUsers();
-    const topSafePadding =
-        insets.top > 0 ? insets.top + 4 : Platform.OS === "ios" ? 50 : 20;
+    // Story card starts just below the status bar.
+    const cardTop = insets.top > 0 ? insets.top : Platform.OS === "ios" ? 44 : 20;
+    // Progress bars / header sit a touch inside the rounded top edge.
+    const topSafePadding = cardTop + 10;
+
+    // Height reserved at the bottom for the reply/actions dock. The story media
+    // stops here (rounded corners) instead of running under the input.
+    const DOCK_HEIGHT = insets.bottom + 72;
+
+    // Bumped on every successful story reply to fire the "Sent" toast.
+    const [sentNonce, setSentNonce] = useState(0);
+
+    // Keep the reply dock sitting flush on top of the keyboard. A
+    // KeyboardAvoidingView inside a Modal misbehaves, so we drive the bottom
+    // padding from the keyboard events directly (animated to match iOS).
+    const dockPad = useRef(new Animated.Value(insets.bottom)).current;
+    useEffect(() => {
+        const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+        const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+        const showSub = Keyboard.addListener(showEvent, (e) => {
+            const h = e.endCoordinates?.height ?? 0;
+            Animated.timing(dockPad, {
+                toValue: Platform.OS === "ios" ? Math.max(h, insets.bottom) : 0,
+                duration: (e as any).duration ?? 250,
+                useNativeDriver: false,
+            }).start();
+        });
+        const hideSub = Keyboard.addListener(hideEvent, (e) => {
+            Animated.timing(dockPad, {
+                toValue: insets.bottom,
+                duration: (e as any)?.duration ?? 200,
+                useNativeDriver: false,
+            }).start();
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, [dockPad, insets.bottom]);
 
     const {
         currentUserIdx,
@@ -308,7 +348,7 @@ export default function StoryViewerModal({
         loadingReplyStory,
         setReplyTextStory,
         handleReplyStory,
-    } = useReplyStory(currentGroup, currentStory.id)
+    } = useReplyStory(currentGroup, currentStory.id, () => setSentNonce((n) => n + 1))
 
     return (
         <Modal
@@ -339,34 +379,34 @@ export default function StoryViewerModal({
                     </View>
                 )}
 
-                {isVideo ? (
-                    <VideoView
-                        key={currentStory.id}
-                        player={videoPlayer}
-                        style={styles.storyMedia}
-                        nativeControls={false}
-                        contentFit="cover"
-                        onFirstFrameRender={handleMediaReady}
-                    />
-                ) : (
-                    <Image
-                        key={currentStory.id}
-                        source={{ uri: currentStory.media_url, cache: "force-cache" }}
-                        style={styles.storyMedia}
-                        resizeMode="cover"
-                        fadeDuration={0}
-                        onLoad={handleMediaReady}
-                    />
-                )}
+                <View style={[styles.mediaCard, { top: cardTop, bottom: DOCK_HEIGHT }]}>
+                    {isVideo ? (
+                        <VideoView
+                            key={currentStory.id}
+                            player={videoPlayer}
+                            style={styles.storyMedia}
+                            nativeControls={false}
+                            contentFit="cover"
+                            onFirstFrameRender={handleMediaReady}
+                        />
+                    ) : (
+                        <Image
+                            key={currentStory.id}
+                            source={{ uri: currentStory.media_url, cache: "force-cache" }}
+                            style={styles.storyMedia}
+                            resizeMode="cover"
+                            fadeDuration={0}
+                            onLoad={handleMediaReady}
+                        />
+                    )}
 
-                <View style={styles.touchOverlay}>
-                    <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
-                    <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapRight} />
+                    <View style={styles.touchOverlay}>
+                        <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
+                        <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapRight} />
+                    </View>
                 </View>
 
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : undefined}
-                    keyboardVerticalOffset={Platform.OS === "ios" ? -insets.bottom + 54 : 0}
+                <View
                     style={[styles.uiOverlay, { paddingTop: topSafePadding }, isHolding && styles.hiddenUI]}
                     pointerEvents="box-none"
                 >
@@ -418,8 +458,17 @@ export default function StoryViewerModal({
                             </View>
                         </View>
                     </View>
+                </View>
 
-                    <View style={[styles.footer, { paddingBottom: 20 }]}>
+                <Animated.View
+                    style={[
+                        styles.footerDock,
+                        { paddingBottom: dockPad },
+                        isHolding && styles.hiddenUI,
+                    ]}
+                    pointerEvents="box-none"
+                >
+                    <View style={styles.footer}>
                         {currentGroup.is_me ? (
                             <View style={styles.myActions}>
                                 <TouchableOpacity
@@ -435,12 +484,16 @@ export default function StoryViewerModal({
                                 </TouchableOpacity>
                             </View>
                         ) : (
-                            // --- SCROLL VIEW PARA EL TECLADO ---
+                            // ScrollView (scroll activo, sólo acotado por maxHeight)
+                            // para que keyboardShouldPersistTaps surta efecto: sin
+                            // esto el primer tap al botón se lo come el cierre del
+                            // teclado. Ver facebook/react-native#28871.
                             <ScrollView
+                                style={styles.replyRowScroll}
                                 contentContainerStyle={styles.actionsContainer}
                                 keyboardShouldPersistTaps="always"
-                                scrollEnabled={false}
-                                style={{ flexGrow: 0 }}
+                                showsVerticalScrollIndicator={false}
+                                bounces={false}
                             >
                                 <TextInput
                                     style={styles.textInputReply}
@@ -454,11 +507,14 @@ export default function StoryViewerModal({
                                     value={replyTextStory}
 
                                     returnKeyType="send"
+                                    blurOnSubmit={false}
                                     onSubmitEditing={handleReplyStory}
                                 />
 
                                 {replyTextStory ? (
-                                    <TouchableOpacity disabled={loadingReplyStory} onPress={handleReplyStory} style={styles.likeButton} activeOpacity={0.8}>
+                                    // onPressIn (no onPress): fallback extra por si
+                                    // el tap se pierde al cerrarse el teclado.
+                                    <TouchableOpacity disabled={loadingReplyStory} onPressIn={handleReplyStory} hitSlop={8} style={styles.likeButton} activeOpacity={0.8}>
                                         {loadingReplyStory ? (
                                             <ActivityIndicator color={getThemeColor("tint")} />
                                         ) : (
@@ -481,7 +537,7 @@ export default function StoryViewerModal({
                             </ScrollView>
                         )}
                     </View>
-                </KeyboardAvoidingView>
+                </Animated.View>
 
                 {isViewsSheetOpen && (
                     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -525,6 +581,8 @@ export default function StoryViewerModal({
                         </Animated.View>
                     </View>
                 )}
+
+                <CenterToast message="Sent" trigger={sentNonce} />
             </Animated.View>
         </Modal>
     );

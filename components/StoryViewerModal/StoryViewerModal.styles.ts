@@ -1,7 +1,11 @@
 import { Colors } from "@/constants/theme";
 import { Dimensions, StyleSheet } from "react-native";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+/** Rounded bottom corners of the story media, matching Instagram. */
+const STORY_CARD_RADIUS = 24;
+
 export const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -13,12 +17,23 @@ export const styles = StyleSheet.create({
         alignItems: "center",
         zIndex: 2,
     },
+    // Media lives in a rounded card that starts below the status bar and stops
+    // above the reply dock. `top` / `bottom` are set inline from the safe-area
+    // insets.
+    mediaCard: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        overflow: "hidden",
+        backgroundColor: "#000",
+        borderRadius: STORY_CARD_RADIUS,
+    },
     storyMedia: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
         position: "absolute",
         top: 0,
         left: 0,
+        right: 0,
+        bottom: 0,
     },
     uiOverlay: {
         ...StyleSheet.absoluteFill,
@@ -98,17 +113,32 @@ export const styles = StyleSheet.create({
     },
     touchLeft: { width: "30%", height: "100%" },
     touchRight: { width: "70%", height: "100%" },
-    footer: { paddingHorizontal: 20, marginBottom: 20 },
-    actionsContainer: { alignItems: "center", display: "flex", flexDirection: "row", gap: 12 },
+    // Bottom dock: pinned to the screen bottom, lifts with the keyboard.
+    footerDock: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    footer: {
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 10,
+    },
+    actionsContainer: { alignItems: "center", display: "flex", flexDirection: "row", gap: 12, minHeight: 46 },
+    // Thin wrapper so `keyboardShouldPersistTaps` works (a plain View can't do it,
+    // and `scrollEnabled={false}` disables persistTaps). Fixed height keeps it
+    // laying out like the row it wraps; it never actually scrolls.
+    replyRowScroll: { flexGrow: 0, height: 50 },
     likeButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.55)",
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.2)",
+        borderColor: "rgba(255,255,255,0.16)",
         flexDirection: "row",
         gap: 4,
     },
@@ -188,9 +218,9 @@ export const styles = StyleSheet.create({
     },
     textInputReply: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.55)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.2)",
+        borderColor: "rgba(255,255,255,0.16)",
         paddingVertical: 12,
         paddingHorizontal: 16,
         borderRadius: 22,

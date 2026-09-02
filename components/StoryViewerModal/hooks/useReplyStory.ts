@@ -7,21 +7,23 @@ import { supabase } from "@/lib/supabase";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { vaultCrypto } from "@/utils/crypto";
 
-export function useReplyStory(currentGroup: any, currentStoryId: any) {
+export function useReplyStory(currentGroup: any, currentStoryId: any, onSent?: () => void) {
     const { session } = useContext(AuthContext)
 
     const [replyTextStory, setReplyTextStory] = useState<string>("")
     const [loadingReplyStory, setLoadingReplyStory] = useState<boolean>(false)
 
     const handleReplyStory = async () => {
-        if (!currentStoryId) return
-        if (loadingReplyStory) return
-        Keyboard.dismiss();
+        if (!currentStoryId || loadingReplyStory) return
 
+        const cleanedMessage = cleanChatMessage(replyTextStory);
+        if (!cleanedMessage) return
+
+        // Don't dismiss the keyboard here — doing it before the tap is processed
+        // is what made the send button need a second tap. We close it *after* a
+        // successful send instead.
+        setLoadingReplyStory(true)
         try {
-            setLoadingReplyStory(true)
-            if (!replyTextStory) return
-            const cleanedMessage = cleanChatMessage(replyTextStory);
             const targetFriendId = currentGroup.user_id
 
             const chatId = await chatApi.getOrCreateChat(targetFriendId)
@@ -53,8 +55,10 @@ export function useReplyStory(currentGroup: any, currentStoryId: any) {
             }
 
             setReplyTextStory("")
+            Keyboard.dismiss()
+            onSent?.()
         } catch (error) {
-            console.error("handleReplyStory failed:", error); // 👈 ESTO es lo que te faltaba
+            console.error("handleReplyStory failed:", error);
         } finally {
             setLoadingReplyStory(false)
         }

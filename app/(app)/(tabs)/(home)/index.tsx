@@ -108,6 +108,10 @@ export default function HomeScreen() {
             showsVerticalScrollIndicator={false}
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{ paddingBottom: 120, paddingTop: 12 }}
+            // Without this, a tap on a button inside the Story viewer modal (which
+            // lives in this tree) is swallowed to dismiss the keyboard and needs
+            // a second tap. See facebook/react-native#28871.
+            keyboardShouldPersistTaps="handled"
             refreshControl={
                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor("tint")} />
             }
