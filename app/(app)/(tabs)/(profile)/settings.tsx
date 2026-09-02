@@ -2,9 +2,11 @@
 import { ThemedText } from "@/components/themed-text";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
+import * as Clipboard from "expo-clipboard";
 import Constants from "expo-constants";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import * as Updates from "expo-updates";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -32,6 +34,63 @@ export default function SettingsScreen() {
     const [bio, setBio] = useState("");
     const [initialBio, setInitialBio] = useState("");
     const [updating, setUpdating] = useState(false);
+
+    // --- Info de versión / OTA (expo-updates) ---
+    const { currentlyRunning, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
+    const [otaStatus, setOtaStatus] = useState<string | null>(null);
+    const [checkingOta, setCheckingOta] = useState(false);
+
+    const appVersion = Constants.expoConfig?.version ?? "—";
+    const runtimeVersion =
+        (typeof Updates.runtimeVersion === "string" && Updates.runtimeVersion) || "—";
+    const otaChannel = currentlyRunning?.channel ?? Updates.channel ?? "—";
+    const isEmbedded = currentlyRunning?.isEmbeddedLaunch ?? true;
+    const otaId = isEmbedded ? "Embedded (no OTA)" : (currentlyRunning?.updateId ?? "—");
+    const otaShortId = isEmbedded ? otaId : `${otaId.slice(0, 8)}…`;
+    const otaDate = currentlyRunning?.createdAt
+        ? new Date(currentlyRunning.createdAt).toLocaleString()
+        : "—";
+
+    const diagnostics =
+        `Nimly v${appVersion}\n` +
+        `Runtime: ${runtimeVersion}\n` +
+        `Channel: ${otaChannel}\n` +
+        `Update: ${otaId}\n` +
+        `Published: ${otaDate}\n` +
+        `Platform: ${Platform.OS}`;
+
+    async function checkForOta() {
+        // Si ya hay uno descargado esperando, reiniciar es lo único que falta.
+        if (isUpdatePending) {
+            await Updates.reloadAsync();
+            return;
+        }
+        setOtaStatus(null);
+        setCheckingOta(true);
+        try {
+            const res = await Updates.checkForUpdateAsync();
+            if (res.isAvailable) {
+                setOtaStatus("Update found, downloading…");
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+            } else {
+                setOtaStatus("You're on the latest version.");
+            }
+        } catch (e: any) {
+            setOtaStatus(
+                __DEV__
+                    ? "OTA updates don't run in development."
+                    : `Check failed: ${e?.message ?? e}`
+            );
+        } finally {
+            setCheckingOta(false);
+        }
+    }
+
+    async function copyDiagnostics() {
+        await Clipboard.setStringAsync(diagnostics);
+        setOtaStatus("Diagnostics copied to clipboard.");
+    }
 
     // Temas del sistema
     const bg = getThemeColor('background');
@@ -165,9 +224,68 @@ export default function SettingsScreen() {
                         </TouchableOpacity>
                     </View>
 
+                    {/* SECCIÓN: SYSTEM / OTA */}
+                    <View style={styles.section}>
+                        <ThemedText style={[styles.label, { color: accent }]}>SYSTEM</ThemedText>
+
+                        <TouchableOpacity
+                            style={styles.infoCard}
+                            activeOpacity={0.7}
+                            onLongPress={copyDiagnostics}
+                        >
+                            <View style={styles.infoRow}>
+                                <ThemedText style={styles.infoKey}>App version</ThemedText>
+                                <ThemedText style={styles.infoVal}>v{appVersion}</ThemedText>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <ThemedText style={styles.infoKey}>Runtime</ThemedText>
+                                <ThemedText style={styles.infoVal}>{runtimeVersion}</ThemedText>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <ThemedText style={styles.infoKey}>Channel</ThemedText>
+                                <ThemedText style={styles.infoVal}>{otaChannel}</ThemedText>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <ThemedText style={styles.infoKey}>Update</ThemedText>
+                                <ThemedText style={styles.infoVal} numberOfLines={1}>{otaShortId}</ThemedText>
+                            </View>
+                            <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                                <ThemedText style={styles.infoKey}>Published</ThemedText>
+                                <ThemedText style={styles.infoVal} numberOfLines={1}>{otaDate}</ThemedText>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={checkForOta}
+                            disabled={checkingOta}
+                        >
+                            <View style={[styles.iconBox, { backgroundColor: '#333' }]}>
+                                {checkingOta
+                                    ? <ActivityIndicator size="small" color="#FFF" />
+                                    : <SymbolView name="arrow.triangle.2.circlepath" size={18} tintColor="#FFF" />}
+                            </View>
+                            <ThemedText style={styles.menuText}>
+                                {isUpdatePending
+                                    ? "Restart to apply update"
+                                    : isUpdateAvailable
+                                        ? "Downloading update…"
+                                        : "Check for updates"}
+                            </ThemedText>
+                            <SymbolView name="chevron.right" size={14} tintColor={textSec} />
+                        </TouchableOpacity>
+
+                        {otaStatus && (
+                            <ThemedText style={styles.otaStatus}>{otaStatus}</ThemedText>
+                        )}
+                        <ThemedText style={styles.hintText}>
+                            Long-press the card to copy diagnostics.
+                        </ThemedText>
+                    </View>
+
                     {/* Versión actualizada */}
                     <ThemedText style={styles.versionText}>
-                        Nimly Discrete v{Constants.expoConfig?.version ?? ''}
+                        Nimly v{appVersion}
                     </ThemedText>
                 </View>
             </ScrollView>
@@ -194,5 +312,25 @@ const styles = StyleSheet.create({
     },
     iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     menuText: { flex: 1, fontSize: 16, fontWeight: '500' },
+    infoCard: {
+        backgroundColor: '#111',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        paddingHorizontal: 14,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        gap: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(255,255,255,0.08)',
+    },
+    infoKey: { fontSize: 13, opacity: 0.5, flexShrink: 0 },
+    infoVal: { fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+    otaStatus: { fontSize: 12, opacity: 0.7, marginTop: 4, textAlign: 'center' },
+    hintText: { fontSize: 11, opacity: 0.3, textAlign: 'center' },
     versionText: { textAlign: 'center', fontSize: 12, opacity: 0.2, marginTop: 20 }
 });
