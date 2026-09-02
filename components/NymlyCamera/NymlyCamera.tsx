@@ -311,7 +311,7 @@ export default function NymlyCamera({
                                     }}
                                 >
                                     <SymbolView name="infinity" size={24} tintColor="#fff" />
-                                    <Text style={styles.decisionText}>Enviar al Chat</Text>
+                                    <Text style={styles.decisionText}>Send to Chat</Text>
                                 </TouchableOpacity>
 
                                 <View style={styles.separator} />

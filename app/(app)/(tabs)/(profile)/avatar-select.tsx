@@ -214,7 +214,7 @@ export default function AvatarSelectScreen() {
                headerTitle: "",
                headerRight: () => (
                   <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-                     <ThemedText style={styles.saveBtnText}>Guardar</ThemedText>
+                     <ThemedText style={styles.saveBtnText}>Save</ThemedText>
                   </TouchableOpacity>
                ),
             }}
