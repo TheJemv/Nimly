@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nimly",
     "slug": "Nimly",
-    "version": "1.2.4",
+    "version": "1.3.1",
     "orientation": "portrait",
     "icon": "./assets/expo/icon.png",
     "scheme": "nimly",

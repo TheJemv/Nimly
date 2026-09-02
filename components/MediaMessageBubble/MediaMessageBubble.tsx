@@ -3,14 +3,13 @@ import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
 import { SymbolView } from 'expo-symbols';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Modal, PanResponder, Text, TouchableOpacity, useAnimatedValue, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Text, TouchableOpacity, View } from 'react-native';
 
+import FullscreenImageViewer from './FullscreenImageViewer';
 import { styles } from "./MediaMessageBubble.styles";
 
 export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine }: { filePath: string, friendPublicKey: string, isViewOnce: boolean, isMine: boolean }) {
-    const cachedValid = vaultRAMCache[filePath] && vaultRAMCache[filePath].startsWith('data:image');
-
     const [imageUri, setImageUri] = useState<string | null>(vaultRAMCache[filePath] || null);
     const [isLoading, setIsLoading] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
@@ -18,42 +17,13 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
 
-    const panY = useAnimatedValue(0)
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderMove: Animated.event(
-                [null, { dy: panY }],
-                { useNativeDriver: false }
-            ),
-            onPanResponderRelease: (e, gestureState) => {
-                if (gestureState.dy > 120) {
-                    Animated.timing(panY, {
-                        toValue: 1000,
-                        duration: 150,
-                        useNativeDriver: true,
-                    }).start(() => {
-                        // Solo cerramos el modal, NO reiniciamos la posición aquí
-                        setIsFullScreen(false);
-                    });
-                } else {
-                    Animated.spring(panY, {
-                        toValue: 0,
-                        useNativeDriver: true,
-                    }).start();
-                }
-            },
-        })
-    ).current;
-
     // AUTO-DESCARGA SEGURA PARA FOTOS NORMALES
     useEffect(() => {
         let isMounted = true;
 
         const autoLoad = async () => {
-            if (!isViewOnce && (!imageUri || cachedValid) && !isLocked && filePath && !isLoading) {
-                await downloadAndDecrypt(false, isMounted);
+            if (!isViewOnce && !imageUri && !isLocked && filePath && !isLoading) {
+                await downloadAndDecrypt(false, isMounted, { silent: true });
             }
         };
 
@@ -64,7 +34,11 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         };
     }, [filePath, isViewOnce]);
 
-    const downloadAndDecrypt = async (triggerFullScreen = true, isMounted = true) => {
+    const downloadAndDecrypt = async (
+        triggerFullScreen = true,
+        isMounted = true,
+        { silent = false }: { silent?: boolean } = {}
+    ) => {
         if (wasConsumed || isLocked || isLoading) return;
 
         // Verificar caché en RAM de nuevo
@@ -112,6 +86,12 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             }
         } catch (e) {
             console.error("Error descifrando multimedia:", e);
+            if (isMounted && !silent) {
+                Alert.alert(
+                    "Photo unavailable",
+                    "We couldn't load this photo. Check your connection and try again."
+                );
+            }
         } finally {
             if (isMounted) setIsLoading(false);
         }
@@ -120,18 +100,29 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const handleClose = async () => {
         setIsFullScreen(false);
 
-        if (isViewOnce && !isMine) {
+        if (!(isViewOnce && !isMine)) return;
+
+        try {
+            // Se marca la cápsula como consumida ANTES de borrar el archivo. Si esta
+            // actualización falla, el blob sigue disponible y el receptor puede
+            // reintentar; nunca perdemos la foto por un corte de red.
+            const { error: updErr } = await supabase.from('messages')
+                .update({ content: 'OPENED_CAPSULE', type: 'text' })
+                .eq('content', filePath);
+            if (updErr) throw updErr;
+
             setWasConsumed(true);
             setImageUri(null);
+            delete vaultRAMCache[filePath];
 
-            try {
-                await supabase.storage.from('chat-media').remove([filePath]);
-                await supabase.from('messages')
-                    .update({ content: 'OPENED_CAPSULE', type: 'text' })
-                    .eq('content', filePath);
-
-                delete vaultRAMCache[filePath];
-            } catch { }
+            // Borrado best-effort del blob cifrado (si falla, queda huérfano e ilegible).
+            supabase.storage.from('chat-media').remove([filePath]).catch(() => { });
+        } catch (e) {
+            console.error("view-once consume failed:", e);
+            Alert.alert(
+                "Still available",
+                "We couldn't mark this capsule as opened. It will stay available until you open it again with a connection."
+            );
         }
     };
 
@@ -187,31 +178,11 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                     )}
                 </TouchableOpacity>
 
-                {/* MODAL ACTUALIZADO */}
-                <Modal visible={isFullScreen} transparent={true} animationType="fade">
-                    <View style={styles.fullScreenContainer}>
-                        {/* Contenedor Animado */}
-                        <Animated.View
-                            style={[
-                                styles.animatedContainer, // Asegúrate de agregar este estilo (te lo pasé en el mensaje anterior)
-                                { transform: [{ translateY: panY }] }
-                            ]}
-                            {...panResponder.panHandlers}
-                        >
-                            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsFullScreen(false)}>
-                                <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
-                            </TouchableOpacity>
-
-                            {imageUri && (
-                                <Image
-                                    source={{ uri: imageUri }}
-                                    style={styles.fullScreenImage}
-                                    resizeMode="contain"
-                                />
-                            )}
-                        </Animated.View>
-                    </View>
-                </Modal>
+                <FullscreenImageViewer
+                    visible={isFullScreen}
+                    uri={imageUri}
+                    onClose={() => setIsFullScreen(false)}
+                />
             </>
         );
     }
@@ -244,43 +215,11 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                 )}
             </TouchableOpacity>
 
-            {/* <Modal visible={isFullScreen} transparent={false} animationType="slide">
-                <View style={styles.fullScreenContainer}>
-                    <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-                        <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
-                    </TouchableOpacity>
-                    {imageUri && <Image source={{ uri: imageUri }} style={styles.fullScreenImage} resizeMode="contain" />}
-                </View>
-            </Modal> */}
-
-            <Modal visible={isFullScreen} transparent={true} animationType="fade">
-                <View style={styles.fullScreenContainer}>
-
-                    {/* 3. Animated.View permite que el contenedor se mueva con el dedo */}
-                    <Animated.View
-                        style={[
-                            styles.animatedContainer,
-                            { transform: [{ translateY: panY }] } // Mueve el componente en el eje Y
-                        ]}
-                        {...panResponder.panHandlers} // Activa la detección del dedo aquí
-                    >
-
-                        <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-                            <SymbolView name="xmark.circle.fill" size={30} tintColor="#fff" />
-                        </TouchableOpacity>
-
-                        {imageUri && (
-                            <Image
-                                source={{ uri: imageUri }}
-                                style={styles.fullScreenImage}
-                                resizeMode="contain"
-                            />
-                        )}
-
-                    </Animated.View>
-
-                </View>
-            </Modal>
+            <FullscreenImageViewer
+                visible={isFullScreen}
+                uri={imageUri}
+                onClose={handleClose}
+            />
         </>
     );
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
    ActivityIndicator,
    Alert,
@@ -10,6 +10,12 @@ import {
    TouchableOpacity,
    View
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+   useAnimatedStyle,
+   useSharedValue,
+   withSpring
+} from "react-native-reanimated";
 
 // Expo
 import { Button, ContextMenu, Host, Image as SwiftImage } from "@expo/ui/swift-ui";
@@ -31,12 +37,17 @@ import UserAvatar from "@/components/UserAvatar";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { prefetchChatMedia } from "@/utils/mediaPrefetch";
+import { DateSeparator } from "./components/DateSeparator";
+import { cornerRadius, decorateMessages, formatBubbleTime, type DecoratedMessage } from "./utils/messageGrouping";
 
 // More
 import { chatApi } from "@/api/chat";
 import { supabase } from "@/lib/supabase";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
+
+// Distancia máxima (px) que se desliza la burbuja al hacer swipe para ver la hora.
+const MAX_REVEAL = 64;
 
 export default function ChatScreen() {
    const { id: targetFriendId, user: routeUserParam } = useLocalSearchParams<{ id: string; user?: string }>();
@@ -60,6 +71,58 @@ export default function ChatScreen() {
    } = useChatSync(targetFriendId);
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
+
+   const listRef = useRef<FlatList<any> | null>(null);
+
+   // Swipe hacia la izquierda para revelar la hora de cada mensaje. Solo se
+   // desplaza la burbuja propia (hacia el centro, nunca se recorta); en los
+   // mensajes recibidos la hora simplemente aparece en el hueco de la derecha.
+   const revealX = useSharedValue(0);
+   const bubbleShiftStyle = useAnimatedStyle(() => ({ transform: [{ translateX: revealX.value }] }));
+   const timeFadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, -revealX.value / MAX_REVEAL) }));
+   const revealGesture = useMemo(
+      () =>
+         Gesture.Pan()
+            .activeOffsetX([-15, 10000])
+            .failOffsetY([-12, 12])
+            .simultaneousWithExternalGesture(listRef as React.RefObject<any>)
+            .onUpdate((e) => {
+               revealX.value = Math.max(-MAX_REVEAL, Math.min(0, e.translationX));
+            })
+            .onEnd(() => {
+               revealX.value = withSpring(0, { damping: 20, stiffness: 220, mass: 0.5 });
+            }),
+      [revealX]
+   );
+
+   // Mensajes con metadatos de agrupación y separadores de tiempo. Se reutiliza
+   // la referencia previa de cada mensaje si su render no cambió, para que un
+   // mensaje nuevo no fuerce el re-render de toda la lista visible.
+   const decoratedCache = useRef<Map<string, DecoratedMessage>>(new Map());
+   const decoratedMessages = useMemo(() => {
+      const next = new Map<string, DecoratedMessage>();
+      const result = decorateMessages(messages, hasMore).map((d) => {
+         const prev = decoratedCache.current.get(d.id);
+         if (
+            prev &&
+            prev.__groupPosition === d.__groupPosition &&
+            prev.__separatorLabel === d.__separatorLabel &&
+            prev.__spacing === d.__spacing &&
+            prev.content === d.content &&
+            prev.is_read === d.is_read &&
+            prev.type === d.type &&
+            prev.reply_to === d.reply_to &&
+            prev.reply_to_story === d.reply_to_story
+         ) {
+            next.set(d.id, prev);
+            return prev;
+         }
+         next.set(d.id, d);
+         return d;
+      });
+      decoratedCache.current = next;
+      return result;
+   }, [messages, hasMore]);
 
    // Parsear el objeto user que viene por parámetro de ruta (si existe)
    const routeUser = useMemo(() => {
@@ -147,56 +210,74 @@ export default function ChatScreen() {
 
       const replyData = Array.isArray(item.reply_to) ? item.reply_to[0] : item.reply_to;
 
+      const isMedia = !(isText || isViewOnceSender || isOpenedCapsule);
+      const corners = cornerRadius(mine, item.__groupPosition);
+
       return (
-         <View style={styles.rowContainer}>
-            {item.reply_to_story && (
-               <ReplyStory
-                  content={item.reply_to_story}
-                  isMyMessage={item.sender_id === currentUserId}
-               />
-            )}
+         <View>
+            {item.__separatorLabel ? <DateSeparator label={item.__separatorLabel} /> : null}
 
-            <TouchableOpacity
-               activeOpacity={0.85}
-               onPress={() => isText && setReplyingTo(item)}
-               style={[
-                  (isText || isViewOnceSender || isOpenedCapsule) ? styles.bubble : styles.bubbleImage,
-                  mine ? styles.myBubble : styles.theirBubble
-               ]}
-            >
-               {replyData && !isOpenedCapsule && (
-                  <View style={{ marginBottom: 4 }}>
-                     <Text style={{ color: '#aaa', fontSize: 11 }}>
-                        Replying to {replyData.sender_id === currentUserId ? "yourself" : displayName}
-                     </Text>
-                  </View>
-               )}
-
-               {isOpenedCapsule ? (
-                  <View style={styles.openedCapsule}>
-                     <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
-                     <Text style={styles.openedCapsuleText}>Opened</Text>
-                  </View>
-               ) : isText ? (
-                  <MessageContent content={item.content} friendPublicKey={keyToUse} />
-               ) : (
-                  <MediaMessageBubble
-                     filePath={item.content}
-                     friendPublicKey={keyToUse}
-                     isViewOnce={item.type === 'image-view-once'}
-                     isMine={mine}
+            <View style={[styles.rowContainer, { marginBottom: item.__spacing }]}>
+               {item.reply_to_story && (
+                  <ReplyStory
+                     content={item.reply_to_story}
+                     isMyMessage={item.sender_id === currentUserId}
                   />
                )}
-            </TouchableOpacity>
 
-            {showReadReceipt && (
-               <View style={styles.readReceiptContainer}>
-                  <UserAvatar size={16} avatar_url={avatarUrl} avatar_config={avatarConfig} />
+               <View style={styles.revealRow}>
+                  <Animated.View style={mine ? bubbleShiftStyle : undefined}>
+                     <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => isText && setReplyingTo(item)}
+                        style={[
+                           isMedia ? styles.bubbleImage : styles.bubble,
+                           mine ? styles.myBubble : styles.theirBubble,
+                           corners
+                        ]}
+                     >
+                        {replyData && !isOpenedCapsule && (
+                           <View style={{ marginBottom: 4 }}>
+                              <Text style={{ color: '#aaa', fontSize: 11 }}>
+                                 Replying to {replyData.sender_id === currentUserId ? "yourself" : displayName}
+                              </Text>
+                           </View>
+                        )}
+
+                        {isOpenedCapsule ? (
+                           <View style={styles.openedCapsule}>
+                              <SymbolView name="eye.slash.fill" size={14} tintColor="#888" />
+                              <Text style={styles.openedCapsuleText}>Opened</Text>
+                           </View>
+                        ) : isText ? (
+                           <MessageContent content={item.content} friendPublicKey={keyToUse} />
+                        ) : (
+                           <MediaMessageBubble
+                              filePath={item.content}
+                              friendPublicKey={keyToUse}
+                              isViewOnce={item.type === 'image-view-once'}
+                              isMine={mine}
+                           />
+                        )}
+                     </TouchableOpacity>
+                  </Animated.View>
+
+                  <Animated.View style={[styles.timeReveal, timeFadeStyle]} pointerEvents="none">
+                     <Text style={styles.timeRevealText} numberOfLines={1}>
+                        {formatBubbleTime(item.created_at)}
+                     </Text>
+                  </Animated.View>
+
+                  {showReadReceipt && (
+                     <View style={styles.readReceiptContainer}>
+                        <UserAvatar size={16} avatar_url={avatarUrl} avatar_config={avatarConfig} />
+                     </View>
+                  )}
                </View>
-            )}
+            </View>
          </View>
       );
-   }, [currentUserId, friendProfile, routeUser, lastReadMessageId, displayName, avatarUrl, avatarConfig]);
+   }, [currentUserId, friendProfile, routeUser, lastReadMessageId, displayName, avatarUrl, avatarConfig, bubbleShiftStyle, timeFadeStyle]);
 
    const handleBurnHistory = () => {
       if (!chatId) return;
@@ -288,23 +369,26 @@ export default function ChatScreen() {
                <ActivityIndicator color={getThemeColor("tint")} size="large" />
             </View>
          ) : (
-            <FlatList
-               inverted
-               data={messages}
-               keyExtractor={(item) => item.id}
-               renderItem={renderItem}
-               onEndReached={() => {
-                  if (hasMore && !loadingMore) {
-                     loadMoreMessages();
-                  }
-               }}
-               onEndReachedThreshold={0.2}
-               contentContainerStyle={{ padding: 16 }}
-               removeClippedSubviews={Platform.OS === 'android'}
-               maxToRenderPerBatch={10}
-               windowSize={5}
-               ListFooterComponent={() => loadingMore ? <ActivityIndicator style={{ margin: 10 }} color={getThemeColor("tint")} /> : null}
-            />
+            <GestureDetector gesture={revealGesture}>
+               <FlatList
+                  ref={listRef}
+                  inverted
+                  data={decoratedMessages}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderItem}
+                  onEndReached={() => {
+                     if (hasMore && !loadingMore) {
+                        loadMoreMessages();
+                     }
+                  }}
+                  onEndReachedThreshold={0.2}
+                  contentContainerStyle={{ padding: 16 }}
+                  removeClippedSubviews={Platform.OS === 'android'}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
+                  ListFooterComponent={() => loadingMore ? <ActivityIndicator style={{ margin: 10 }} color={getThemeColor("tint")} /> : null}
+               />
+            </GestureDetector>
          )}
 
          {isUploading && (

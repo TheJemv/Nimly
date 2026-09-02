@@ -68,7 +68,9 @@ export function useChatSync(targetFriendId: string | undefined) {
 
                 const [, profRes] = await Promise.all([
                     fetchMessages(cId, 0),
-                    supabase.from('profiles').select('*').eq('id', targetFriendId).single()
+                    // maybeSingle: si el perfil aún no existe no queremos que lance y
+                    // deje el chat bloqueado; se usa `routeUser` como respaldo.
+                    supabase.from('profiles').select('*').eq('id', targetFriendId).maybeSingle()
                 ]);
 
                 if (isMounted && profRes.data) {

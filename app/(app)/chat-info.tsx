@@ -16,6 +16,8 @@ import {
     View,
 } from "react-native";
 
+// "Media" = mensajes con contenido multimedia. Los view-once ya consumidos
+// pasan a `type: 'text'` (ver MediaMessageBubble) → dejan de contar aquí.
 const MEDIA_TYPES = ["image", "video", "image-view-once"];
 
 const accent = getThemeColor("tint");
@@ -75,6 +77,8 @@ export default function ChatInfoScreen() {
                         : Promise.resolve({ count: 0 } as any),
                 ]);
                 if (!active) return;
+
+                if (media.error) console.error("chat-info media count error:", media.error);
 
                 setFriend(f);
                 setMessageCount(msgs.count ?? 0);
