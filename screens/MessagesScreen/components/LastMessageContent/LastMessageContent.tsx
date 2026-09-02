@@ -12,28 +12,38 @@ interface LastMessageContentProps {
     hasUnread: boolean;
 }
 
+/** A stored media message: type says so, or the content is a storage path. */
+const isMediaMessage = (content: string, type?: string) => {
+    const t = (type || "").toLowerCase().replace(/[_\s]/g, "-");
+    if (t.includes("image") || t.includes("photo") || t.includes("video") || t.includes("once") || t.includes("capsule")) {
+        return true;
+    }
+    if (!content || content.startsWith("v2:")) return false;
+    // "<chatId>/<ts>.vault", signed URLs, legacy paths…
+    return /\//.test(content) || /\.(vault|enc|jpe?g|png|webp|heic|mp4|mov)$/i.test(content);
+};
+
 const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUnread }: LastMessageContentProps) => {
-    const isOpenedCapsule = content === 'OPENED_CAPSULE';
-    const decryptedText = useDecryptedMessage(isOpenedCapsule ? '' : content, friendPublicKey);
+    const isOpenedCapsule = content === "OPENED_CAPSULE";
+    const isViewOnce = (type || "").toLowerCase().replace(/[_\s]/g, "-").includes("once");
+    const media = !isOpenedCapsule && isMediaMessage(content, type);
+
+    // Hook must run unconditionally; skip work when we already know it's media.
+    const { text, status } = useDecryptedMessage(media || isOpenedCapsule ? "" : content, friendPublicKey);
+
     const messageStyle = hasUnread ? styles.lastMessageUnread : isMine ? styles.lastMessageMine : styles.lastMessageRead;
-    const normalizedType = type ? type.toLowerCase() : '';
+    const prefix = isMine ? "You: " : "";
 
-    if (isOpenedCapsule) {
-        return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}👁 Opened</Text>;
-    }
-    const isMediaContent =
-        normalizedType === 'image' ||
-        normalizedType === 'image-view-once' ||
-        normalizedType === 'video' ||
-        content?.startsWith('http') ||
-        content?.includes('storage') ||
-        content?.includes('/');
+    let body: string;
+    if (isOpenedCapsule) body = "👁 Opened";
+    else if (media) body = isViewOnce ? "📷 One-time photo" : "📷 Photo";
+    else if (status === "pending") body = "…";
+    else if (status === "failed") body = "🔒 Encrypted message";
+    else body = text;
 
-    if (isMediaContent) {
-        return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}📷 Photo</Text>;
-    }
-
-    return <Text style={messageStyle} numberOfLines={1}>{isMine ? 'You: ' : ''}{decryptedText}</Text>;
+    return (
+        <Text style={messageStyle} numberOfLines={1}>{prefix}{body}</Text>
+    );
 });
 
 export default LastMessageContent;

@@ -7,6 +7,7 @@ import { AppMetrics, ObserveRoot } from "expo-observe";
 import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 
+import { AppErrorBoundary, AppRecoveryView } from "@/components/AppErrorBoundary";
 import ConnectionErrorView from "@/components/ConnectionErrorView";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { supabase } from '@/lib/supabase';
@@ -16,16 +17,34 @@ import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'react-native';
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => { });
 SplashScreen.setOptions({
     duration: 1000,
     fade: true,
 })
 
+// Failsafe: if startup never finishes (hung promise, bad OTA bundle, …) don't
+// trap the user on the splash forever — show a recovery screen after this long.
+// Sits comfortably past the legit worst case (10s auth timeout + 3.5s net check).
+const STARTUP_WATCHDOG_MS = 15000;
+
 function RootLayoutNav() {
     const { isLoading } = useAuth();
     const [isOffline, setIsOffline] = useState(false);
     const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
+    const [startupStalled, setStartupStalled] = useState(false);
+
+    const ready = !isLoading && !isCheckingNetwork;
+
+    useEffect(() => {
+        if (ready) return;
+        const t = setTimeout(() => setStartupStalled(true), STARTUP_WATCHDOG_MS);
+        return () => clearTimeout(t);
+    }, [ready]);
+
+    useEffect(() => {
+        if (startupStalled && !ready) SplashScreen.hide();
+    }, [startupStalled, ready]);
 
     const checkServerConnection = async () => {
         try {
@@ -49,14 +68,14 @@ function RootLayoutNav() {
     }, [isLoading]);
 
     useEffect(() => {
-        if (!isLoading && !isCheckingNetwork) {
+        if (ready) {
             SplashScreen.hide();
-            AppMetrics.markInteractive();
+            try { AppMetrics.markInteractive(); } catch { /* telemetry only */ }
         }
-    }, [isLoading, isCheckingNetwork]);
+    }, [ready]);
 
-    if (isLoading || isCheckingNetwork) {
-        return null;
+    if (!ready) {
+        return startupStalled ? <AppRecoveryView reason="timeout" /> : null;
     }
 
     if (isOffline) {
@@ -85,7 +104,7 @@ function RootLayoutNav() {
 
 function AppLayout() {
     return (
-        <>
+        <AppErrorBoundary>
             <StatusBar backgroundColor="#000000" barStyle="light-content" />
             <ThemeProvider value={DarkTheme}>
                 <AuthProvider>
@@ -96,7 +115,7 @@ function AppLayout() {
                     </ProfileProvider>
                 </AuthProvider>
             </ThemeProvider>
-        </>
+        </AppErrorBoundary>
     );
 }
 

@@ -1,43 +1,55 @@
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { useEffect, useState } from "react";
 
-export function useDecryptedMessage(content: string, friendPublicKey?: string) {
-    const initialText = vaultRAMCache[content] && !vaultRAMCache[content].startsWith("🔒")
-        ? vaultRAMCache[content]
-        : "🔒 Decrypting...";
+export type DecryptStatus = "ok" | "pending" | "failed";
 
-    const [decryptedText, setDecryptedText] = useState(initialText);
+const DECRYPTING = "🔒 Decrypting…";
+
+const statusOf = (t: string): DecryptStatus => {
+    if (!t.startsWith("🔒")) return "ok";
+    return t.includes("Decrypting") ? "pending" : "failed";
+};
+
+/**
+ * Decrypts a chat-list preview. Returns `{ text, status }` so the caller can
+ * show a clean fallback instead of leaking sentinels like "🔒 One-time photo".
+ */
+export function useDecryptedMessage(content: string, friendPublicKey?: string): { text: string; status: DecryptStatus } {
+    const cached = vaultRAMCache[content];
+    const initialText = cached && !cached.startsWith("🔒") ? cached : DECRYPTING;
+
+    const [text, setText] = useState(initialText);
 
     useEffect(() => {
+        if (!content) {
+            setText("");
+            return;
+        }
         if (!friendPublicKey) {
-            setDecryptedText("🔒 Decrypting…");
+            setText(DECRYPTING);
             return;
         }
 
-        const cached = vaultRAMCache[content];
-        if (cached && !cached.startsWith("🔒")) {
-            setDecryptedText(cached); // 👈 antes solo hacía "return", ahora sí actualiza
+        const hit = vaultRAMCache[content];
+        if (hit && !hit.startsWith("🔒")) {
+            setText(hit);
             return;
         }
 
-        let isMounted = true;
-        const decrypt = async () => {
+        let alive = true;
+        (async () => {
             try {
-                const clearText = await vaultCrypto.decryptMessage(content, friendPublicKey);
-                if (isMounted) {
-                    if (!clearText.startsWith("🔒")) {
-                        vaultRAMCache[content] = clearText;
-                    }
-                    setDecryptedText(clearText);
-                }
-            } catch (e) {
-                if (isMounted) setDecryptedText("🔒 Error");
+                const clear = await vaultCrypto.decryptMessage(content, friendPublicKey);
+                if (!alive) return;
+                if (!clear.startsWith("🔒")) vaultRAMCache[content] = clear;
+                setText(clear);
+            } catch {
+                if (alive) setText("🔒");
             }
-        };
-        decrypt();
+        })();
 
-        return () => { isMounted = false; };
+        return () => { alive = false; };
     }, [content, friendPublicKey]);
 
-    return decryptedText;
+    return { text, status: statusOf(text) };
 }
