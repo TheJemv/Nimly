@@ -16,6 +16,27 @@ import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'react-native';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://aa8f8ea6c977c413e09cc4ee443efb1a@o4512021080440832.ingest.us.sentry.io/4512021085028352',
+
+  // App E2EE: no mandamos IP / cookies / datos personales por defecto.
+  sendDefaultPii: false,
+
+  environment: __DEV__ ? 'development' : 'production',
+
+  // Solo errores → mínima cuota. Sin performance tracing ni logs.
+  tracesSampleRate: 0,
+  enableLogs: false,
+
+  // Ruido conocido que no aporta.
+  ignoreErrors: [
+    'Network request failed',
+    'AbortError',
+    'Non-Error promise rejection captured',
+  ],
+});
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 SplashScreen.setOptions({
@@ -120,4 +141,4 @@ function AppLayout() {
 }
 
 
-export default ObserveRoot.wrap(AppLayout)
+export default Sentry.wrap(ObserveRoot.wrap(AppLayout));

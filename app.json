@@ -46,6 +46,14 @@
             "deploymentTarget": "16.4"
           }
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "nimly",
+          "organization": "nimly"
+        }
       ]
     ],
     "experiments": {

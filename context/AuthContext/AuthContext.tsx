@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
+import * as Sentry from '@sentry/react-native';
 import { Session } from '@supabase/supabase-js';
 
 // Custom Hooks
@@ -54,6 +55,11 @@ export const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Adjunta solo el id a los eventos de Sentry (sin PII: nada de email / IP).
+    useEffect(() => {
+        Sentry.setUser(session?.user?.id ? { id: session.user.id } : null);
+    }, [session?.user?.id]);
 
     const {
         setupVaultIdentity,

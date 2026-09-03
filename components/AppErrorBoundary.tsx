@@ -1,4 +1,5 @@
 import { getThemeColor } from "@/constants/theme";
+import * as Sentry from "@sentry/react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import React from "react";
@@ -87,10 +88,16 @@ export class AppErrorBoundary extends React.Component<{ children: React.ReactNod
       return { hasError: true };
    }
 
-   componentDidCatch(error: unknown, info: unknown) {
+   componentDidCatch(error: unknown, info: { componentStack?: string | null }) {
       console.error("❌ [APP] Fatal render error:", error, info);
+      // Este boundary "maneja" el error, así que el handler global de Sentry no
+      // lo vería — lo reportamos explícitamente.
+      Sentry.captureException(error, {
+         contexts: { react: { componentStack: info?.componentStack ?? undefined } },
+         tags: { boundary: "app-root" },
+      });
       // Whatever happens, get off the splash screen.
-      SplashScreen.hideAsync().catch(() => {});
+      SplashScreen.hideAsync().catch(() => { });
    }
 
    render() {
