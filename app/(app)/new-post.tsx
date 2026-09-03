@@ -5,6 +5,7 @@ import { getThemeColor } from "@/constants/theme";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import { useVideoPlayer, VideoView } from "expo-video";
 
 import { useState } from "react";
 import {
@@ -42,7 +43,12 @@ export default function NewPostScreen() {
    const MAX_CHARS = 128;
 
    const isOverLimit = text.length > MAX_CHARS;
-   const canPost = (text.trim().length > 0 || media !== null) && !isPosting;
+   const canPost = (text.trim().length > 0 || !!media) && !isPosting;
+
+   const previewPlayer = useVideoPlayer(media?.type === 'video' ? media.uri : null, (p) => {
+      p.loop = true;
+      p.play();
+   });
 
    // LÓGICA DE PERMISOS Y MULTIMEDIA
    const pickMedia = async () => {
@@ -149,7 +155,11 @@ export default function NewPostScreen() {
 
                      {media && (
                         <View style={styles.previewContainer}>
-                           <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
+                           {media.type === 'video' ? (
+                              <VideoView player={previewPlayer} style={styles.mediaPreview} nativeControls={false} contentFit="cover" />
+                           ) : (
+                              <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
+                           )}
                            <TouchableOpacity style={styles.removeBtn} onPress={() => setMedia(undefined)}>
                               <SymbolView name="xmark" size={12} tintColor="#FFF" />
                            </TouchableOpacity>
@@ -180,8 +190,8 @@ export default function NewPostScreen() {
             visible={isCameraVisible}
             onClose={() => setCameraVisible(false)}
             mode="simple"
-            onSend={(uri) => {
-               setMedia({ uri, type: 'image' });
+            onSend={(uri, type) => {
+               setMedia({ uri, type });
             }}
          />
       </View>

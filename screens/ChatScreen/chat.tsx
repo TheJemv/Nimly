@@ -212,7 +212,7 @@ export default function ChatScreen() {
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
 
       const mediaItems = messages
-         .filter(m => m.type === 'image' && m.content && m.content !== 'OPENED_CAPSULE')
+         .filter(m => m.type === 'image' && m.content && m.content !== 'OPENED_CAPSULE' && !/\.mp4/i.test(m.content))
          .map(m => ({ filePath: m.content, friendPublicKey: pubKey }));
 
       if (mediaItems.length > 0) prefetchChatMedia(mediaItems);

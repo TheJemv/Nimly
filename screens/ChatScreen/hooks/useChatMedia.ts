@@ -36,7 +36,9 @@ export function useChatMedia(chatId: string, currentUserId: string) {
             const encryptedText = await vaultCrypto.encryptMessage(base64, friendPublicKey);
             if (!encryptedText) throw new Error("Encryption failed");
 
-            const fileName = `${chatId}/${Date.now()}.vault`;
+            // La extensión antes de `.vault` deja saber al render si es video.
+            const ext = type === 'video' ? 'mp4' : 'jpg';
+            const fileName = `${chatId}/${Date.now()}.${ext}.vault`;
             const { error: storageError } = await supabase.storage
                 .from('chat-media')
                 .upload(fileName, encryptedText, {

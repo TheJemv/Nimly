@@ -1,14 +1,44 @@
+import { getThemeColor } from "@/constants/theme";
 import { StyleSheet } from "react-native";
+
+const TINT = getThemeColor("tint");
 
 export const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     camera: { flex: 1, justifyContent: 'flex-end' },
-    fullCamera: { position: 'absolute', top: 0, width: '100%', height: '100%' },
-    closeBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10 },
+
+    topBar: {
+        position: 'absolute',
+        left: 12,
+        right: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        zIndex: 10,
+    },
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    recPill: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'center',
+        justifyContent: 'center',
+        gap: 7,
+    },
+    recDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#FF3B30' },
+    recText: { color: '#fff', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+
     zoomBadge: {
         position: 'absolute',
         alignSelf: 'center',
-        bottom: 200,
+        bottom: 190,
         backgroundColor: 'rgba(0,0,0,0.5)',
         paddingHorizontal: 12,
         paddingVertical: 6,
@@ -17,13 +47,9 @@ export const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.2)',
         zIndex: 10,
     },
-    zoomText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: '700',
-    },
+    zoomText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+
     bottomControls: {
-        paddingBottom: 45,
         paddingTop: 15,
         backgroundColor: 'rgba(0,0,0,0.35)',
     },
@@ -41,27 +67,20 @@ export const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    shutterOuterVideo: { borderColor: '#DC143C' },
+    shutterOuterVideo: { borderColor: TINT },
     shutterOuterRecording: { borderColor: '#FF3B30' },
-    shutterInner: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: '#fff',
-    },
-    shutterInnerVideo: { backgroundColor: '#DC143C' },
-    shutterInnerRecording: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        backgroundColor: '#FF3B30',
-    },
+    shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
+    shutterInnerVideo: { backgroundColor: TINT },
+    shutterInnerRecording: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#FF3B30' },
+
     sideBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+    sideBtnHidden: { opacity: 0 },
+
     previewContainer: { flex: 1, backgroundColor: '#000' },
-    previewMedia: { flex: 1, width: '100%', height: '100%' },
+    previewMedia: { flex: 1, width: '100%' },
+
     decisionPanel: {
         position: 'absolute',
-        bottom: 40,
         left: 20,
         right: 20,
         flexDirection: 'row',
@@ -69,11 +88,14 @@ export const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     decisionBtn: { flex: 1, paddingVertical: 18, alignItems: 'center', gap: 8 },
+    decisionBtnDisabled: { opacity: 0.7 },
     decisionText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+    decisionTextTint: { color: TINT, fontWeight: '700' },
+    decisionTextMuted: { color: '#777' },
     separator: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 15 },
+
     simplePanel: {
         position: 'absolute',
-        bottom: 40,
         left: 20,
         right: 20,
         borderRadius: 25,

@@ -1,5 +1,11 @@
 import { StyleSheet } from "react-native";
 
+const TRACK_WIDTH = 188;
+const TRACK_PADDING = 4;
+
+/** Distance the selection pill slides between the two tabs. */
+export const PILL_TRAVEL = (TRACK_WIDTH - TRACK_PADDING * 2) / 2;
+
 export const styles = StyleSheet.create({
     outerContainer: {
         alignItems: 'center',
@@ -7,10 +13,10 @@ export const styles = StyleSheet.create({
     },
     glassContainer: {
         flexDirection: 'row',
-        width: 190,
+        width: TRACK_WIDTH,
         height: 40,
         borderRadius: 20,
-        padding: 4,
+        padding: TRACK_PADDING,
         backgroundColor: 'rgba(0, 0, 0, 0.4)',
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.15)',
@@ -18,8 +24,9 @@ export const styles = StyleSheet.create({
     },
     pill: {
         position: 'absolute',
-        top: 4,
-        width: 90,
+        top: TRACK_PADDING,
+        left: TRACK_PADDING,
+        width: PILL_TRAVEL,
         height: 32,
         borderRadius: 16,
         shadowColor: '#000',

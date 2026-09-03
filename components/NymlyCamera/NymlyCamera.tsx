@@ -6,21 +6,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
-import {
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import PermissionRequest from '@/components/PermissionRequest';
 import { getThemeColor } from '@/constants/theme';
 import CameraModeSelector, { CameraCaptureMode } from '../CameraModeSelector/CameraModeSelector';
 import { styles } from './NimlyCamera.styles';
+
+// Los videos se cifran E2EE (base64 en memoria), así que se limitan en
+// duración y resolución para que el blob sea manejable.
+const MAX_VIDEO_SECONDS = 12;
 
 interface CapturedMedia {
     uri: string;
@@ -34,76 +32,88 @@ interface NymlyCameraProps {
     mode?: 'chat' | 'simple' | 'story';
 }
 
-export default function NymlyCamera({
-    visible,
-    onClose,
-    onSend,
-    mode = 'chat',
-}: NymlyCameraProps) {
+const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }: NymlyCameraProps) {
+    const insets = useSafeAreaInsets();
     const [cameraPermission, requestCameraPermission] = useCameraPermissions();
     const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
     const [captureMode, setCaptureMode] = useState<CameraCaptureMode>('photo');
     const [facing, setFacing] = useState<'back' | 'front'>('back');
+    const [flash, setFlash] = useState<'off' | 'on'>('off');
     const [capturedMedia, setCapturedMedia] = useState<CapturedMedia | null>(null);
     const [isRecording, setIsRecording] = useState(false);
+    const [isBusy, setIsBusy] = useState(false);
+    const [elapsed, setElapsed] = useState(0);
 
-    // 🔍 ESTADO DE ZOOM (0.0 a 1.0)
     const [zoom, setZoom] = useState(0);
     const baseZoomRef = useRef(0);
-
     const cameraRef = useRef<CameraView>(null);
 
-    // Reproductor de Video
-    const videoPlayer = useVideoPlayer(capturedMedia?.type === 'video' ? capturedMedia.uri : null, player => {
-        player.loop = true;
-        player.play();
-    });
+    const videoPlayer = useVideoPlayer(
+        capturedMedia?.type === 'video' ? capturedMedia.uri : null,
+        (player) => {
+            player.loop = true;
+            player.muted = false;
+            player.play();
+        }
+    );
 
-    // Reproducción automática en bucle
+    // Cronómetro de grabación.
     useEffect(() => {
-        if (capturedMedia?.type === 'video' && capturedMedia.uri && videoPlayer) {
-            try {
-                // videoPlayer.replace(capturedMedia.uri);
-                // videoPlayer.loop = true;
-                // videoPlayer.play();
+        if (!isRecording) {
+            setElapsed(0);
+            return;
+        }
+        const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+        return () => clearInterval(id);
+    }, [isRecording]);
 
-            } catch (e) {
-                console.warn("Error al reproducir vista previa de video:", e);
-            }
+    // Autoplay de la vista previa de video (el callback de useVideoPlayer solo
+    // corre al montar, no cuando cambia la fuente).
+    useEffect(() => {
+        if (capturedMedia?.type === 'video' && videoPlayer) {
+            try {
+                videoPlayer.loop = true;
+                videoPlayer.play();
+            } catch { /* preview no crítica */ }
         }
     }, [capturedMedia, videoPlayer]);
+
+    // Al cerrar / reabrir, volvemos a la cámara limpia.
+    useEffect(() => {
+        if (!visible) {
+            setCapturedMedia(null);
+            setIsRecording(false);
+            setZoom(0);
+        }
+    }, [visible]);
 
     const handleRequestPermissions = async () => {
         if (!cameraPermission?.granted) await requestCameraPermission();
         if (!micPermission?.granted) await requestMicPermission();
     };
 
-    // 🤌 GESTO DE PELLIZCO (PINCH TO ZOOM)
     const pinchGesture = Gesture.Pinch()
         .onBegin(() => {
             baseZoomRef.current = zoom;
         })
         .onUpdate((event) => {
-            // Sensibilidad ajustada para que el zoom sea progresivo
-            const scaleDelta = (event.scale - 1) * 0.5;
-            const newZoom = Math.min(Math.max(baseZoomRef.current + scaleDelta, 0), 1);
-            runOnJS(setZoom)(newZoom);
+            const next = Math.min(Math.max(baseZoomRef.current + (event.scale - 1) * 0.5, 0), 1);
+            runOnJS(setZoom)(next);
         });
 
-    // Alternar zoom rápido entre 1x y 2x (0 y 0.25 en escala de Expo Camera)
-    const toggleQuickZoom = () => {
-        setZoom((prev) => (prev === 0 ? 0.25 : 0));
-    };
+    const toggleQuickZoom = () => setZoom((prev) => (prev === 0 ? 0.25 : 0));
 
-    // --- DISPARADOR ---
     const handleShutterPress = async () => {
-        if (!cameraRef.current) return;
+        if (!cameraRef.current || isBusy) return;
 
         if (captureMode === 'photo') {
+            setIsBusy(true);
             try {
-                const photo = await cameraRef.current.takePictureAsync({ exif: true });
-                if (photo) {
+                const photo = await cameraRef.current.takePictureAsync({ exif: false });
+                if (photo?.uri) {
                     const fixed = await ImageManipulator.manipulateAsync(
                         photo.uri,
                         [],
@@ -112,52 +122,59 @@ export default function NymlyCamera({
                     setCapturedMedia({ uri: fixed.uri, type: 'image' });
                 }
             } catch (e) {
-                console.warn("Error al tomar foto:", e);
+                console.warn('Error taking photo:', e);
+            } finally {
+                setIsBusy(false);
             }
-        } else {
-            if (isRecording) {
-                cameraRef.current.stopRecording();
-                setIsRecording(false);
-            } else {
-                if (!micPermission?.granted) {
-                    const res = await requestMicPermission();
-                    if (!res.granted) return;
-                }
+            return;
+        }
 
-                setIsRecording(true);
-                try {
-                    const video = await cameraRef.current.recordAsync({ maxDuration: 15 });
-                    if (video?.uri) {
-                        setCapturedMedia({ uri: video.uri, type: 'video' });
-                    }
-                } catch (e) {
-                    console.warn("Error grabacion video:", e);
-                } finally {
-                    setIsRecording(false);
-                }
-            }
+        // Video
+        if (isRecording) {
+            cameraRef.current.stopRecording();
+            return;
+        }
+
+        if (!micPermission?.granted) {
+            const res = await requestMicPermission();
+            if (!res.granted) return;
+        }
+
+        setIsRecording(true);
+        try {
+            const video = await cameraRef.current.recordAsync({ maxDuration: MAX_VIDEO_SECONDS, codec: 'avc1' });
+            if (video?.uri) setCapturedMedia({ uri: video.uri, type: 'video' });
+        } catch (e) {
+            console.warn('Error recording video:', e);
+        } finally {
+            setIsRecording(false);
         }
     };
 
     const pickFromGallery = async () => {
+        if (isRecording) return;
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
             quality: 0.8,
-            videoMaxDuration: 15,
+            videoMaxDuration: MAX_VIDEO_SECONDS,
         });
-
-        if (!result.canceled && result.assets[0].uri) {
+        if (!result.canceled && result.assets[0]?.uri) {
             const asset = result.assets[0];
-            setCapturedMedia({
-                uri: asset.uri,
-                type: asset.type === 'video' ? 'video' : 'image',
-            });
+            setCapturedMedia({ uri: asset.uri, type: asset.type === 'video' ? 'video' : 'image' });
         }
     };
 
     const toggleCameraFacing = () => {
-        setZoom(0); // Reset de zoom al voltear la cámara
-        setFacing((current) => (current === 'back' ? 'front' : 'back'));
+        if (isRecording) return;
+        setZoom(0);
+        setFacing((c) => (c === 'back' ? 'front' : 'back'));
+    };
+
+    const send = (option?: 'image-view-once') => {
+        if (!capturedMedia) return;
+        onSend(capturedMedia.uri, capturedMedia.type, option);
+        setCapturedMedia(null);
+        onClose();
     };
 
     if (!cameraPermission || !micPermission) return <View />;
@@ -166,88 +183,114 @@ export default function NymlyCamera({
             <PermissionRequest
                 visible={visible}
                 icon="camera.fill"
-                title="Acceso a Cámara"
-                subtitle="Nimly necesita acceso a tu cámara y micrófono para capturar historias."
-                confirmLabel="Permitir Acceso"
+                title="Camera Access"
+                subtitle="Nimly needs access to your camera and microphone to capture photos and videos."
+                confirmLabel="Allow Access"
                 onRequest={handleRequestPermissions}
                 onClose={onClose}
             />
         );
     }
 
+    const isVideoMode = captureMode === 'video';
+    const remaining = Math.max(0, MAX_VIDEO_SECONDS - elapsed);
+
     return (
-        <Modal visible={visible} animationType="slide" transparent={false}>
+        <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
             <View style={styles.container}>
                 {!capturedMedia ? (
                     <View style={styles.camera}>
-                        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                            <SymbolView name="xmark" size={24} tintColor="#fff" />
-                        </TouchableOpacity>
-
-                        {/* ENVOLTORIO CON GESTO DE ZOOM */}
                         <GestureDetector gesture={pinchGesture}>
-                            <View style={styles.fullCamera}>
+                            <View style={StyleSheet.absoluteFill}>
                                 <CameraView
                                     style={StyleSheet.absoluteFill}
                                     facing={facing}
                                     ref={cameraRef}
-                                    mode={captureMode === 'photo' ? 'picture' : 'video'}
-                                    zoom={zoom} // 👈 PROP DE ZOOM APLICADO
+                                    mode={isVideoMode ? 'video' : 'picture'}
+                                    zoom={zoom}
+                                    flash={flash}
+                                    enableTorch={isVideoMode && flash === 'on'}
+                                    videoQuality="480p"
                                 />
                             </View>
                         </GestureDetector>
 
-                        {/* BOTÓN INSIGNIA DE ZOOM (1x / 2x) */}
-                        <TouchableOpacity
-                            style={styles.zoomBadge}
-                            onPress={toggleQuickZoom}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={styles.zoomText}>
-                                {zoom === 0 ? '1x' : `${(1 + zoom * 4).toFixed(1)}x`}
-                            </Text>
-                        </TouchableOpacity>
+                        {/* Barra superior */}
+                        <View style={[styles.topBar, { top: insets.top + 6 }]} pointerEvents="box-none">
+                            <TouchableOpacity style={styles.iconBtn} onPress={onClose} hitSlop={8}>
+                                <SymbolView name="xmark" size={22} tintColor="#fff" />
+                            </TouchableOpacity>
 
-                        {/* CONTROLES INFERIORES */}
-                        <View style={styles.bottomControls}>
+                            {isRecording ? (
+                                <View style={styles.recPill}>
+                                    <View style={styles.recDot} />
+                                    <Text style={styles.recText}>{fmtTime(remaining)}</Text>
+                                </View>
+                            ) : (
+                                <View style={{ flex: 1 }} />
+                            )}
+
+                            <TouchableOpacity
+                                style={styles.iconBtn}
+                                onPress={() => setFlash((f) => (f === 'off' ? 'on' : 'off'))}
+                                hitSlop={8}
+                            >
+                                <SymbolView name={flash === 'on' ? 'bolt.fill' : 'bolt.slash.fill'} size={20} tintColor="#fff" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Zoom rápido */}
+                        {!isRecording && (
+                            <TouchableOpacity style={styles.zoomBadge} onPress={toggleQuickZoom} activeOpacity={0.8}>
+                                <Text style={styles.zoomText}>{zoom === 0 ? '1x' : `${(1 + zoom * 4).toFixed(1)}x`}</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Controles inferiores */}
+                        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 24 }]}>
                             <CameraModeSelector
                                 activeMode={captureMode}
-                                onModeChange={(newMode) => {
-                                    if (isRecording) cameraRef.current?.stopRecording();
-                                    setCaptureMode(newMode);
+                                onModeChange={(m) => {
+                                    if (isRecording) return;
+                                    setCaptureMode(m);
                                 }}
                                 tintColor={getThemeColor('tint')}
+                                disabled={isRecording}
                             />
 
                             <View style={styles.shutterRow}>
-                                <TouchableOpacity onPress={pickFromGallery} style={styles.sideBtn}>
-                                    <SymbolView name="photo.on.rectangle" size={28} tintColor="#fff" />
+                                <TouchableOpacity
+                                    onPress={pickFromGallery}
+                                    style={[styles.sideBtn, isRecording && styles.sideBtnHidden]}
+                                    disabled={isRecording}
+                                >
+                                    <SymbolView name="photo.on.rectangle" size={26} tintColor="#fff" />
                                 </TouchableOpacity>
 
-                                <TouchableOpacity onPress={handleShutterPress} activeOpacity={0.8}>
+                                <TouchableOpacity onPress={handleShutterPress} activeOpacity={0.8} disabled={isBusy}>
                                     <View
                                         style={[
                                             styles.shutterOuter,
-                                            captureMode === 'video' && styles.shutterOuterVideo,
+                                            isVideoMode && styles.shutterOuterVideo,
                                             isRecording && styles.shutterOuterRecording,
                                         ]}
                                     >
                                         <View
                                             style={[
                                                 styles.shutterInner,
-                                                captureMode === 'video' && styles.shutterInnerVideo,
+                                                isVideoMode && styles.shutterInnerVideo,
                                                 isRecording && styles.shutterInnerRecording,
                                             ]}
                                         />
                                     </View>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity onPress={toggleCameraFacing} style={styles.sideBtn}>
-                                    <SymbolView
-                                        name="arrow.triangle.2.circlepath.camera"
-                                        size={28}
-                                        tintColor="#fff"
-                                    />
+                                <TouchableOpacity
+                                    onPress={toggleCameraFacing}
+                                    style={[styles.sideBtn, isRecording && styles.sideBtnHidden]}
+                                    disabled={isRecording}
+                                >
+                                    <SymbolView name="arrow.triangle.2.circlepath.camera" size={26} tintColor="#fff" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -255,77 +298,63 @@ export default function NymlyCamera({
                 ) : (
                     <View style={styles.previewContainer}>
                         {capturedMedia.type === 'image' ? (
-                            <Image source={{ uri: capturedMedia.uri }} style={styles.previewMedia} />
+                            <Image source={{ uri: capturedMedia.uri }} style={styles.previewMedia} resizeMode="cover" />
                         ) : (
                             <VideoView
                                 player={videoPlayer}
                                 style={styles.previewMedia}
                                 nativeControls={false}
+                                contentFit="cover"
                             />
                         )}
 
-                        <TouchableOpacity style={styles.closeBtn} onPress={() => setCapturedMedia(null)}>
-                            <SymbolView name="chevron.left" size={24} tintColor="#fff" />
+                        <TouchableOpacity
+                            style={[styles.iconBtn, { position: 'absolute', top: insets.top + 6, left: 16 }]}
+                            onPress={() => setCapturedMedia(null)}
+                            hitSlop={8}
+                        >
+                            <SymbolView name="chevron.left" size={22} tintColor="#fff" />
                         </TouchableOpacity>
 
                         {mode === 'story' ? (
-                            <GlassView style={styles.simplePanel}>
-                                <TouchableOpacity
-                                    style={styles.simpleBtn}
-                                    onPress={() => {
-                                        onSend(capturedMedia.uri, capturedMedia.type);
-                                        setCapturedMedia(null);
-                                        onClose();
-                                    }}
-                                >
+                            <GlassView style={[styles.simplePanel, { bottom: insets.bottom + 20 }]}>
+                                <TouchableOpacity style={styles.simpleBtn} onPress={() => send()}>
                                     <SymbolView name="paperplane.fill" size={20} tintColor={getThemeColor('tint')} />
-                                    <Text style={[styles.decisionText, { color: getThemeColor('tint'), fontWeight: 'bold' }]}>
-                                        Compartir en Historia
-                                    </Text>
+                                    <Text style={[styles.decisionText, styles.decisionTextTint]}>Share to Story</Text>
                                 </TouchableOpacity>
                             </GlassView>
                         ) : mode === 'simple' ? (
-                            <GlassView style={styles.simplePanel}>
-                                <TouchableOpacity
-                                    style={styles.simpleBtn}
-                                    onPress={() => {
-                                        onSend(capturedMedia.uri, capturedMedia.type);
-                                        setCapturedMedia(null);
-                                        onClose();
-                                    }}
-                                >
+                            <GlassView style={[styles.simplePanel, { bottom: insets.bottom + 20 }]}>
+                                <TouchableOpacity style={styles.simpleBtn} onPress={() => send()}>
                                     <SymbolView name="checkmark.circle.fill" size={20} tintColor={getThemeColor('tint')} />
-                                    <Text style={[styles.decisionText, { color: getThemeColor('tint') }]}>
-                                        Usar Archivo
-                                    </Text>
+                                    <Text style={[styles.decisionText, styles.decisionTextTint]}>Use File</Text>
                                 </TouchableOpacity>
                             </GlassView>
                         ) : (
-                            <GlassView style={styles.decisionPanel}>
-                                <TouchableOpacity
-                                    style={styles.decisionBtn}
-                                    onPress={() => {
-                                        onSend(capturedMedia.uri, capturedMedia.type);
-                                        setCapturedMedia(null);
-                                        onClose();
-                                    }}
-                                >
-                                    <SymbolView name="infinity" size={24} tintColor="#fff" />
+                            <GlassView style={[styles.decisionPanel, { bottom: insets.bottom + 20 }]}>
+                                <TouchableOpacity style={styles.decisionBtn} onPress={() => send()}>
+                                    <SymbolView name="infinity" size={22} tintColor="#fff" />
                                     <Text style={styles.decisionText}>Send to Chat</Text>
                                 </TouchableOpacity>
 
                                 <View style={styles.separator} />
 
                                 <TouchableOpacity
-                                    style={styles.decisionBtn}
-                                    onPress={() => {
-                                        onSend(capturedMedia.uri, capturedMedia.type, 'image-view-once');
-                                        setCapturedMedia(null);
-                                        onClose();
-                                    }}
+                                    style={[styles.decisionBtn, capturedMedia.type === 'video' && styles.decisionBtnDisabled]}
+                                    onPress={() => send('image-view-once')}
+                                    disabled={capturedMedia.type === 'video'}
                                 >
-                                    <SymbolView name="eye.fill" size={24} tintColor={getThemeColor('tint')} />
-                                    <Text style={[styles.decisionText, { color: getThemeColor('tint') }]}>
+                                    <SymbolView
+                                        name="eye.fill"
+                                        size={22}
+                                        tintColor={capturedMedia.type === 'video' ? '#555' : getThemeColor('tint')}
+                                    />
+                                    <Text
+                                        style={[
+                                            styles.decisionText,
+                                            capturedMedia.type === 'video' ? styles.decisionTextMuted : styles.decisionTextTint,
+                                        ]}
+                                    >
                                         View Once
                                     </Text>
                                 </TouchableOpacity>

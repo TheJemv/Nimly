@@ -204,7 +204,9 @@ export default function StoryViewerModal({
 
     const handleClose = () => {
         resetTimer();
-        if (isVideo && videoPlayer) videoPlayer.pause();
+        // expo-video puede haber liberado el player nativo (fin de historias /
+        // desmontaje): la llamada lanza NotFoundException si no se protege.
+        try { if (isVideo && videoPlayer) videoPlayer.pause(); } catch { /* player liberado */ }
         resetSheet();
         onClose();
     };

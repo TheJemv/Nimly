@@ -4,6 +4,12 @@ const { width, height } = Dimensions.get('window');
 export const styles = StyleSheet.create({
     standardImageContainer: { width: 200, height: 250, borderRadius: 15, overflow: 'hidden', backgroundColor: '#1c1c1e' },
     imageMini: { width: '100%', height: '100%' },
+    playOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     retryTouch: { justifyContent: 'center', alignItems: 'center' },
     senderVO: { flexDirection: 'row', alignItems: 'center', gap: 6 },

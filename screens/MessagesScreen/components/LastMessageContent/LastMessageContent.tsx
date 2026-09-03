@@ -25,7 +25,9 @@ const isMediaMessage = (content: string, type?: string) => {
 
 const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUnread }: LastMessageContentProps) => {
     const isOpenedCapsule = content === "OPENED_CAPSULE";
-    const isViewOnce = (type || "").toLowerCase().replace(/[_\s]/g, "-").includes("once");
+    const normType = (type || "").toLowerCase().replace(/[_\s]/g, "-");
+    const isViewOnce = normType.includes("once");
+    const isVideo = normType.includes("video") || /\.mp4/i.test(content || "");
     const media = !isOpenedCapsule && isMediaMessage(content, type);
 
     // Hook must run unconditionally; skip work when we already know it's media.
@@ -36,7 +38,7 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUn
 
     let body: string;
     if (isOpenedCapsule) body = "👁 Opened";
-    else if (media) body = isViewOnce ? "📷 One-time photo" : "📷 Photo";
+    else if (media) body = isVideo ? "🎥 Video" : isViewOnce ? "📷 One-time photo" : "📷 Photo";
     else if (status === "pending") body = "…";
     else if (status === "failed") body = "🔒 Encrypted message";
     else body = text;
