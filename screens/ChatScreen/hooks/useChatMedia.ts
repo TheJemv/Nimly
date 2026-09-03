@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto } from '@/utils/crypto';
+import * as Sentry from '@sentry/react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useState } from 'react';
@@ -70,6 +71,7 @@ export function useChatMedia(chatId: string, currentUserId: string) {
             if (__DEV__) console.log(`Vault: ${type} sent (E2EE).`);
         } catch (e) {
             console.error("Media Service Error:", e);
+            Sentry.captureException(e, { tags: { area: 'chat-media-upload' }, extra: { type } });
             Alert.alert("Media not sent", "Your photo could not be encrypted and sent. Please try again.");
         } finally {
             setIsUploading(false);

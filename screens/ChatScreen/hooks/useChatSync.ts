@@ -3,6 +3,7 @@ import { useAppForeground } from "@/hooks/useAppForeground";
 import { supabase } from "@/lib/supabase";
 import { cleanChatMessage } from "@/utils/chatUtils";
 import { contactKeys, identityRotation, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
+import * as Sentry from "@sentry/react-native";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -185,6 +186,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 await fetchMessages(cId, 0, pubKey);
             } catch (e) {
                 console.error("❌ [INIT] Chat Init Error:", e);
+                Sentry.captureException(e, { tags: { area: 'chat-init' } });
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -374,6 +376,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 return { ok: true };
             } catch (e) {
                 console.error("❌ [SEND] Vault Send Error:", e);
+                Sentry.captureException(e, { tags: { area: 'chat-send' } });
                 setMessages((prev) =>
                     prev.map((m) => (m.id === clientId ? { ...m, __status: "failed" as const } : m))
                 );

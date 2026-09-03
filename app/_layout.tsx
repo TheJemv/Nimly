@@ -17,6 +17,7 @@ import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'react-native';
 import * as Sentry from '@sentry/react-native';
+import { scrubBreadcrumb, scrubSentryEvent } from '@/utils/sentryScrub';
 
 Sentry.init({
   dsn: 'https://aa8f8ea6c977c413e09cc4ee443efb1a@o4512021080440832.ingest.us.sentry.io/4512021085028352',
@@ -36,6 +37,10 @@ Sentry.init({
     'AbortError',
     'Non-Error promise rejection captured',
   ],
+
+  // E2EE: redacta llaves / texto descifrado / passcodes de todo lo que sale.
+  beforeSend: scrubSentryEvent,
+  beforeBreadcrumb: scrubBreadcrumb,
 });
 
 SplashScreen.preventAutoHideAsync().catch(() => { });

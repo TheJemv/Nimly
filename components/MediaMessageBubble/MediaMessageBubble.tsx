@@ -2,6 +2,7 @@ import { getThemeColor } from '@/constants/theme';
 
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
+import * as Sentry from '@sentry/react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SymbolView } from 'expo-symbols';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -108,6 +109,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             }
         } catch (e) {
             console.error("Media decrypt error:", e);
+            Sentry.captureException(e, { tags: { area: 'chat-media-decrypt' } });
             if (isMounted && !silent) {
                 Alert.alert("Media unavailable", "We couldn't load this. Check your connection and try again.");
             }

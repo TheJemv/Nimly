@@ -10,6 +10,7 @@ import {
 } from '@/utils/crypto';
 import { useAppForeground } from '@/hooks/useAppForeground';
 import { vaultPasscode } from '@/utils/vaultPasscode';
+import * as Sentry from '@sentry/react-native';
 import { Session } from '@supabase/supabase-js';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
@@ -185,6 +186,7 @@ export function useVaultSecurity() {
             return finishReady();
         } catch (error) {
             console.error('Vault Initialization Error:', error);
+            Sentry.captureException(error, { tags: { area: 'vault-init' } });
             setVaultState('needs_new_identity');
             return 'needs_new_identity';
         }
@@ -255,6 +257,7 @@ export function useVaultSecurity() {
             return { ok: true };
         } catch (e) {
             console.error('doTakeover failed:', e);
+            Sentry.captureException(e, { tags: { area: 'vault-takeover' } });
             return { ok: false, message: 'Could not set up this device. Check your connection and try again.' };
         } finally {
             takeoverInFlightRef.current = false;
