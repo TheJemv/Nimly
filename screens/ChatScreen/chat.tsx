@@ -33,7 +33,7 @@ import { getThemeColor } from "@/constants/theme";
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import { MessageContent } from "@/components/MessageContent";
 import NymlyCamera from "@/components/NymlyCamera";
-import { ReplyPreview } from "@/components/ReplyPreview";
+import { ReplyPreview, replyMediaKind } from "@/components/ReplyPreview";
 import { ReplyStory } from "@/components/ReplyStory";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -363,6 +363,10 @@ export default function ChatScreen() {
                            if (pending) return;
                            if (isText) setReplyingTo(item);
                         }}
+                        onLongPress={() => {
+                           if (!pending && !failed) setReplyingTo(item);
+                        }}
+                        delayLongPress={250}
                         style={[
                            isMedia ? styles.bubbleImage : styles.bubble,
                            mine ? styles.myBubble : styles.theirBubble,
@@ -392,6 +396,7 @@ export default function ChatScreen() {
                               isViewOnce={item.type === 'image-view-once'}
                               isMine={mine}
                               onLocked={() => markLocked(item.id)}
+                              onRequestReply={() => setReplyingTo(item)}
                            />
                         )}
                      </TouchableOpacity>
@@ -555,19 +560,22 @@ export default function ChatScreen() {
                   <Text style={styles.replyPreviewLabel} numberOfLines={1}>
                      Replying to {replyingTo.sender_id === currentUserId ? "yourself" : `@${displayName}`}
                   </Text>
-                  {replyingTo.type === 'image' || replyingTo.type === 'image-view-once' || replyingTo.content === 'OPENED_CAPSULE' ? (
-                     <View style={styles.replyPhotoRow}>
-                        <SymbolView name="photo.fill" size={12} tintColor="#8E8E93" />
-                        <Text style={styles.replyPreviewText}>Photo</Text>
-                     </View>
-                  ) : (
-                     <MessageContent
-                        content={replyingTo.content}
-                        friendPublicKey={friendProfile?.public_key || routeUser?.public_key}
-                        style={styles.replyPreviewText}
-                        numberOfLines={1}
-                     />
-                  )}
+                  {(() => {
+                     const rm = replyMediaKind(replyingTo.content, replyingTo.type);
+                     return rm ? (
+                        <View style={styles.replyPhotoRow}>
+                           <SymbolView name={rm.icon as any} size={12} tintColor="#8E8E93" />
+                           <Text style={styles.replyPreviewText}>{rm.label}</Text>
+                        </View>
+                     ) : (
+                        <MessageContent
+                           content={replyingTo.content}
+                           friendPublicKey={friendProfile?.public_key || routeUser?.public_key}
+                           style={styles.replyPreviewText}
+                           numberOfLines={1}
+                        />
+                     );
+                  })()}
                </View>
                <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={8}>
                   <SymbolView name="xmark.circle.fill" size={22} tintColor="#666" />

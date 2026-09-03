@@ -18,12 +18,14 @@ interface Props {
     isViewOnce: boolean;
     isMine: boolean;
     onLocked?: () => void;
+    /** Long-press en la burbuja → responder a este mensaje. */
+    onRequestReply?: () => void;
 }
 
 /** El sufijo antes de `.vault` (ver useChatMedia) indica el tipo. */
 const isVideoPath = (p: string) => /\.mp4(\.vault)?$/i.test(p);
 
-export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine, onLocked }: Props) {
+export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine, onLocked, onRequestReply }: Props) {
     const isVideo = isVideoPath(filePath);
 
     const [mediaUri, setMediaUri] = useState<string | null>(vaultRAMCache[filePath] || null);
@@ -158,6 +160,8 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             <>
                 <TouchableOpacity
                     onPress={() => (mediaUri ? setIsFullScreen(true) : downloadAndDecrypt(true))}
+                    onLongPress={onRequestReply}
+                    delayLongPress={250}
                     style={styles.standardImageContainer}
                     disabled={isLoading}
                     activeOpacity={0.9}
@@ -215,7 +219,13 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
 
     return (
         <>
-            <TouchableOpacity style={styles.receiverVOContainer} onPress={() => downloadAndDecrypt(true)} disabled={isLoading}>
+            <TouchableOpacity
+                style={styles.receiverVOContainer}
+                onPress={() => downloadAndDecrypt(true)}
+                onLongPress={onRequestReply}
+                delayLongPress={250}
+                disabled={isLoading}
+            >
                 {isLoading ? (
                     <ActivityIndicator color={getThemeColor('tint')} size="small" />
                 ) : (

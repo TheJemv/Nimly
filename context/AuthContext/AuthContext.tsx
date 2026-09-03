@@ -6,7 +6,7 @@ import { Session } from '@supabase/supabase-js';
 
 // Custom Hooks
 import { useProtectedRoute, useVaultSecurity } from './hooks';
-import type { VaultState } from './hooks/useVaultSecurity';
+import type { PasscodeResult, VaultState } from './hooks/useVaultSecurity';
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
     if (__DEV__) return promise;
@@ -25,10 +25,16 @@ interface AuthContextValue {
         state: VaultState;
         /** Migración legítima: crea identidad nueva en este dispositivo. */
         confirmNewIdentity: () => Promise<void>;
-        /** Cuenta bloqueada en otro dispositivo: toma el control con contraseña. */
-        forceTakeover: (password: string) => Promise<string | null>;
+        /** Crea el PIN de 6 dígitos (pantalla 'needs_passcode'). */
+        createPasscode: (code: string) => Promise<PasscodeResult>;
+        /** Cuenta bloqueada en otro dispositivo → takeover con el PIN. */
+        takeoverWithPasscode: (code: string) => Promise<PasscodeResult>;
+        /** Fallback: takeover con la contraseña de la cuenta. */
+        forceTakeover: (password: string) => Promise<PasscodeResult>;
     };
 }
+
+const notReady: PasscodeResult = { ok: false, message: 'not ready' };
 
 export const AuthContext = createContext<AuthContextValue>({
     session: null,
@@ -36,7 +42,9 @@ export const AuthContext = createContext<AuthContextValue>({
     vault: {
         state: 'loading',
         confirmNewIdentity: async () => { },
-        forceTakeover: async () => 'not ready',
+        createPasscode: async () => notReady,
+        takeoverWithPasscode: async () => notReady,
+        forceTakeover: async () => notReady,
     },
 });
 
@@ -49,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         purgeVaultData,
         vaultState,
         confirmNewIdentity,
+        createPasscode,
+        takeoverWithPasscode,
         forceTakeover,
     } = useVaultSecurity();
     useProtectedRoute(session, isLoading);
@@ -116,6 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 vault: {
                     state: vaultState,
                     confirmNewIdentity,
+                    createPasscode,
+                    takeoverWithPasscode,
                     forceTakeover,
                 },
             }}

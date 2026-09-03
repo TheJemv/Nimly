@@ -8,16 +8,19 @@ import {
     vaultIdentity,
     VaultIdentityState,
 } from '@/utils/crypto';
+import { vaultPasscode } from '@/utils/vaultPasscode';
 import { Session } from '@supabase/supabase-js';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
-// 'device_locked' → la cuenta ya está en uso en OTRO dispositivo. Nimly es de un
-// solo dispositivo: este equipo no puede entrar hasta que el otro cierre sesión
-// (o el usuario haga un "force takeover" con su contraseña).
-export type VaultState = 'loading' | 'device_locked' | VaultIdentityState;
+// 'device_locked'   → la cuenta ya está activa en OTRO dispositivo.
+// 'needs_passcode'  → hay identidad usable aquí pero falta crear el PIN de 6
+//                     dígitos (recuperación / segundo factor para el takeover).
+export type VaultState = 'loading' | 'device_locked' | 'needs_passcode' | VaultIdentityState;
+
+export type PasscodeResult = { ok: true } | { ok: false; message: string };
 
 /** Identificador estable de este dispositivo (sobrevive reinstalación en el mismo equipo). */
 const buildDeviceId = () =>
@@ -102,6 +105,15 @@ export function useVaultSecurity() {
         };
     }, []);
 
+    /** Bóveda usable aquí → 'ready', salvo que falte crear el passcode. */
+    const finishReady = async (): Promise<VaultState> => {
+        let hasPasscode = true; // ante un fallo de red no bloqueamos al usuario
+        try { hasPasscode = await vaultPasscode.isSet(); } catch { /* resiliente */ }
+        const next: VaultState = hasPasscode ? 'ready' : 'needs_passcode';
+        setVaultState(next);
+        return next;
+    };
+
     const runSetup = useCallback(async (userSession: Session | null): Promise<VaultState> => {
         if (!userSession?.user) return 'loading';
         if (takeoverInFlightRef.current) return 'loading';
@@ -139,8 +151,7 @@ export function useVaultSecurity() {
             if (localPrivateKey && storedOwnerId === currentUserId) {
                 await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
                 await claimDevice(currentUserId);
-                setVaultState('ready');
-                return 'ready';
+                return finishReady();
             }
 
             // Sin llave local y libre. ¿El servidor ya tenía una identidad?
@@ -155,8 +166,7 @@ export function useVaultSecurity() {
             await vaultIdentity.generateIdentity();
             await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
             await claimDevice(currentUserId);
-            setVaultState('ready');
-            return 'ready';
+            return finishReady();
         } catch (error) {
             console.error('Vault Initialization Error:', error);
             setVaultState('needs_new_identity');
@@ -183,38 +193,65 @@ export function useVaultSecurity() {
             await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
             await claimDevice(user.id);
         }
-        setVaultState('ready');
+        await finishReady();
     }, []);
 
-    /**
-     * "Perdí mi otro dispositivo": exige la contraseña de la cuenta, libera el
-     * lock del servidor y toma el control aquí con una identidad nueva. Devuelve
-     * un mensaje de error o `null` si salió bien.
-     */
-    const forceTakeover = useCallback(async (password: string): Promise<string | null> => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user?.email) return 'Could not verify your account.';
+    /** Crea el PIN de 6 dígitos y desbloquea la app. */
+    const createPasscode = useCallback(async (code: string): Promise<PasscodeResult> => {
+        if (!/^\d{6}$/.test(code)) return { ok: false, message: 'Enter 6 digits.' };
+        try {
+            await vaultPasscode.set(code);
+            setVaultState('ready');
+            return { ok: true };
+        } catch (e) {
+            console.error('createPasscode failed:', e);
+            return { ok: false, message: 'Could not save your passcode. Check your connection.' };
+        }
+    }, []);
 
+    // Núcleo compartido: libera el lock del servidor y toma el control aquí con
+    // una identidad NUEVA (el historial cifrado anterior queda ilegible).
+    const doTakeover = async (userId: string): Promise<PasscodeResult> => {
         takeoverInFlightRef.current = true;
         try {
-            const { error: authError } = await supabase.auth.signInWithPassword({
-                email: user.email,
-                password,
-            });
-            if (authError) return 'Incorrect password.';
-
-            await supabase.from('profiles').update({ current_device_id: null }).eq('id', user.id);
+            await supabase.from('profiles').update({ current_device_id: null }).eq('id', userId);
             await vaultIdentity.createFreshIdentity();
-            await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
-            await claimDevice(user.id);
-            setVaultState('ready');
-            return null;
+            await SecureStore.setItemAsync(OWNER_ID_STORE, userId);
+            await claimDevice(userId);
+            await finishReady();
+            return { ok: true };
         } catch (e) {
-            console.error('forceTakeover failed:', e);
-            return 'Could not set up this device. Check your connection and try again.';
+            console.error('doTakeover failed:', e);
+            return { ok: false, message: 'Could not set up this device. Check your connection and try again.' };
         } finally {
             takeoverInFlightRef.current = false;
         }
+    };
+
+    /** Takeover con el PIN de 6 dígitos (camino principal). */
+    const takeoverWithPasscode = useCallback(async (code: string): Promise<PasscodeResult> => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { ok: false, message: 'Could not verify your account.' };
+
+        const res = await vaultPasscode.verify(code);
+        if (!res.ok) {
+            if (res.reason === 'no_passcode') return { ok: false, message: 'No passcode set. Use your account password instead.' };
+            if (res.reason === 'locked') return { ok: false, message: 'Too many attempts. Try again in 15 minutes.' };
+            if (res.reason === 'wrong') return { ok: false, message: `Wrong passcode. ${res.attemptsLeft} attempt(s) left.` };
+            return { ok: false, message: 'Could not check your passcode. Check your connection.' };
+        }
+        return doTakeover(user.id);
+    }, []);
+
+    /** Fallback: takeover con la contraseña de la cuenta ("olvidé mi passcode"). */
+    const forceTakeover = useCallback(async (password: string): Promise<PasscodeResult> => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) return { ok: false, message: 'Could not verify your account.' };
+
+        const { error: authError } = await supabase.auth.signInWithPassword({ email: user.email, password });
+        if (authError) return { ok: false, message: 'Incorrect password.' };
+
+        return doTakeover(user.id);
     }, []);
 
     const purgeVaultData = async () => {
@@ -224,6 +261,7 @@ export function useVaultSecurity() {
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await SecureStore.deleteItemAsync(OWNER_ID_STORE);
         await identityRotation.clear();
+        await vaultPasscode.clearLocalFlag();
         purgeVaultRAM();
         purgeSharedSecrets();
         setVaultState('loading');
@@ -233,6 +271,8 @@ export function useVaultSecurity() {
         vaultState,
         setupVaultIdentity,
         confirmNewIdentity,
+        createPasscode,
+        takeoverWithPasscode,
         forceTakeover,
         purgeVaultData,
     };

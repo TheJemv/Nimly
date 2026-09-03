@@ -22,6 +22,16 @@ interface ReplyPreviewProps {
    friendPublicKey: string;
 }
 
+/** Devuelve icono + etiqueta si el mensaje citado es multimedia. */
+export const replyMediaKind = (content?: string | null, type?: string | null): { icon: string; label: string } | null => {
+   const t = (type || "").toLowerCase();
+   if (content === "OPENED_CAPSULE") return { icon: "photo.fill", label: "Photo" };
+   if (t.includes("video") || /\.mp4/i.test(content || "")) return { icon: "video.fill", label: "Video" };
+   if (t.includes("once")) return { icon: "photo.fill", label: "One-time photo" };
+   if (t.includes("image")) return { icon: "photo.fill", label: "Photo" };
+   return null;
+};
+
 /**
  * Instagram-style quoted reply that sits just above a message bubble: a small
  * "X replied to Y" line and a tinted pill with a one-line peek of the original.
@@ -35,10 +45,7 @@ export const ReplyPreview = memo(({ reply, isMine, friendName, currentUserId, fr
    else if (originalMine) label = `@${friendName} replied to you`;
    else label = `@${friendName} replied to themselves`;
 
-   const isPhoto =
-      reply.type === "image" ||
-      reply.type === "image-view-once" ||
-      reply.content === "OPENED_CAPSULE";
+   const media = replyMediaKind(reply.content, reply.type);
 
    return (
       <View style={[styles.wrap, isMine ? styles.alignEnd : styles.alignStart]}>
@@ -48,10 +55,10 @@ export const ReplyPreview = memo(({ reply, isMine, friendName, currentUserId, fr
          </View>
 
          <View style={[styles.quote, isMine ? styles.quoteMine : styles.quoteTheirs]}>
-            {isPhoto ? (
+            {media ? (
                <View style={styles.photoRow}>
-                  <SymbolView name="photo.fill" size={12} tintColor="#c7c7cc" />
-                  <Text style={styles.quoteText}>Photo</Text>
+                  <SymbolView name={media.icon as any} size={12} tintColor="#c7c7cc" />
+                  <Text style={styles.quoteText}>{media.label}</Text>
                </View>
             ) : (
                <MessageContent
