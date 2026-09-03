@@ -108,6 +108,7 @@ export const vaultIdentity = {
     async createFreshIdentity(): Promise<void> {
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await vaultIdentity.generateIdentity();
+        await identityRotation.markRotated();
     },
 };
 
@@ -163,6 +164,26 @@ export const contactKeys = {
     async get(userId: string): Promise<KnownKeyRecord | null> {
         const all = await readKnownKeys();
         return all[userId] ?? null;
+    },
+};
+
+// --- MOMENTO EN QUE MI IDENTIDAD SE ROTÓ EN ESTE DISPOSITIVO ---
+//
+// Tras un cambio de identidad (dispositivo nuevo / "force takeover"), la llave
+// privada anterior desaparece: nada cifrado ANTES de este instante se puede
+// descifrar aquí. El chat usa esta marca para ni siquiera pedir esos mensajes.
+
+const IDENTITY_ROTATED_STORE = 'nimly_identity_rotated_at';
+
+export const identityRotation = {
+    async markRotated(): Promise<void> {
+        try { await AsyncStorage.setItem(IDENTITY_ROTATED_STORE, new Date().toISOString()); } catch { /* no crítico */ }
+    },
+    async rotatedAt(): Promise<string | null> {
+        try { return await AsyncStorage.getItem(IDENTITY_ROTATED_STORE); } catch { return null; }
+    },
+    async clear(): Promise<void> {
+        try { await AsyncStorage.removeItem(IDENTITY_ROTATED_STORE); } catch { /* no crítico */ }
     },
 };
 

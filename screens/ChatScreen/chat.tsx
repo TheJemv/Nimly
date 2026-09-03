@@ -94,6 +94,7 @@ export default function ChatScreen() {
       hasMore,
       friendProfile,
       friendKeyChanged,
+      messageCutoff,
       currentUserId,
       loadMoreMessages,
       sendText
@@ -173,19 +174,38 @@ export default function ChatScreen() {
    const avatarConfig = friendProfile?.avatar_config || routeUser?.avatar_config;
    const avatarUrl = friendProfile?.avatar_url || routeUser?.avatar_url;
 
+   const cutoffLabel = useMemo(() => {
+      if (!messageCutoff) return null;
+      const d = new Date(messageCutoff);
+      if (isNaN(d.getTime())) return null;
+      const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const sameYear = d.getFullYear() === new Date().getFullYear();
+      const when = sameYear ? `${MONTHS[d.getMonth()]} ${d.getDate()}` : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+      return `Encryption keys changed · messages before ${when} aren't available on this device`;
+   }, [messageCutoff]);
+
    const keyChangeNotice = friendKeyChanged
       ? `@${displayName}'s encryption keys changed · earlier messages can't be opened`
       : `Some earlier messages can't be opened on this device`;
 
-   // Final FlatList data: decorated (visible) messages with the key-change
-   // notice spliced in at the boundary. List is inverted, so index 0 = newest.
+   // Final FlatList data (inverted → index 0 = newest). We may splice in a system
+   // notice: at the hidden-messages boundary, and/or one pinned at the very top
+   // when there's a hard history cutoff (nothing older is even fetched).
    const listData = useMemo(() => {
-      if (!newestHiddenAt) return decoratedMessages;
-      const notice = { __system: true, id: 'sys-key-change', __label: keyChangeNotice } as any;
-      const idx = decoratedMessages.findIndex(m => new Date(m.created_at).getTime() <= newestHiddenAt);
-      if (idx === -1) return [...decoratedMessages, notice];
-      return [...decoratedMessages.slice(0, idx), notice, ...decoratedMessages.slice(idx)];
-   }, [decoratedMessages, newestHiddenAt, keyChangeNotice]);
+      let out = decoratedMessages;
+
+      if (newestHiddenAt) {
+         const notice = { __system: true, id: 'sys-key-change', __label: keyChangeNotice } as any;
+         const idx = out.findIndex(m => new Date(m.created_at).getTime() <= newestHiddenAt);
+         out = idx === -1 ? [...out, notice] : [...out.slice(0, idx), notice, ...out.slice(idx)];
+      }
+
+      if (cutoffLabel && !hasMore) {
+         out = [...out, { __system: true, id: 'sys-cutoff', __label: cutoffLabel } as any];
+      }
+
+      return out;
+   }, [decoratedMessages, newestHiddenAt, keyChangeNotice, cutoffLabel, hasMore]);
 
    useEffect(() => {
       if (!friendProfile?.public_key && !routeUser?.public_key || messages.length === 0) return;

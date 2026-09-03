@@ -2,7 +2,7 @@ import { chatApi } from "@/api/chat";
 import { useAppForeground } from "@/hooks/useAppForeground";
 import { supabase } from "@/lib/supabase";
 import { cleanChatMessage } from "@/utils/chatUtils";
-import { contactKeys, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
+import { contactKeys, identityRotation, vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -49,6 +49,11 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     // true si la public key del contacto cambió respecto a la última vista en este dispositivo
     const [friendKeyChanged, setFriendKeyChanged] = useState(false);
+    // Instante desde el cual este dispositivo SÍ puede descifrar en este chat:
+    // el más reciente entre mi rotación de identidad y la rotación del contacto.
+    // Nada anterior se pide al servidor (no se puede leer de todos modos).
+    const [messageCutoff, setMessageCutoff] = useState<string | null>(null);
+    const cutoffRef = useRef<string | null>(null);
     // Se incrementa al volver de segundo plano para forzar la reconexión del
     // canal de realtime (iOS mata el WebSocket mientras la app está fuera).
     const [resyncNonce, setResyncNonce] = useState(0);
@@ -63,12 +68,14 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
 
     const fetchMessages = useCallback(async (cId: string, offset: number, keyOverride?: string) => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('messages')
                 .select(REPLY_SELECT)
                 .eq('chat_id', cId)
-                .order('created_at', { ascending: false })
-                .range(offset, offset + PAGE_SIZE - 1);
+                .order('created_at', { ascending: false });
+            if (cutoffRef.current) query = query.gte('created_at', cutoffRef.current);
+
+            const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
 
             if (error) throw error;
 
@@ -93,12 +100,14 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
     // paginación ni las burbujas optimistas. Se usa al volver de segundo plano.
     const catchUpMessages = useCallback(async (cId: string) => {
         try {
-            const { data } = await supabase
+            let query = supabase
                 .from('messages')
                 .select(REPLY_SELECT)
                 .eq('chat_id', cId)
-                .order('created_at', { ascending: false })
-                .limit(PAGE_SIZE);
+                .order('created_at', { ascending: false });
+            if (cutoffRef.current) query = query.gte('created_at', cutoffRef.current);
+
+            const { data } = await query.limit(PAGE_SIZE);
 
             if (!data || data.length === 0) return;
 
@@ -154,12 +163,23 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 const pubKey = profRes.data?.public_key ?? routeUserPublicKey;
                 pubKeyRef.current = pubKey;
 
+                // Corte de historial: lo más reciente entre MI rotación de identidad
+                // y la rotación de llave del contacto. Para el contacto usamos el
+                // `public_key_updated_at` del servidor (cuándo publicó su llave
+                // actual), no cuándo lo detectamos aquí.
+                const myRotatedAt = await identityRotation.rotatedAt();
+                let friendRotatedAt: string | null = null;
+
                 if (isMounted && profRes.data) {
                     setFriendProfile(profRes.data);
-                    // Detección local de cambio de llave (estilo "safety number changed").
-                    const { changed } = await contactKeys.record(targetFriendId, profRes.data.public_key ?? null);
-                    if (isMounted) setFriendKeyChanged(changed);
+                    const rec = await contactKeys.record(targetFriendId, profRes.data.public_key ?? null);
+                    if (isMounted) setFriendKeyChanged(rec.changed);
+                    if (rec.changed) friendRotatedAt = profRes.data.public_key_updated_at ?? rec.firstSeenAt;
                 }
+
+                const cutoff = [myRotatedAt, friendRotatedAt].filter(Boolean).sort().pop() as string | undefined;
+                cutoffRef.current = cutoff ?? null;
+                if (isMounted) setMessageCutoff(cutoff ?? null);
 
                 await markMessagesAsRead(cId);
                 await fetchMessages(cId, 0, pubKey);
@@ -372,6 +392,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         hasMore,
         friendProfile,
         friendKeyChanged,
+        messageCutoff,
         currentUserId,
         loadMoreMessages,
         markMessagesAsRead,

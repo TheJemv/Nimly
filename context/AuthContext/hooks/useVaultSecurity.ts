@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import {
+    identityRotation,
     OWNER_ID_STORE,
     PRIVATE_KEY_STORE,
     purgeSharedSecrets,
@@ -114,6 +115,7 @@ export function useVaultSecurity() {
             // Cambio de cuenta: las llaves del usuario anterior no sirven aquí.
             if (storedOwnerId && storedOwnerId !== currentUserId) {
                 await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
+                await identityRotation.clear();
                 localPrivateKey = null;
             }
 
@@ -221,6 +223,7 @@ export function useVaultSecurity() {
         await SecureStore.deleteItemAsync('nymly_vault_seed');
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await SecureStore.deleteItemAsync(OWNER_ID_STORE);
+        await identityRotation.clear();
         purgeVaultRAM();
         purgeSharedSecrets();
         setVaultState('loading');
