@@ -27,9 +27,8 @@ Sentry.init({
 
   environment: __DEV__ ? 'development' : 'production',
 
-  // Solo errores → mínima cuota. Sin performance tracing ni logs.
+  // Solo errores → mínima cuota. Sin performance tracing.
   tracesSampleRate: 0,
-  enableLogs: false,
 
   // Ruido conocido que no aporta.
   ignoreErrors: [
