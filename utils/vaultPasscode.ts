@@ -1,9 +1,28 @@
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import crypto, { Buffer } from 'react-native-quick-crypto';
 
-// Flag local para no consultar el servidor en cada arranque una vez que ya
-// sabemos que la cuenta tiene passcode. Se limpia al cerrar sesión.
-const PASSCODE_SET_FLAG = 'nimly_passcode_set';
+// Hash local del PIN (Keychain) → permite re-verificar el auto-lock SIN red.
+// El hash del servidor (tabla vault_security) solo se usa para el takeover en
+// otro dispositivo.
+const LOCAL_HASH_STORE = 'nimly_passcode_local';       // "iters:saltHex:hashHex"
+const LAST_UNLOCK_STORE = 'nimly_passcode_last_unlock'; // ms epoch (AsyncStorage)
+
+const PBKDF2_ITERATIONS = 200_000;
+const KEYLEN = 32;
+
+const derive = (code: string, saltHex: string, iterations: number): string =>
+    (crypto.pbkdf2Sync(code, Buffer.from(saltHex, 'hex'), iterations, KEYLEN, 'sha256') as Buffer).toString('hex');
+
+const timingSafeEqualHex = (a: string, b: string): boolean => {
+    try {
+        if (a.length !== b.length) return false;
+        return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+    } catch {
+        return a === b;
+    }
+};
 
 export type PasscodeVerifyResult =
     | { ok: true }
@@ -13,28 +32,16 @@ export type PasscodeVerifyResult =
     | { ok: false; reason: 'error' };
 
 export const vaultPasscode = {
-    /** ¿La cuenta ya tiene un passcode? (con caché local optimista). */
-    async isSet(): Promise<boolean> {
-        try {
-            if ((await AsyncStorage.getItem(PASSCODE_SET_FLAG)) === '1') return true;
-        } catch { /* ignore */ }
+    // ---- Servidor (takeover en otro dispositivo) ----
 
-        const { data, error } = await supabase.rpc('has_vault_passcode');
-        if (error) throw error;
-        if (data) {
-            try { await AsyncStorage.setItem(PASSCODE_SET_FLAG, '1'); } catch { /* ignore */ }
-        }
-        return !!data;
-    },
-
-    /** Crea / cambia el passcode (6 dígitos). */
-    async set(code: string): Promise<void> {
+    /** Crea / cambia el PIN en el servidor. */
+    async setRemote(code: string): Promise<void> {
         const { error } = await supabase.rpc('set_vault_passcode', { p_passcode: code });
         if (error) throw error;
-        try { await AsyncStorage.setItem(PASSCODE_SET_FLAG, '1'); } catch { /* ignore */ }
     },
 
-    async verify(code: string): Promise<PasscodeVerifyResult> {
+    /** Verifica contra el servidor con rate-limiting. */
+    async verifyRemote(code: string): Promise<PasscodeVerifyResult> {
         try {
             const { data, error } = await supabase.rpc('verify_vault_passcode', { p_passcode: code });
             if (error || !data) return { ok: false, reason: 'error' };
@@ -47,7 +54,47 @@ export const vaultPasscode = {
         }
     },
 
-    async clearLocalFlag(): Promise<void> {
-        try { await AsyncStorage.removeItem(PASSCODE_SET_FLAG); } catch { /* ignore */ }
+    // ---- Local (setup en este device + auto-lock) ----
+
+    async saveLocal(code: string): Promise<void> {
+        const saltHex = (crypto.randomBytes(16) as Buffer).toString('hex');
+        const hashHex = derive(code, saltHex, PBKDF2_ITERATIONS);
+        await SecureStore.setItemAsync(LOCAL_HASH_STORE, `${PBKDF2_ITERATIONS}:${saltHex}:${hashHex}`);
+    },
+
+    async hasLocal(): Promise<boolean> {
+        try { return !!(await SecureStore.getItemAsync(LOCAL_HASH_STORE)); } catch { return false; }
+    },
+
+    async verifyLocal(code: string): Promise<boolean> {
+        try {
+            const stored = await SecureStore.getItemAsync(LOCAL_HASH_STORE);
+            if (!stored) return false;
+            const [iterStr, saltHex, hashHex] = stored.split(':');
+            const iterations = parseInt(iterStr, 10) || PBKDF2_ITERATIONS;
+            if (!saltHex || !hashHex) return false;
+            return timingSafeEqualHex(derive(code, saltHex, iterations), hashHex);
+        } catch {
+            return false;
+        }
+    },
+
+    async touchUnlock(): Promise<void> {
+        try { await AsyncStorage.setItem(LAST_UNLOCK_STORE, String(Date.now())); } catch { /* ignore */ }
+    },
+
+    async lastUnlockAt(): Promise<number | null> {
+        try {
+            const v = await AsyncStorage.getItem(LAST_UNLOCK_STORE);
+            const n = v ? parseInt(v, 10) : NaN;
+            return Number.isFinite(n) ? n : null;
+        } catch {
+            return null;
+        }
+    },
+
+    async clearLocal(): Promise<void> {
+        try { await SecureStore.deleteItemAsync(LOCAL_HASH_STORE); } catch { /* ignore */ }
+        try { await AsyncStorage.removeItem(LAST_UNLOCK_STORE); } catch { /* ignore */ }
     },
 };

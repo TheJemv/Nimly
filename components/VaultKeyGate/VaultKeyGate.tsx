@@ -2,7 +2,7 @@ import { getThemeColor } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -26,24 +26,73 @@ const accent = getThemeColor('tint');
  *                         tomar el control con el PIN (o la contraseña como fallback).
  *  - `needs_new_identity`→ migración (dispositivo sin llaves, cuenta libre).
  */
+const GATED: string[] = ['needs_passcode', 'locked_timeout', 'device_locked', 'needs_new_identity'];
+
 export default function VaultKeyGate({ children }: { children: React.ReactNode }) {
     const { vault } = useAuth();
     const state = vault.state;
 
-    if (state !== 'needs_passcode' && state !== 'device_locked' && state !== 'needs_new_identity') {
-        return <>{children}</>;
-    }
+    if (!GATED.includes(state)) return <>{children}</>;
 
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                     {state === 'needs_passcode' && <CreatePasscode />}
+                    {state === 'locked_timeout' && <UnlockTimeout />}
                     {state === 'device_locked' && <DeviceLocked />}
                     {state === 'needs_new_identity' && <Migrate />}
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
+    );
+}
+
+// --- Auto-lock periódico (cada 12h) ----------------------------------------
+function UnlockTimeout() {
+    const { vault } = useAuth();
+    const [code, setCode] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const fails = useRef(0);
+
+    const onFilled = async (value: string) => {
+        setBusy(true);
+        setError(null);
+        const res = await vault.unlockWithPasscode(value);
+        if (!res.ok) {
+            fails.current += 1;
+            setCode('');
+            // Retraso creciente tras varios fallos (protege contra fuerza bruta local).
+            if (fails.current >= 5) {
+                const wait = Math.min(60, (fails.current - 4) * 15);
+                setError(`Wrong passcode. Try again in ${wait}s.`);
+                await new Promise((r) => setTimeout(r, wait * 1000));
+                setError('Wrong passcode.');
+            } else {
+                setError(res.message);
+            }
+        }
+        setBusy(false);
+    };
+
+    return (
+        <>
+            <SymbolView name="lock.fill" size={54} tintColor={accent} />
+            <Text style={styles.title}>Enter your passcode</Text>
+            <Text style={styles.body}>Nimly locks itself periodically. Enter your 6-digit passcode to continue.</Text>
+
+            <PasscodeInput value={code} onChange={setCode} onFilled={onFilled} autoFocus editable={!busy} />
+
+            {busy && <ActivityIndicator color={accent} style={{ marginTop: 20 }} />}
+            {error ? <Text style={[styles.body, styles.warn]}>{error}</Text> : null}
+
+            {!busy && (
+                <TouchableOpacity style={styles.link} onPress={() => supabase.auth.signOut()}>
+                    <Text style={styles.linkText}>Sign out</Text>
+                </TouchableOpacity>
+            )}
+        </>
     );
 }
 

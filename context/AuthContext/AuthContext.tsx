@@ -27,6 +27,8 @@ interface AuthContextValue {
         confirmNewIdentity: () => Promise<void>;
         /** Crea el PIN de 6 dígitos (pantalla 'needs_passcode'). */
         createPasscode: (code: string) => Promise<PasscodeResult>;
+        /** Desbloqueo del auto-lock de 12h (pantalla 'locked_timeout'). */
+        unlockWithPasscode: (code: string) => Promise<PasscodeResult>;
         /** Cuenta bloqueada en otro dispositivo → takeover con el PIN. */
         takeoverWithPasscode: (code: string) => Promise<PasscodeResult>;
         /** Fallback: takeover con la contraseña de la cuenta. */
@@ -43,6 +45,7 @@ export const AuthContext = createContext<AuthContextValue>({
         state: 'loading',
         confirmNewIdentity: async () => { },
         createPasscode: async () => notReady,
+        unlockWithPasscode: async () => notReady,
         takeoverWithPasscode: async () => notReady,
         forceTakeover: async () => notReady,
     },
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         vaultState,
         confirmNewIdentity,
         createPasscode,
+        unlockWithPasscode,
         takeoverWithPasscode,
         forceTakeover,
     } = useVaultSecurity();
@@ -127,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     state: vaultState,
                     confirmNewIdentity,
                     createPasscode,
+                    unlockWithPasscode,
                     takeoverWithPasscode,
                     forceTakeover,
                 },
