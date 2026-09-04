@@ -31,8 +31,12 @@ const getValidOptions = (collection: any, category: string) => {
 
 const getDynamicTabs = (collection: any) => {
    const schema = collection.schema.properties;
+   // "style" y "backgroundColor" ya se agregan a mano abajo — algunas colecciones
+   // (ej. avataaars) tienen SU PROPIA propiedad de schema llamada literalmente
+   // "style" (circle/default), lo que duplicaba el tab y hacía tronar React con
+   // "Encountered two children with the same key".
    const ignore = [
-      'seed', 'flip', 'rotate', 'scale', 'radius', 'backgroundColor',
+      'seed', 'flip', 'rotate', 'scale', 'radius', 'backgroundColor', 'style',
       'backgroundType', 'backgroundRotation', 'translateX', 'translateY', 'clip'
    ];
 
@@ -264,7 +268,7 @@ export default function AvatarSelectScreen() {
                <ScrollView contentContainerStyle={styles.gridContainer} keyboardShouldPersistTaps="handled">
                   <View style={styles.gridWrap}>
                      {(activeTab === "style" ? ESTILOS_DICEBEAR : activeTab === "backgroundColor" ? COLORES_FONDO : getValidOptions(activeStyle.collection, activeTab)).map((item: any, index: number) => (
-                        <React.Fragment key={(activeTab === "style" ? item.id : String(item)) + index}>
+                        <React.Fragment key={`${activeTab}:${index}`}>
                            {renderGridItem({ item })}
                         </React.Fragment>
                      ))}
