@@ -4,7 +4,7 @@ import { getThemeColor } from "@/constants/theme";
 import { createAvatar } from "@dicebear/core";
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 // Cambiamos SafeAreaView por el de safe-area-context como pide el warning
 import { supabase } from "@/lib/supabase";
@@ -73,10 +73,12 @@ export default function AvatarSelectScreen() {
    const handleStyleChange = (nuevoEstilo: any) => {
       setActiveStyle(nuevoEstilo);
       setActiveTab("style");
-      // Reseteamos totalmente el config, manteniendo solo el fondo
+      // Reseteamos el config (las opciones de un estilo no sirven en otro),
+      // pero mantenemos fondo y seed — si no, cada cambio de estilo perdía
+      // la seed del username y todos terminaban con el mismo avatar "user".
       setConfig({
          backgroundColor: config.backgroundColor || ["DC143C"],
-         seed: "user"
+         seed: config.seed || "user"
       });
    };
 
@@ -141,7 +143,11 @@ export default function AvatarSelectScreen() {
             .map(([key, value]) => `${key}=${Array.isArray(value) ? value[0] : value}`)
             .join('&');
 
-         const dynamicAvatarUrl = `https://api.dicebear.com/7.x/${activeStyle.id}/svg?${params}`;
+         // La API REST de DiceBear usa slugs kebab-case (ej. "adventurer-neutral"),
+         // pero nuestros ids son camelCase ("adventurerNeutral") — sin este mapeo
+         // la URL quedaba rota (404) para más de la mitad de los estilos.
+         const apiSlug = activeStyle.id.replace(/([A-Z])/g, "-$1").toLowerCase();
+         const dynamicAvatarUrl = `https://api.dicebear.com/7.x/${apiSlug}/svg?${params}`;
 
          const { error } = await supabase
             .from('profiles')
@@ -247,15 +253,23 @@ export default function AvatarSelectScreen() {
                   </ScrollView>
                </View>
 
-               <FlatList
-                  key={activeTab} // IMPORTANTE: Esto arregla el Grid raro al cambiar de tab
-                  data={activeTab === "style" ? ESTILOS_DICEBEAR : activeTab === "backgroundColor" ? COLORES_FONDO : getValidOptions(activeStyle.collection, activeTab)}
-                  numColumns={4}
-                  renderItem={renderGridItem}
-                  contentContainerStyle={styles.gridContainer}
-                  columnWrapperStyle={styles.gridRow}
-                  keyExtractor={(item, index) => index.toString()}
-               />
+               {/*
+                  Antes esto era un FlatList con numColumns=4. Con listas tan chicas
+                  (máx. ~22 items) la virtualización de FlatList no aporta nada y sí
+                  suma riesgo: sin `extraData`, las celdas ya montadas no se enteran
+                  cuando cambia `config`/`activeStyle` por closure (no por `data`), así
+                  que el borde de selección y el preview se quedaban pegados a una
+                  opción vieja. Un View con flexWrap siempre usa el closure actual.
+               */}
+               <ScrollView contentContainerStyle={styles.gridContainer} keyboardShouldPersistTaps="handled">
+                  <View style={styles.gridWrap}>
+                     {(activeTab === "style" ? ESTILOS_DICEBEAR : activeTab === "backgroundColor" ? COLORES_FONDO : getValidOptions(activeStyle.collection, activeTab)).map((item: any, index: number) => (
+                        <React.Fragment key={(activeTab === "style" ? item.id : String(item)) + index}>
+                           {renderGridItem({ item })}
+                        </React.Fragment>
+                     ))}
+                  </View>
+               </ScrollView>
             </View>
          </SafeAreaView>
       </View>
@@ -274,7 +288,7 @@ const styles = StyleSheet.create({
    tabButton: { paddingVertical: 18, paddingHorizontal: 16, borderBottomWidth: 3, borderBottomColor: 'transparent' },
    tabText: { fontSize: 14, fontWeight: '600', color: '#8A8A8A' },
    gridContainer: { padding: 16, paddingBottom: 120 },
-   gridRow: { justifyContent: 'flex-start', gap: 10, marginBottom: 10 },
+   gridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
    gridItem: {
       width: (width - 62) / 4,
       height: 85,
