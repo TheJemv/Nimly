@@ -12,7 +12,7 @@ import { useAppForeground } from '@/hooks/useAppForeground';
 import { vaultPasscode } from '@/utils/vaultPasscode';
 import * as Sentry from '@sentry/react-native';
 import { Session } from '@supabase/supabase-js';
-import * as Device from 'expo-device';
+import { randomUUID } from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
@@ -28,9 +28,22 @@ export type PasscodeResult = { ok: true } | { ok: false; message: string };
 /** Cada cuánto la app vuelve a pedir el passcode. */
 const AUTO_LOCK_MS = 12 * 60 * 60 * 1000;
 
-/** Identificador estable de este dispositivo (sobrevive reinstalación en el mismo equipo). */
-const buildDeviceId = () =>
-    `${Device.deviceName}-${Device.modelId}-${Device.osInternalBuildId}`;
+const DEVICE_ID_STORE = 'nimly_device_id';
+
+/**
+ * Identificador estable de este dispositivo: un UUID generado UNA vez y guardado
+ * en el Keychain. No usar nada derivado de Device.* (modelo, nombre, build del SO):
+ * `osInternalBuildId` en particular es la build de iOS, no del hardware — cambia
+ * solo con cada actualización del sistema y eso bloqueaba dispositivos legítimos.
+ */
+const getDeviceId = async (): Promise<string> => {
+    let id = await SecureStore.getItemAsync(DEVICE_ID_STORE);
+    if (!id) {
+        id = randomUUID();
+        await SecureStore.setItemAsync(DEVICE_ID_STORE, id);
+    }
+    return id;
+};
 
 export function useVaultSecurity() {
     const [vaultState, setVaultState] = useState<VaultState>('loading');
@@ -71,7 +84,7 @@ export function useVaultSecurity() {
 
     /** Marca este dispositivo como el activo de la cuenta y vigila cambios. */
     const claimDevice = async (userId: string) => {
-        const myDeviceId = buildDeviceId();
+        const myDeviceId = await getDeviceId();
         try {
             await supabase.from('profiles').update({ current_device_id: myDeviceId }).eq('id', userId);
             ownedUserIdRef.current = userId;
@@ -99,7 +112,7 @@ export function useVaultSecurity() {
                 .from('profiles')
                 .update({ current_device_id: null })
                 .eq('id', userId)
-                .eq('current_device_id', buildDeviceId());
+                .eq('current_device_id', await getDeviceId());
         } catch (e) {
             console.error('releaseDevice failed:', e);
         }
@@ -135,7 +148,6 @@ export function useVaultSecurity() {
         if (!userSession?.user) return 'loading';
         if (takeoverInFlightRef.current) return 'loading';
         const currentUserId = userSession.user.id;
-        const myDeviceId = buildDeviceId();
 
         try {
             const storedOwnerId = await SecureStore.getItemAsync(OWNER_ID_STORE);
@@ -148,7 +160,19 @@ export function useVaultSecurity() {
                 localPrivateKey = null;
             }
 
-            // ¿Qué dispositivo tiene la cuenta según el servidor?
+            // Ya tenemos la llave privada de ESTE usuario en ESTE dispositivo: eso
+            // ya es la prueba de legitimidad. Reclamamos directo, sin comparar contra
+            // el fingerprint guardado en el servidor — ese fingerprint puede haber
+            // quedado desactualizado (p. ej. cambió algo del sistema) y no debe poder
+            // bloquear a un dispositivo que ya tiene las llaves correctas.
+            if (localPrivateKey && storedOwnerId === currentUserId) {
+                await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
+                await claimDevice(currentUserId);
+                return finishReady();
+            }
+
+            // Sin llave local: sí importa qué dispositivo tiene la cuenta según el servidor.
+            const myDeviceId = await getDeviceId();
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('current_device_id, public_key')
@@ -164,14 +188,7 @@ export function useVaultSecurity() {
                 return 'device_locked';
             }
 
-            // Tenemos la identidad local y nadie más reclama la cuenta → listo.
-            if (localPrivateKey && storedOwnerId === currentUserId) {
-                await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
-                await claimDevice(currentUserId);
-                return finishReady();
-            }
-
-            // Sin llave local y libre. ¿El servidor ya tenía una identidad?
+            // Libre, pero ¿el servidor ya tenía una identidad?
             if (profile?.public_key) {
                 // Migración legítima (el otro dispositivo cerró sesión / se perdió):
                 // requiere confirmación explícita porque se pierde el historial.
