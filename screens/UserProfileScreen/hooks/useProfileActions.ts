@@ -130,7 +130,7 @@ export function useProfileActions({ id, username, statusInfo, setLoading, refetc
             } else {
                 await friendsApi.sendRequest(id);
             }
-            refetch();
+            await refetch();
         } catch (error: any) {
             Alert.alert("Error", error.message);
         } finally {
