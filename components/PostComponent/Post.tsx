@@ -14,8 +14,10 @@ import Animated, {
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import { useVideoPlayer, VideoView } from "expo-video";
 
 import FullscreenImageViewer from "@/components/MediaMessageBubble/FullscreenImageViewer";
+import FullscreenVideoViewer from "@/components/MediaMessageBubble/FullscreenVideoViewer";
 import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 
@@ -40,6 +42,7 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
 
         //  Media
         isMedia,
+        isVideo,
         mediaUrl,
 
         //  Post
@@ -57,6 +60,12 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
 
     // Zoom a pantalla completa (tap sencillo sobre la imagen).
     const [zoomVisible, setZoomVisible] = useState(false);
+
+    // Preview en línea del video: primer frame, mudo, en pausa (como en chat).
+    const previewPlayer = useVideoPlayer(isVideo && mediaUrl ? mediaUrl : null, (p) => {
+        p.muted = true;
+        p.loop = false;
+    });
 
     // Corazón grande que aparece al doble-tap, estilo Instagram.
     const heartScale = useSharedValue(0);
@@ -128,11 +137,11 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
 
                     {isOwner ? (
                         <TouchableOpacity onPress={handleDelete} style={styles.moreAction}>
-                            <SymbolView name="trash.fill" size={18} tintColor="#48484A" />
+                            <SymbolView name="trash.fill" size={18} tintColor={getThemeColor("icon")} />
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity onPress={async () => await handleReportPost(post.id)} style={styles.moreAction}>
-                            <SymbolView name="exclamationmark.triangle.fill" size={18} tintColor="#48484A" />
+                            <SymbolView name="exclamationmark.triangle.fill" size={18} tintColor={getThemeColor("icon")} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -149,12 +158,26 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                     {isMedia && mediaUrl ? (
                         <GestureDetector gesture={imageTapGesture}>
                             <View style={styles.mediaFrame}>
-                                <Image
-                                    source={{ uri: mediaUrl }}
-                                    style={styles.image}
-                                    contentFit="cover"
-                                    transition={400}
-                                />
+                                {isVideo ? (
+                                    <>
+                                        <VideoView
+                                            player={previewPlayer}
+                                            style={styles.image}
+                                            contentFit="cover"
+                                            nativeControls={false}
+                                        />
+                                        <View style={styles.playOverlay} pointerEvents="none">
+                                            <SymbolView name="play.circle.fill" size={54} tintColor="rgba(255,255,255,0.95)" />
+                                        </View>
+                                    </>
+                                ) : (
+                                    <Image
+                                        source={{ uri: mediaUrl }}
+                                        style={styles.image}
+                                        contentFit="cover"
+                                        transition={400}
+                                    />
+                                )}
                                 <Animated.View style={[styles.heartBurst, heartAnimStyle]} pointerEvents="none">
                                     <SymbolView name="heart.fill" size={90} tintColor="#fff" />
                                 </Animated.View>
@@ -171,7 +194,7 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                         <SymbolView
                             name={isLiked ? "heart.fill" : "heart"}
                             size={18}
-                            tintColor={isLiked ? getThemeColor("tint") : "#636366"}
+                            tintColor={isLiked ? getThemeColor("tint") : getThemeColor("textSecondary")}
                         />
                         <Text style={[styles.interactionText, isLiked && { color: getThemeColor("tint") }]}>
                             {likesCount}
@@ -182,18 +205,26 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                         style={styles.interactionBtn}
                         onPress={onCommentPress}
                     >
-                        <SymbolView name="bubble.right" size={18} tintColor="#636366" />
+                        <SymbolView name="bubble.right" size={18} tintColor={getThemeColor("textSecondary")} />
                         <Text style={styles.interactionText}>{commentsCount}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
 
             {isMedia && mediaUrl ? (
-                <FullscreenImageViewer
-                    visible={zoomVisible}
-                    uri={mediaUrl}
-                    onClose={() => setZoomVisible(false)}
-                />
+                isVideo ? (
+                    <FullscreenVideoViewer
+                        visible={zoomVisible}
+                        uri={mediaUrl}
+                        onClose={() => setZoomVisible(false)}
+                    />
+                ) : (
+                    <FullscreenImageViewer
+                        visible={zoomVisible}
+                        uri={mediaUrl}
+                        onClose={() => setZoomVisible(false)}
+                    />
+                )
             ) : null}
         </View>
     );

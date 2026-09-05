@@ -18,6 +18,12 @@ const toStoragePath = (value: string): string => {
     return i >= 0 ? value.slice(i + marker.length) : value;
 };
 
+// La columna `type` de posts nunca se guardaba bien para video (createPost
+// no la seteaba), así que no es confiable — detectamos por extensión del
+// archivo en vez de por esa columna. Cubre .mov (lo que graba la cámara en
+// iOS) y .mp4/.m4v (lo que puede venir de la librería).
+const isVideoPath = (path: string): boolean => /\.(mp4|mov|m4v|avi|webm)$/i.test(path);
+
 //  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {
     const { session } = useContext(AuthContext)
@@ -64,6 +70,7 @@ export function usePost(post: any, onDelete?: () => void) {
     const isOwner = session?.user.id === post.user_id;
 
     const isMedia = Boolean(post.media_url);
+    const isVideo = isMedia && isVideoPath(post.media_url);
 
     // URL firmada de corta duración para el bucket privado 'media'
     // (en vez de exponer el access_token como header de la imagen).
@@ -193,6 +200,7 @@ export function usePost(post: any, onDelete?: () => void) {
         handleDoubleTapLike,
 
         isMedia,
+        isVideo,
         mediaUrl,
 
         postText,
