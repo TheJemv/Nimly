@@ -22,7 +22,9 @@ const toStoragePath = (value: string): string => {
 // no la seteaba), así que no es confiable — detectamos por extensión del
 // archivo en vez de por esa columna. Cubre .mov (lo que graba la cámara en
 // iOS) y .mp4/.m4v (lo que puede venir de la librería).
-const isVideoPath = (path: string): boolean => /\.(mp4|mov|m4v|avi|webm)$/i.test(path);
+// Exportado: el feed (home) también lo necesita para decidir qué post-video
+// es "el más visible" sin duplicar la regex.
+export const isVideoPath = (path: string): boolean => /\.(mp4|mov|m4v|avi|webm)$/i.test(path);
 
 //  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {

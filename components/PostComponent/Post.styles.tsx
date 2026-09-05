@@ -26,6 +26,17 @@ export const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    muteButton: {
+        position: 'absolute',
+        bottom: 10,
+        right: 10,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     heartBurst: {
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
    ActivityIndicator,
+   FlatList,
    RefreshControl,
-   ScrollView,
    StyleSheet,
    TouchableOpacity,
    View
@@ -17,6 +17,7 @@ import { getFriendsPosts } from "@/api/posts";
 
 import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
+import { isVideoPath } from "@/components/PostComponent/hooks/usePost";
 
 import StoriesDaily from "@/components/StoriesDaily";
 import { Colors, getThemeColor } from "@/constants/theme";
@@ -47,6 +48,20 @@ export default function HomeScreen() {
 
    const commentsRef = useRef<BottomSheetModal>(null);
    const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+
+   // Solo el post-video "más visible" en pantalla reproduce a la vez (estilo
+   // Instagram/TikTok) -- el resto queda en pausa. El mute es compartido por
+   // todo el feed: desmutear uno los deja desmuteados a todos según van
+   // entrando en pantalla.
+   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+   const [feedMuted, setFeedMuted] = useState(true);
+   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+   const onViewableItemsChanged = useRef(
+      ({ viewableItems }: { viewableItems: { item: any; isViewable: boolean }[] }) => {
+         const winner = viewableItems.find((v) => v.isViewable && isVideoPath(v.item?.media_url || ''));
+         setActiveVideoPostId(winner?.item?.id ?? null);
+      }
+   ).current;
 
    const loadPosts = useCallback(async (showLoading = true) => {
       if (showLoading) setLoadingPosts(true);
@@ -113,7 +128,9 @@ export default function HomeScreen() {
             }}
          />
 
-         <ScrollView
+         <FlatList
+            data={visiblePosts}
+            keyExtractor={(post) => post.id}
             showsVerticalScrollIndicator={false}
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{ paddingBottom: 120, paddingTop: 12 }}
@@ -124,49 +141,54 @@ export default function HomeScreen() {
             refreshControl={
                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor("tint")} />
             }
-         >
-            <View style={styles.feed}>
-               {loadingStories ? (
-                  <View style={{
-                     backgroundColor: "transparent",
-                     paddingVertical: 12,
-                     borderBottomWidth: 0,
-                     borderBottomColor: Colors.dark.glassBorder,
-                     minHeight: 110,
-                     display: "flex",
-                     justifyContent: "center",
-                     alignContent: "center"
-                  }}>
-                     <ActivityIndicator size={"large"} color={getThemeColor("tint")} />
-                  </View>
-               ) : (
-                  <StoriesDaily
-                     storyGroups={visibleStoryGroups}
-                     currentUserId={currentUserId}
-                     onStorySeen={handleStorySeen}
-                     onStoryLiked={handleStoryLiked}
-                     onSendStory={handleSendStory}
-                     onStoryDeleted={handleStoryDeleted}
-                  />
-               )}
-
-               {loadingPosts && visiblePosts.length === 0 ? (
-                  <ActivityIndicator style={{ marginTop: 40 }} color={getThemeColor("tint")} />
-               ) : (
-                  visiblePosts.map((post) => (
-                     <PostComponent
-                        post={post}
-                        key={post.id}
-                        onDelete={() => loadPosts(false)}
-                        onCommentPress={() => {
-                           setActiveCommentPostId(post.id);
-                           commentsRef.current?.present();
-                        }}
+            // Decide cuál post-video "gana" y reproduce -- ver los estados
+            // activeVideoPostId/feedMuted arriba.
+            viewabilityConfig={viewabilityConfig}
+            onViewableItemsChanged={onViewableItemsChanged}
+            ListHeaderComponent={
+               <View style={styles.storiesWrap}>
+                  {loadingStories ? (
+                     <View style={{
+                        backgroundColor: "transparent",
+                        paddingVertical: 12,
+                        borderBottomWidth: 0,
+                        borderBottomColor: Colors.dark.glassBorder,
+                        minHeight: 110,
+                        display: "flex",
+                        justifyContent: "center",
+                        alignContent: "center"
+                     }}>
+                        <ActivityIndicator size={"large"} color={getThemeColor("tint")} />
+                     </View>
+                  ) : (
+                     <StoriesDaily
+                        storyGroups={visibleStoryGroups}
+                        currentUserId={currentUserId}
+                        onStorySeen={handleStorySeen}
+                        onStoryLiked={handleStoryLiked}
+                        onSendStory={handleSendStory}
+                        onStoryDeleted={handleStoryDeleted}
                      />
-                  ))
-               )}
-            </View>
-         </ScrollView>
+                  )}
+               </View>
+            }
+            ListEmptyComponent={
+               loadingPosts ? <ActivityIndicator style={{ marginTop: 40 }} color={getThemeColor("tint")} /> : null
+            }
+            renderItem={({ item: post }) => (
+               <PostComponent
+                  post={post}
+                  isActive={post.id === activeVideoPostId}
+                  muted={feedMuted}
+                  onToggleMute={() => setFeedMuted((m) => !m)}
+                  onDelete={() => loadPosts(false)}
+                  onCommentPress={() => {
+                     setActiveCommentPostId(post.id);
+                     commentsRef.current?.present();
+                  }}
+               />
+            )}
+         />
          {/* )} */}
 
          {/*
@@ -188,7 +210,10 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
    container: { flex: 1, backgroundColor: "#000000" },
-   feed: { paddingHorizontal: 0, zIndex: 1, flexDirection: "column", gap: 12 },
+   // Antes este espacio lo daba el `gap: 12` del View que envolvía todo el
+   // feed en el ScrollView viejo -- el FlatList no envuelve items así, y el
+   // espacio entre posts ya lo da el propio marginBottom de PostComponent.
+   storiesWrap: { marginBottom: 12 },
    loaderContainer: {
       flex: 1,
       justifyContent: "center",

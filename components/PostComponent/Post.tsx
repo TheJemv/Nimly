@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
     runOnJS,
@@ -28,9 +28,22 @@ interface Props {
     post: any;
     onDelete?: () => void;
     onCommentPress?: () => void;
+    /**
+     * Solo importa si el post es video. Quién controla el feed (Home) decide
+     * cuál post-video es "el más visible" y solo a ese le pasa `true` — así
+     * nunca hay dos reproduciendo al mismo tiempo. Si nadie lo controla (ej.
+     * el grid del perfil, que no trackea scroll), por default se reproduce
+     * solo, sin depender de esto.
+     */
+    isActive?: boolean;
+    /** Mute compartido entre todos los videos del feed (como Instagram: se
+     *  desmutea uno y los demás seguirán así al llegar). Si no se pasa, cada
+     *  post lleva su propio mute independiente. */
+    muted?: boolean;
+    onToggleMute?: () => void;
 }
 
-export default function PostComponent({ post, onDelete, onCommentPress }: Props) {
+export default function PostComponent({ post, onDelete, onCommentPress, isActive = true, muted: mutedProp, onToggleMute: onToggleMuteProp }: Props) {
     const router = useRouter();
     const {
         //  Likes
@@ -61,11 +74,48 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
     // Zoom a pantalla completa (tap sencillo sobre la imagen).
     const [zoomVisible, setZoomVisible] = useState(false);
 
-    // Preview en línea del video: primer frame, mudo, en pausa (como en chat).
+    // Mute propio si nadie lo controla desde afuera (ver comentario del prop).
+    const [localMuted, setLocalMuted] = useState(true);
+    const muted = mutedProp ?? localMuted;
+    const toggleMute = onToggleMuteProp ?? (() => setLocalMuted((m) => !m));
+
+    // Preview en línea del video: en loop, arranca/pausa según isActive.
     const previewPlayer = useVideoPlayer(isVideo && mediaUrl ? mediaUrl : null, (p) => {
-        p.muted = true;
-        p.loop = false;
+        p.loop = true;
+        p.muted = muted;
     });
+
+    // El player se recrea si cambia mediaUrl, así que hay que re-aplicar el
+    // mute cada vez que cambie (propio o compartido) — no solo al crearlo.
+    useEffect(() => {
+        try { previewPlayer.muted = muted; } catch { /* player liberado */ }
+    }, [muted, previewPlayer]);
+
+    // Solo reproduce si es el video "activo" del feed Y no está abierto en
+    // pantalla completa (evita que suenen dos audios a la vez).
+    useEffect(() => {
+        if (!isVideo) return;
+        try {
+            if (isActive && !zoomVisible) previewPlayer.play();
+            else previewPlayer.pause();
+        } catch { /* player liberado */ }
+    }, [isVideo, isActive, zoomVisible, previewPlayer]);
+
+    // "no inicia hasta después de un rato": antes se mostraba un botón de
+    // play sobre un frame congelado sin indicar que estaba cargando. Ahora
+    // mostramos un spinner mientras el player buffer-ea, solo si es el que
+    // debería estar reproduciendo ahora mismo.
+    const [previewLoading, setPreviewLoading] = useState(true);
+    useEffect(() => {
+        if (!isVideo) return;
+        const syncStatus = () => {
+            try { setPreviewLoading(previewPlayer.status === 'loading'); } catch { /* liberado */ }
+        };
+        syncStatus();
+        let sub: { remove: () => void } | undefined;
+        try { sub = previewPlayer.addListener?.('statusChange', syncStatus); } catch { /* liberado */ }
+        return () => { try { sub?.remove(); } catch { /* liberado */ } };
+    }, [isVideo, previewPlayer]);
 
     // Corazón grande que aparece al doble-tap, estilo Instagram.
     const heartScale = useSharedValue(0);
@@ -166,9 +216,22 @@ export default function PostComponent({ post, onDelete, onCommentPress }: Props)
                                             contentFit="cover"
                                             nativeControls={false}
                                         />
-                                        <View style={styles.playOverlay} pointerEvents="none">
-                                            <SymbolView name="play.circle.fill" size={54} tintColor="rgba(255,255,255,0.95)" />
-                                        </View>
+                                        {previewLoading && isActive && (
+                                            <View style={styles.playOverlay} pointerEvents="none">
+                                                <ActivityIndicator color="#fff" />
+                                            </View>
+                                        )}
+                                        <TouchableOpacity
+                                            style={styles.muteButton}
+                                            onPress={toggleMute}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
+                                            <SymbolView
+                                                name={muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
+                                                size={13}
+                                                tintColor="#fff"
+                                            />
+                                        </TouchableOpacity>
                                     </>
                                 ) : (
                                     <Image
