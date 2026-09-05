@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { compressVideoForUpload } from '@/utils/compressVideo';
 import { User } from '@supabase/supabase-js';
 import * as ImageManipulator from 'expo-image-manipulator';
 
@@ -36,6 +37,9 @@ export const storiesApi = {
       } catch (err) {
         console.warn("No se pudo comprimir la imagen, usando original:", err);
       }
+    } else {
+      // Video -> ~720p (13s: ~26MB -> ~3-4MB). Nunca falla.
+      fileUri = await compressVideoForUpload(localUri);
     }
 
     const fileExt = mediaType === 'video' ? 'mp4' : 'jpg';

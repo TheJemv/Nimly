@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { compressVideoForUpload } from "@/utils/compressVideo";
 import { decode } from 'base64-arraybuffer';
 // Importamos desde el path legacy para que funcione la lectura en base64
 import * as FileSystem from 'expo-file-system/legacy';
@@ -52,11 +53,17 @@ export const createPost = async (
     if (!media && !text) return
     if (media) {
         try {
-            const base64 = await FileSystem.readAsStringAsync(media.uri, {
+            // Los videos se comprimen a ~720p antes de subir (un clip de 13s
+            // pasa de ~26MB a ~3-4MB). Nunca falla: si no puede, usa el original.
+            const sourceUri = media.type === 'video'
+                ? await compressVideoForUpload(media.uri)
+                : media.uri;
+
+            const base64 = await FileSystem.readAsStringAsync(sourceUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
 
-            const ext = media.uri.split('.').pop() || 'jpg';
+            const ext = sourceUri.split('.').pop() || 'jpg';
             const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
             const filePath = `${userId}/${fileName}`; // Carpeta por usuario para más orden
 

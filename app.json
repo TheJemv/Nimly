@@ -53,7 +53,8 @@
           "project": "nimly",
           "organization": "nimly"
         }
-      ]
+      ],
+      "react-native-compressor"
     ],
     "experiments": {
       "typedRoutes": true,
