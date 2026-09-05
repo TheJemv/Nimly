@@ -157,6 +157,10 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
             mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
             quality: 0.8,
             videoMaxDuration: MAX_VIDEO_SECONDS,
+            // Ver el comentario en new-post.tsx: sin esto el video de fototeca
+            // sube tal cual (con el HDR de la Cámara nativa incluido) y se ve
+            // lavado. Esto lo re-codifica a H.264/AAC estándar (SDR).
+            videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
         });
         if (!result.canceled && result.assets[0]?.uri) {
             const asset = result.assets[0];

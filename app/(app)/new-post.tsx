@@ -24,6 +24,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const TINT = getThemeColor("tint");
+const SURFACE = getThemeColor("surface");
+const TEXT_SECONDARY = getThemeColor("textSecondary");
+const ICON = getThemeColor("icon");
+
 // 1. 👇 Importamos tus contextos
 import UserAvatar from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
@@ -63,6 +68,13 @@ export default function NewPostScreen() {
             mediaTypes: ['images', 'videos'],
             allowsEditing: true,
             quality: 0.8,
+            // Por default (`Passthrough`) el video se sube exactamente como
+            // está en la fototeca -- si se grabó con la Cámara nativa (que
+            // trae HDR prendido de fábrica), ese HDR se sube intacto y se ve
+            // "lavado"/con más brillo al reproducirlo. Forzar un preset real
+            // re-codifica a H.264/AAC estándar (SDR), igual que ya sale de
+            // nuestra propia cámara en la app.
+            videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
          });
 
          if (!result.canceled) {
@@ -124,7 +136,7 @@ export default function NewPostScreen() {
             headerRight: () => (
                <TouchableOpacity onPress={handlePost} disabled={!canPost} style={styles.headerBtn}>
                   {isPosting ? <ActivityIndicator size="small" color={tintColor} /> :
-                     <Text style={[styles.postBtnText, { color: canPost ? tintColor : '#3A3A3C' }]}>Post</Text>}
+                     <Text style={[styles.postBtnText, { color: canPost ? tintColor : ICON }]}>Post</Text>}
                </TouchableOpacity>
             ),
          }} />
@@ -144,7 +156,7 @@ export default function NewPostScreen() {
                      <TextInput
                         style={styles.textInput}
                         placeholder="What is happening?!"
-                        placeholderTextColor="#3A3A3C"
+                        placeholderTextColor={ICON}
                         multiline
                         autoFocus
                         value={text}
@@ -204,7 +216,7 @@ const styles = StyleSheet.create({
    postBtnText: { fontWeight: "700", fontSize: 16 },
    inputArea: { flexDirection: 'row', gap: 12 },
    avatarCol: { width: 40 },
-   avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1C1C1E' },
+   avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: SURFACE },
    contentCol: { flex: 1 },
    textInput: {
       color: "#fff",
@@ -215,14 +227,14 @@ const styles = StyleSheet.create({
       paddingTop: 4
    },
    counterText: {
-      color: '#636366',
+      color: TEXT_SECONDARY,
       fontSize: 16,
       textAlign: 'right',
       marginTop: 4,
       marginBottom: 8
    },
    counterError: {
-      color: '#FF453A',
+      color: TINT,
       fontWeight: '600'
    },
    previewContainer: {
@@ -231,7 +243,7 @@ const styles = StyleSheet.create({
       borderRadius: 16,
       overflow: 'hidden',
       marginTop: 4,
-      backgroundColor: '#1C1C1E',
+      backgroundColor: SURFACE,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.1)'
    },
