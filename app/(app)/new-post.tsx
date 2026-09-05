@@ -68,13 +68,9 @@ export default function NewPostScreen() {
             mediaTypes: ['images', 'videos'],
             allowsEditing: true,
             quality: 0.8,
-            // Por default (`Passthrough`) el video se sube exactamente como
-            // está en la fototeca -- si se grabó con la Cámara nativa (que
-            // trae HDR prendido de fábrica), ese HDR se sube intacto y se ve
-            // "lavado"/con más brillo al reproducirlo. Forzar un preset real
-            // re-codifica a H.264/AAC estándar (SDR), igual que ya sale de
-            // nuestra propia cámara en la app.
-            videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
+            // Passthrough: dejamos el video original tal cual. compressVideoForUpload
+            // (react-native-compressor, parcheado para tone-map HDR->SDR) hace el
+            // único transcode -- así no doble-procesamos.
          });
 
          if (!result.canceled) {
