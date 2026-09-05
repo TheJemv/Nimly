@@ -1,5 +1,5 @@
 // app/_layout.tsx
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-get-random-values';
 
@@ -10,11 +10,12 @@ import * as SplashScreen from "expo-splash-screen";
 import { AppErrorBoundary, AppRecoveryView } from "@/components/AppErrorBoundary";
 import ConnectionErrorView from "@/components/ConnectionErrorView";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { supabase } from '@/lib/supabase';
+import { supabaseUrl } from '@/lib/supabase';
 
 import { AppReadyProvider, useAppReady } from '@/context/AppReadyContext';
 import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
 import { ProfileProvider } from '@/context/ProfileContext';
+import { useAppForeground } from '@/hooks/useAppForeground';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { StatusBar, StyleSheet, View } from 'react-native';
@@ -62,6 +63,32 @@ const STARTUP_WATCHDOG_MS = 15000;
 // normal del feed (el comportamiento de antes) queda como respaldo visible.
 const HOME_OVERLAY_WATCHDOG_MS = 8000;
 
+// Cada cuánto revisamos que el servidor siga en pie DESPUÉS del arranque.
+const HEALTH_POLL_MS = 20000;
+
+/**
+ * ¿Responde el servidor? Pega directo al endpoint REST (con la apikey) en vez
+ * de a `profiles` — así distinguimos "servidor caído" (Cloudflare devuelve un
+ * 5xx con HTML) de "el servidor respondió pero con un error de permisos/RLS".
+ * Cualquier cosa que no sea una respuesta OK = caído.
+ */
+async function isServerReachable(): Promise<boolean> {
+    try {
+        const timeout = new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error('health-timeout')), 4000),
+        );
+        const res = await Promise.race([
+            fetch(`${supabaseUrl}/rest/v1/`, {
+                headers: { apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '' },
+            }),
+            timeout,
+        ]);
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
 function RootLayoutNav() {
     const { isLoading, session, vault } = useAuth();
     const { homeReady } = useAppReady();
@@ -100,18 +127,8 @@ function RootLayoutNav() {
     }, [startupStalled, ready]);
 
     const checkServerConnection = async () => {
-        try {
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Timeout")), 3500)
-            );
-            const pingPromise = supabase.from('profiles').select('id').limit(1).maybeSingle();
-            await Promise.race([pingPromise, timeoutPromise]);
-            setIsOffline(false);
-        } catch {
-            setIsOffline(true);
-        } finally {
-            setIsCheckingNetwork(false);
-        }
+        setIsOffline(!(await isServerReachable()));
+        setIsCheckingNetwork(false);
     };
 
     useEffect(() => {
@@ -119,6 +136,22 @@ function RootLayoutNav() {
             checkServerConnection();
         }
     }, [isLoading]);
+
+    // El chequeo de arriba solo corre al arrancar. Si el servidor se cae
+    // MIENTRAS la app está abierta, sin esto la app se queda "como si nada"
+    // pero con todo vacío/oscuro (cada fetch falla en silencio). Revisamos
+    // cada 20s y al volver de segundo plano; si vuelve, se recupera solo.
+    const revalidateConnection = useCallback(async () => {
+        setIsOffline(!(await isServerReachable()));
+    }, []);
+
+    useEffect(() => {
+        if (!ready) return;
+        const id = setInterval(revalidateConnection, HEALTH_POLL_MS);
+        return () => clearInterval(id);
+    }, [ready, revalidateConnection]);
+
+    useAppForeground(() => { if (ready) revalidateConnection(); });
 
     useEffect(() => {
         if (ready) {

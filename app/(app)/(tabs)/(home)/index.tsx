@@ -20,7 +20,7 @@ import PostComponent from "@/components/PostComponent";
 import { isVideoPath } from "@/components/PostComponent/hooks/usePost";
 
 import StoriesDaily from "@/components/StoriesDaily";
-import { Colors, getThemeColor } from "@/constants/theme";
+import { getThemeColor } from "@/constants/theme";
 import { useAppReady } from "@/context/AppReadyContext";
 import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
@@ -66,7 +66,7 @@ export default function HomeScreen() {
    const loadPosts = useCallback(async (showLoading = true) => {
       if (showLoading) setLoadingPosts(true);
       const userId = session?.user?.id;
-      if (!userId) return; // sin sesión, no cargamos nada
+      if (!userId) { setLoadingPosts(false); return; } // sin sesión, no cargamos nada
       try {
          const postsData = await getFriendsPosts(userId);
          setPosts(postsData || []);
@@ -128,39 +128,33 @@ export default function HomeScreen() {
             }}
          />
 
-         <FlatList
-            data={visiblePosts}
-            keyExtractor={(post) => post.id}
-            showsVerticalScrollIndicator={false}
-            contentInsetAdjustmentBehavior="automatic"
-            contentContainerStyle={{ paddingBottom: 120, paddingTop: 12 }}
-            // Without this, a tap on a button inside the Story viewer modal (which
-            // lives in this tree) is swallowed to dismiss the keyboard and needs
-            // a second tap. See facebook/react-native#28871.
-            keyboardShouldPersistTaps="handled"
-            refreshControl={
-               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor("tint")} />
-            }
-            // Decide cuál post-video "gana" y reproduce -- ver los estados
-            // activeVideoPostId/feedMuted arriba.
-            viewabilityConfig={viewabilityConfig}
-            onViewableItemsChanged={onViewableItemsChanged}
-            ListHeaderComponent={
-               <View style={styles.storiesWrap}>
-                  {loadingStories ? (
-                     <View style={{
-                        backgroundColor: "transparent",
-                        paddingVertical: 12,
-                        borderBottomWidth: 0,
-                        borderBottomColor: Colors.dark.glassBorder,
-                        minHeight: 110,
-                        display: "flex",
-                        justifyContent: "center",
-                        alignContent: "center"
-                     }}>
-                        <ActivityIndicator size={"large"} color={getThemeColor("tint")} />
-                     </View>
-                  ) : (
+         {/* Un solo loader para todo el feed: antes salían dos spinners a la
+             vez (uno de stories, otro de posts). Mientras cualquiera de los
+             dos hace su PRIMERA carga, mostramos uno solo, centrado. */}
+         {loadingStories || loadingPosts ? (
+            <View style={styles.loaderContainer}>
+               <ActivityIndicator size="large" color={getThemeColor("tint")} />
+            </View>
+         ) : (
+            <FlatList
+               data={visiblePosts}
+               keyExtractor={(post) => post.id}
+               showsVerticalScrollIndicator={false}
+               contentInsetAdjustmentBehavior="automatic"
+               contentContainerStyle={{ paddingBottom: 120, paddingTop: 12 }}
+               // Without this, a tap on a button inside the Story viewer modal (which
+               // lives in this tree) is swallowed to dismiss the keyboard and needs
+               // a second tap. See facebook/react-native#28871.
+               keyboardShouldPersistTaps="handled"
+               refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor("tint")} />
+               }
+               // Decide cuál post-video "gana" y reproduce -- ver los estados
+               // activeVideoPostId/feedMuted arriba.
+               viewabilityConfig={viewabilityConfig}
+               onViewableItemsChanged={onViewableItemsChanged}
+               ListHeaderComponent={
+                  <View style={styles.storiesWrap}>
                      <StoriesDaily
                         storyGroups={visibleStoryGroups}
                         currentUserId={currentUserId}
@@ -169,26 +163,23 @@ export default function HomeScreen() {
                         onSendStory={handleSendStory}
                         onStoryDeleted={handleStoryDeleted}
                      />
-                  )}
-               </View>
-            }
-            ListEmptyComponent={
-               loadingPosts ? <ActivityIndicator style={{ marginTop: 40 }} color={getThemeColor("tint")} /> : null
-            }
-            renderItem={({ item: post }) => (
-               <PostComponent
-                  post={post}
-                  isActive={post.id === activeVideoPostId}
-                  muted={feedMuted}
-                  onToggleMute={() => setFeedMuted((m) => !m)}
-                  onDelete={() => loadPosts(false)}
-                  onCommentPress={() => {
-                     setActiveCommentPostId(post.id);
-                     commentsRef.current?.present();
-                  }}
-               />
-            )}
-         />
+                  </View>
+               }
+               renderItem={({ item: post }) => (
+                  <PostComponent
+                     post={post}
+                     isActive={post.id === activeVideoPostId}
+                     muted={feedMuted}
+                     onToggleMute={() => setFeedMuted((m) => !m)}
+                     onDelete={() => loadPosts(false)}
+                     onCommentPress={() => {
+                        setActiveCommentPostId(post.id);
+                        commentsRef.current?.present();
+                     }}
+                  />
+               )}
+            />
+         )}
          {/* )} */}
 
          {/*
