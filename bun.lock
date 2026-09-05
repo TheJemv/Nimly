@@ -95,6 +95,9 @@
   "trustedDependencies": [
     "@sentry/cli",
   ],
+  "patchedDependencies": {
+    "react-native-compressor@1.19.4": "patches/react-native-compressor@1.19.4.patch",
+  },
   "overrides": {
     "lightningcss": "1.30.1",
   },

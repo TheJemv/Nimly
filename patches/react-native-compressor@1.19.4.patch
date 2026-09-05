@@ -1,0 +1,40 @@
+diff --git a/ios/Video/NextLevelSessionExporter.swift b/ios/Video/NextLevelSessionExporter.swift
+index e25af6987e811f1b83d2c475409213883d4742cc..cdd7abdcf3aa0f61c964f43d150d76df47d7a728 100644
+--- a/ios/Video/NextLevelSessionExporter.swift
++++ b/ios/Video/NextLevelSessionExporter.swift
+@@ -483,7 +483,13 @@ extension NextLevelSessionExporter {
+     
+     internal func createVideoComposition() -> AVMutableVideoComposition {
+         let videoComposition = AVMutableVideoComposition()
+-        
++
++        // Nimly patch: tone-map HDR -> SDR Rec.709 durante el export. Sin esto,
++        // el video HDR de la Cámara nativa de iPhone se ve lavado al reproducir.
++        videoComposition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
++        videoComposition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
++        videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
++
+         if let asset = self.asset,
+             let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first {
+             
+diff --git a/ios/Video/VideoMain.swift b/ios/Video/VideoMain.swift
+index 3e29497df902e0ebf2e6c07f1044ab3431ce0ea2..e2b3fae34a3f12212204274b855afbd6e6b058fa 100644
+--- a/ios/Video/VideoMain.swift
++++ b/ios/Video/VideoMain.swift
+@@ -332,7 +332,15 @@ class VideoCompressor {
+           AVVideoWidthKey:  resultWidth,
+           AVVideoHeightKey:  resultHeight,
+           AVVideoScalingModeKey: AVVideoScalingModeResizeAspect,
+-          AVVideoCompressionPropertiesKey: compressionDict
++          AVVideoCompressionPropertiesKey: compressionDict,
++          // Nimly patch: fuerza salida SDR Rec.709. Sin esto, un video HDR
++          // (los que graba la Cámara nativa de iPhone por default) se
++          // re-codifica sin tone-mapping y se ve lavado/con más brillo.
++          AVVideoColorPropertiesKey: [
++            AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
++            AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
++            AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
++          ]
+         ]
+         exporter.stripAudio = stripAudio
+         if !stripAudio {
