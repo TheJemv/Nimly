@@ -41,6 +41,12 @@ export function usePost(post: any, onDelete?: () => void) {
         }
     };
 
+    // Doble-tap sobre la imagen (estilo Instagram): SOLO da like, nunca lo
+    // quita — si ya tenía like, el doble-tap no debe des-likearlo.
+    const handleDoubleTapLike = () => {
+        if (!isLiked) handleLike();
+    };
+
     useEffect(() => {
         setLikesCount(post.likes_count || 0);
         setIsLiked(post.is_liked_by_me || false);
@@ -179,11 +185,12 @@ export function usePost(post: any, onDelete?: () => void) {
         }
     };
 
-    return { 
-        isLiked, 
-        likesCount, 
-        commentsCount, 
+    return {
+        isLiked,
+        likesCount,
+        commentsCount,
         handleLike,
+        handleDoubleTapLike,
 
         isMedia,
         mediaUrl,
