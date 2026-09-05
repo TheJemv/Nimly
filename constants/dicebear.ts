@@ -2,6 +2,7 @@ import * as adventurer from '@dicebear/adventurer';
 import * as adventurerNeutral from '@dicebear/adventurer-neutral';
 import * as avataaars from '@dicebear/avataaars';
 import * as avataaarsNeutral from '@dicebear/avataaars-neutral';
+import * as bigEars from '@dicebear/big-ears';
 import * as bigEarsNeutral from '@dicebear/big-ears-neutral';
 import * as bigSmile from '@dicebear/big-smile';
 import * as bottts from '@dicebear/bottts';
@@ -20,8 +21,18 @@ import * as openPeeps from '@dicebear/open-peeps';
 import * as personas from '@dicebear/personas';
 import * as pixelArt from '@dicebear/pixel-art';
 import * as pixelArtNeutral from '@dicebear/pixel-art-neutral';
+import * as thumbs from '@dicebear/thumbs';
+import * as toonHead from '@dicebear/toon-head';
 
-export const COLORES_FONDO = ["DC143C", "D27D46", "76C2D9", "E5A0A0", "B2A4D4", "94C9A9", "E6C975", "161616"];
+// Los 8 originales + los 5 pasteles clásicos de DiceBear (b6e3f4...ffdfbf, los
+// mismos que usa su propio playground por default) + un espectro de vivos y
+// neutros, para que se sienta tan variado como el selector de la web.
+export const COLORES_FONDO = [
+    "DC143C", "D27D46", "76C2D9", "E5A0A0", "B2A4D4", "94C9A9", "E6C975", "161616",
+    "B6E3F4", "C0AEDE", "D1D4F9", "FFD5DC", "FFDFBF",
+    "FF6B6B", "FFA94D", "FFD43B", "51CF66", "3BC9DB", "4DABF7", "748FFC", "9775FA", "F783AC",
+    "495057", "ADB5BD", "F1F3F5", "FFFFFF",
+];
 
 /**
  * Avatar por defecto derivado del username. Debe coincidir con lo que genera el
@@ -52,6 +63,7 @@ export const ESTILOS_DICEBEAR = [
     { id: "adventurerNeutral", name: "Adventurer N", collection: adventurerNeutral },
     { id: "avataaars", name: "Avataaars", collection: avataaars },
     { id: "avataaarsNeutral", name: "Avataaars N", collection: avataaarsNeutral },
+    { id: "bigEars", name: "Big Ears", collection: bigEars },
     { id: "bigEarsNeutral", name: "Big Ears N", collection: bigEarsNeutral },
     { id: "bigSmile", name: "Big Smile", collection: bigSmile },
     { id: "bottts", name: "Bottts", collection: bottts },
@@ -70,4 +82,6 @@ export const ESTILOS_DICEBEAR = [
     { id: "personas", name: "Personas", collection: personas },
     { id: "pixelArt", name: "Pixel Art", collection: pixelArt },
     { id: "pixelArtNeutral", name: "Pixel Art N", collection: pixelArtNeutral },
+    { id: "thumbs", name: "Thumbs", collection: thumbs },
+    { id: "toonHead", name: "Toon Head", collection: toonHead },
 ];
