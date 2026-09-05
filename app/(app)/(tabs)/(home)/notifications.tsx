@@ -17,6 +17,10 @@ import {
     View
 } from 'react-native';
 
+const SURFACE = getThemeColor("surface");
+const TEXT_SECONDARY = getThemeColor("textSecondary");
+const TEXT = getThemeColor("text");
+
 const PAGE_SIZE = 20;
 export default function NotificationsScreen() {
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -28,6 +32,9 @@ export default function NotificationsScreen() {
 
     const channelRef = useRef<any>(null);
     const tintColor = getThemeColor("tint");
+    const successColor = getThemeColor("success");
+    const warningColor = getThemeColor("warning");
+    const mutedColor = getThemeColor("textSecondary");
 
     // 1. FUNCIÓN PARA MARCAR TODO COMO LEÍDO EN LA BASE DE DATOS
     const markAllAsSeen = async () => {
@@ -161,12 +168,12 @@ export default function NotificationsScreen() {
         const time = formatRelativeTime(item.created_at);
 
         const ui = (() => {
-            if (isFriendNotif) return { icon: "person.2.fill", color: "#34C759" };
+            if (isFriendNotif) return { icon: "person.2.fill", color: successColor };
             switch (type) {
-                case 'LIKE': return { icon: "heart.fill", color: "#FF2D55" };
+                case 'LIKE': return { icon: "heart.fill", color: tintColor };
                 case 'COMMENT': return { icon: "bubble.left.fill", color: tintColor };
-                case 'FRIEND_REQUEST': return { icon: "person.badge.plus.fill", color: "#5856D6" };
-                default: return { icon: "bell.fill", color: "#8E8E93" };
+                case 'FRIEND_REQUEST': return { icon: "person.badge.plus.fill", color: warningColor };
+                default: return { icon: "bell.fill", color: mutedColor };
             }
         })();
 
@@ -178,7 +185,28 @@ export default function NotificationsScreen() {
                     if (type === 'FRIEND_REQUEST' && !isFriendNotif) {
                         Alert.alert("Friend Request", `Accept @${item.actor?.username}?`, [
                             { text: "Later", style: "cancel" },
-                            { text: "Accept", onPress: () => friendsApi.acceptFriendship(item).then(onRefresh) }
+                            {
+                                text: "Accept",
+                                onPress: async () => {
+                                    try {
+                                        // La notificación no trae el id de friend_requests,
+                                        // así que lo buscamos antes de aceptar -- si no, la
+                                        // fila se queda huérfana en PENDING para siempre
+                                        // (ver useProfileActions, que sí lo pasa bien).
+                                        const status = await friendsApi.getStatus(item.actor_id);
+                                        if (status?.status === 'PENDING' && status.requestId) {
+                                            await friendsApi.acceptFriendship({
+                                                id: status.requestId,
+                                                from_id: item.actor_id,
+                                                to_id: item.user_id,
+                                            });
+                                        }
+                                        onRefresh();
+                                    } catch {
+                                        Alert.alert("Error", "Could not accept the request.");
+                                    }
+                                },
+                            },
                         ]);
                     }
                 }}
@@ -231,7 +259,7 @@ export default function NotificationsScreen() {
                 }}
                 onEndReachedThreshold={0.4}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-                ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 20 }} color="#666" /> : null}
+                ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 20 }} color={mutedColor} /> : null}
                 ListEmptyComponent={!loading ? <Text style={styles.emptyText}>No notifications yet.</Text> : null}
                 contentContainerStyle={{ paddingBottom: 60 }}
             />
@@ -241,15 +269,15 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    notificationItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#1C1C1E' },
+    notificationItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SURFACE },
     avatarWrapper: { width: 48, height: 48, marginRight: 14 },
-    avatarCircle: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: '#1C1C1E' },
-    avatarPlaceholder: { flex: 1, backgroundColor: '#2C2C2E' },
+    avatarCircle: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: SURFACE },
+    avatarPlaceholder: { flex: 1, backgroundColor: SURFACE },
     typeBadge: { position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#000', alignItems: 'center', justifyContent: 'center' },
     textContainer: { flex: 1 },
-    title: { color: '#EBEBF5', fontSize: 14, lineHeight: 18 },
+    title: { color: TEXT, fontSize: 14, lineHeight: 18 },
     boldText: { color: '#FFF', fontWeight: '700' },
-    time: { color: '#636366', fontSize: 12, marginTop: 4 },
+    time: { color: TEXT_SECONDARY, fontSize: 12, marginTop: 4 },
     unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 10 },
-    emptyText: { color: '#636366', textAlign: 'center', marginTop: 100 }
+    emptyText: { color: TEXT_SECONDARY, textAlign: 'center', marginTop: 100 }
 });
