@@ -97,16 +97,13 @@ function RootLayoutNav() {
     const [startupStalled, setStartupStalled] = useState(false);
     const [homeOverlayStalled, setHomeOverlayStalled] = useState(false);
 
-    // Antes "ready" no esperaba a la bóveda -- si vault seguía en 'loading'
-    // cuando isLoading ya era false, se alcanzaba a ver un parpadeo antes de
-    // que VaultKeyGate decidiera qué mostrar. Ahora también espera eso.
-    const vaultResolved = vault.state !== 'loading';
-    const ready = !isLoading && !isCheckingNetwork && vaultResolved;
+    const ready = !isLoading && !isCheckingNetwork;
 
     // Solo si vamos a terminar en el Home (sesión + bóveda lista, no bloqueada)
-    // vale la pena esperar a que cargue su feed antes de destapar la app --
-    // se evalúa una sola vez que vaultResolved es true, así no cambia de
-    // opinión a medio camino.
+    // vale la pena esperar a que cargue su feed antes de destapar la app.
+    // Nota: NO metemos vault.state en `ready` -- runSetup tiene rutas que
+    // dejan el estado en 'loading' (sin sesión, query colgada) y eso trababa
+    // el arranque entero.
     const willShowHome = !!session && vault.state === 'ready';
     const showHomeOverlay = ready && willShowHome && !homeReady && !homeOverlayStalled;
 
