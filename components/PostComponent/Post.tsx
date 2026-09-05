@@ -138,10 +138,23 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         handleDoubleTapLike();
     };
 
+    // Botón de mute: su propio gesto, separado del de la imagen. Un
+    // TouchableOpacity normal montado ENCIMA de una View con GestureDetector
+    // no basta para que gane la prioridad -- son dos sistemas de touch
+    // distintos y ambos se disparaban a la vez (tocar mute también abría el
+    // zoom). Con requireExternalGestureToFail de abajo, el tap sencillo
+    // espera a que el de mute falle (o sea, que el toque haya caído fuera de
+    // su botón) antes de intentar activarse.
+    const muteTap = Gesture.Tap()
+        .hitSlop({ top: 10, bottom: 10, left: 10, right: 10 })
+        .onEnd(() => {
+            runOnJS(toggleMute)();
+        });
+
     // Doble-tap = like + animación. Tap sencillo = zoom a pantalla completa.
-    // El single-tap espera a que el doble-tap falle para no dispararse solo.
-    // Los callbacks de gesture-handler corren en el hilo de UI, así que hay
-    // que cruzar a JS con runOnJS para tocar estado de React.
+    // El single-tap espera a que el doble-tap (y el de mute) fallen para no
+    // dispararse solo. Los callbacks de gesture-handler corren en el hilo de
+    // UI, así que hay que cruzar a JS con runOnJS para tocar estado de React.
     const doubleTap = Gesture.Tap()
         .numberOfTaps(2)
         .maxDuration(250)
@@ -150,7 +163,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         });
     const singleTap = Gesture.Tap()
         .numberOfTaps(1)
-        .requireExternalGestureToFail(doubleTap)
+        .requireExternalGestureToFail(doubleTap, muteTap)
         .onEnd(() => {
             runOnJS(setZoomVisible)(true);
         });
@@ -221,17 +234,15 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                                                 <ActivityIndicator color="#fff" />
                                             </View>
                                         )}
-                                        <TouchableOpacity
-                                            style={styles.muteButton}
-                                            onPress={toggleMute}
-                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        >
-                                            <SymbolView
-                                                name={muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
-                                                size={13}
-                                                tintColor="#fff"
-                                            />
-                                        </TouchableOpacity>
+                                        <GestureDetector gesture={muteTap}>
+                                            <View style={styles.muteButton}>
+                                                <SymbolView
+                                                    name={muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
+                                                    size={13}
+                                                    tintColor="#fff"
+                                                />
+                                            </View>
+                                        </GestureDetector>
                                     </>
                                 ) : (
                                     <Image
