@@ -1,6 +1,9 @@
+import { getThemeColor } from "@/constants/theme";
 import { SymbolView } from "expo-symbols";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+
+const MUTED = getThemeColor("textSecondary");
 
 /**
  * Discreet in-thread system line (same muted styling as the time separators).
@@ -9,7 +12,7 @@ import { StyleSheet, Text, View } from "react-native";
 export const ChatSystemNotice = React.memo(({ text }: { text: string }) => (
    <View style={styles.wrap}>
       <View style={styles.pill}>
-         <SymbolView name="key.slash.fill" size={11} tintColor="#8E8E93" />
+         <SymbolView name="key.slash.fill" size={11} tintColor={MUTED} />
          <Text style={styles.text}>{text}</Text>
       </View>
    </View>
@@ -30,7 +33,7 @@ const styles = StyleSheet.create({
       borderRadius: 12,
    },
    text: {
-      color: "#8E8E93",
+      color: MUTED,
       fontSize: 11.5,
       fontWeight: "500",
       textAlign: "center",

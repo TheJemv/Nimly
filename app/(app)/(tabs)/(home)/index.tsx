@@ -160,15 +160,19 @@ export default function HomeScreen() {
          </ScrollView>
          {/* )} */}
 
-         {activeCommentPostId && (
-            <Host>
-               <CommentsSheet
-                  ref={commentsRef}
-                  postId={activeCommentPostId}
-                  postOwnerId={posts.find((p) => p.id === activeCommentPostId)?.user_id}
-               />
-            </Host>
-         )}
+         {/*
+            Antes esto solo se montaba cuando activeCommentPostId existía, así que
+            en el primer tap el ref todavía era null (el componente ni existía) y
+            .present() no hacía nada -- había que tocar "comentarios" dos veces.
+            Montado siempre, el ref existe desde el primer render.
+         */}
+         <Host>
+            <CommentsSheet
+               ref={commentsRef}
+               postId={activeCommentPostId}
+               postOwnerId={posts.find((p) => p.id === activeCommentPostId)?.user_id}
+            />
+         </Host>
       </View>
    );
 }
