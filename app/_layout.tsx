@@ -12,10 +12,12 @@ import ConnectionErrorView from "@/components/ConnectionErrorView";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { supabase } from '@/lib/supabase';
 
+import { AppReadyProvider, useAppReady } from '@/context/AppReadyContext';
 import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { StatusBar } from 'react-native';
+import { Image } from 'expo-image';
+import { StatusBar, StyleSheet, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { scrubBreadcrumb, scrubSentryEvent } from '@/utils/sentryScrub';
 
@@ -53,13 +55,39 @@ SplashScreen.setOptions({
 // Sits comfortably past the legit worst case (10s auth timeout + 3.5s net check).
 const STARTUP_WATCHDOG_MS = 15000;
 
+// Failsafe propio del overlay que tapa la primera carga del Home: si
+// markHomeReady() nunca llega (p. ej. el fetch de posts se cuelga sin red,
+// sin timeout propio como el de auth) no queremos al usuario atrapado detrás
+// de un splash falso para siempre -- a los 8s lo soltamos igual, y el spinner
+// normal del feed (el comportamiento de antes) queda como respaldo visible.
+const HOME_OVERLAY_WATCHDOG_MS = 8000;
+
 function RootLayoutNav() {
-    const { isLoading } = useAuth();
+    const { isLoading, session, vault } = useAuth();
+    const { homeReady } = useAppReady();
     const [isOffline, setIsOffline] = useState(false);
     const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
     const [startupStalled, setStartupStalled] = useState(false);
+    const [homeOverlayStalled, setHomeOverlayStalled] = useState(false);
 
-    const ready = !isLoading && !isCheckingNetwork;
+    // Antes "ready" no esperaba a la bóveda -- si vault seguía en 'loading'
+    // cuando isLoading ya era false, se alcanzaba a ver un parpadeo antes de
+    // que VaultKeyGate decidiera qué mostrar. Ahora también espera eso.
+    const vaultResolved = vault.state !== 'loading';
+    const ready = !isLoading && !isCheckingNetwork && vaultResolved;
+
+    // Solo si vamos a terminar en el Home (sesión + bóveda lista, no bloqueada)
+    // vale la pena esperar a que cargue su feed antes de destapar la app --
+    // se evalúa una sola vez que vaultResolved es true, así no cambia de
+    // opinión a medio camino.
+    const willShowHome = !!session && vault.state === 'ready';
+    const showHomeOverlay = ready && willShowHome && !homeReady && !homeOverlayStalled;
+
+    useEffect(() => {
+        if (!ready || !willShowHome || homeReady) return;
+        const t = setTimeout(() => setHomeOverlayStalled(true), HOME_OVERLAY_WATCHDOG_MS);
+        return () => clearTimeout(t);
+    }, [ready, willShowHome, homeReady]);
 
     useEffect(() => {
         if (ready) return;
@@ -122,8 +150,30 @@ function RootLayoutNav() {
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="(app)" />
                 </Stack>
+
+                {/*
+                    El Home ya está montado detrás de esto (cargando posts y
+                    stories) -- lo tapamos con algo idéntico al splash nativo
+                    hasta que markHomeReady() avise que terminó, para que el
+                    splash nunca "se quite" antes de tiempo dejando ver los
+                    spinners del feed.
+                */}
+                {showHomeOverlay && <HomeLoadingOverlay />}
             </BottomSheetModalProvider>
         </GestureHandlerRootView>
+    );
+}
+
+/** Calca el splash nativo (mismo fondo + logo) para tapar la carga inicial del Home. */
+function HomeLoadingOverlay() {
+    return (
+        <View style={styles.overlayFill}>
+            <Image
+                source={require('../assets/expo/splash.png')}
+                style={styles.overlayImage}
+                contentFit="contain"
+            />
+        </View>
     );
 }
 
@@ -133,16 +183,31 @@ function AppLayout() {
             <StatusBar backgroundColor="#000000" barStyle="light-content" />
             <ThemeProvider value={DarkTheme}>
                 <AuthProvider>
-                    <ProfileProvider>
-                        <BlockedUsersProvider>
-                            <RootLayoutNav />
-                        </BlockedUsersProvider>
-                    </ProfileProvider>
+                    <AppReadyProvider>
+                        <ProfileProvider>
+                            <BlockedUsersProvider>
+                                <RootLayoutNav />
+                            </BlockedUsersProvider>
+                        </ProfileProvider>
+                    </AppReadyProvider>
                 </AuthProvider>
             </ThemeProvider>
         </AppErrorBoundary>
     );
 }
 
+const styles = StyleSheet.create({
+    overlayFill: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#000000',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    overlayImage: {
+        width: 200,
+        height: 200,
+    },
+});
 
 export default Sentry.wrap(ObserveRoot.wrap(AppLayout));

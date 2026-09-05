@@ -20,12 +20,14 @@ import PostComponent from "@/components/PostComponent";
 
 import StoriesDaily from "@/components/StoriesDaily";
 import { Colors, getThemeColor } from "@/constants/theme";
+import { useAppReady } from "@/context/AppReadyContext";
 import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useStoriesFeed } from "@/hooks/useStoriesFeed";
 
 export default function HomeScreen() {
    const { session } = useAuth()
+   const { markHomeReady } = useAppReady();
    const { blockedIds, isBlocked } = useBlockedUsers();
 
    const [posts, setPosts] = useState<any[]>([]);
@@ -64,6 +66,13 @@ export default function HomeScreen() {
    useEffect(() => {
       loadPosts();
    }, [session, loadPosts]);
+
+   // Le avisa al layout raíz que ya puede destapar la app: sin esto, el
+   // splash se quitaba en cuanto auth resolvía y el usuario alcanzaba a ver
+   // los spinners de posts/stories cargando por separado.
+   useEffect(() => {
+      if (!loadingPosts && !loadingStories) markHomeReady();
+   }, [loadingPosts, loadingStories, markHomeReady]);
 
    const onRefresh = useCallback(async () => {
       setRefreshing(true);
