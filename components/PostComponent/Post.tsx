@@ -21,6 +21,8 @@ import FullscreenVideoViewer from "@/components/MediaMessageBubble/FullscreenVid
 import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 
+import { useHlsSegmentLog } from "@/utils/hlsDebug";
+
 import { styles } from "./Post.styles";
 import { usePost } from './hooks/usePost';
 
@@ -87,6 +89,9 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         p.loop = true;
         p.muted = muted;
     });
+
+    // dev-only: log de segmentos HLS a medida que entran al buffer.
+    useHlsSegmentLog(previewPlayer, videoSource, `post:${String(post.id).slice(0, 8)}`);
 
     // El player se recrea si cambia mediaUrl, así que hay que re-aplicar el
     // mute cada vez que cambie (propio o compartido) — no solo al crearlo.

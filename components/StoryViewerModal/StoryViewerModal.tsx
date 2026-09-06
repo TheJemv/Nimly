@@ -36,6 +36,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
 import { promptReportReason } from "@/utils/moderation";
+import { useHlsSegmentLog } from "@/utils/hlsDebug";
 import { buildVideoSource } from "@/utils/videoSource";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
@@ -164,6 +165,9 @@ export default function StoryViewerModal({
             player.loop = false;
         }
     );
+
+    // dev-only: log de segmentos HLS a medida que entran al buffer.
+    useHlsSegmentLog(videoPlayer, storyVideoSource, `story:${String(currentStory?.id ?? "?").slice(0, 8)}`);
 
     const {
         progressAnim,
