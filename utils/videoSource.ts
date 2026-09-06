@@ -47,6 +47,47 @@ interface BuildVideoSourceOpts {
  *
  * Un post/story NUNCA se rompe ni se oculta por el estado del transcode.
  */
+const prefetched = new Set<string>();
+
+/**
+ * Calienta la reproducción HLS de un post/story ANTES de que llegue a pantalla:
+ *   1. abre conexión (TLS) a la media API y la deja en el pool -> AVPlayer la reusa
+ *   2. fuerza a la API a validar permiso + firmar los segmentos ya
+ *   3. toca el primer segmento (Range 0-1) -> calienta TLS al Storage
+ *
+ * Best-effort total: cualquier fallo se traga. Una vez por id por sesión.
+ * Baja el arranque en frío (~0.8s) del primer video que ves en el feed.
+ */
+export async function prefetchHls(
+    opts: { id?: string | null; ownerId?: string | null; playbackStatus?: string | null },
+    accessToken?: string | null,
+): Promise<void> {
+    const { id, ownerId, playbackStatus } = opts;
+    if (!id || !ownerId || !accessToken || playbackStatus !== "ready" || prefetched.has(id)) return;
+    prefetched.add(id);
+
+    const tag = String(id).slice(0, 8);
+    try {
+        const res = await fetch(`${MEDIA_API_BASE}/media/${ownerId}/${id}/index.m3u8`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+            if (__DEV__) console.log(`[hls:prefetch] ${tag} playlist ${res.status}`);
+            return;
+        }
+        const firstSeg = (await res.text())
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l.length > 0 && !l.startsWith("#"));
+        if (firstSeg) {
+            await fetch(firstSeg, { headers: { Range: "bytes=0-1" } }).catch(() => {});
+        }
+        if (__DEV__) console.log(`[hls:prefetch] ${tag} listo`);
+    } catch {
+        /* best-effort */
+    }
+}
+
 export function buildVideoSource(opts: BuildVideoSourceOpts): VideoSource {
     const { ownerId, mediaId, playbackStatus, mp4Url, accessToken, hlsFailed } = opts;
 

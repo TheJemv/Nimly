@@ -20,6 +20,7 @@ import PostComponent from "@/components/PostComponent";
 import { isVideoPath } from "@/components/PostComponent/hooks/usePost";
 
 import StoriesDaily from "@/components/StoriesDaily";
+import { prefetchHls } from "@/utils/videoSource";
 import { getThemeColor } from "@/constants/theme";
 import { useAppReady } from "@/context/AppReadyContext";
 import { useAuth } from "@/context/AuthContext";
@@ -103,6 +104,18 @@ export default function HomeScreen() {
       () => storyGroups.filter((g) => g.is_me || !isBlocked(g.user_id)),
       [storyGroups, isBlocked, blockedIds],
    );
+
+   // Prefetch: calienta el HLS de los primeros posts-video del feed (permiso +
+   // firma de segmentos + TLS a ambos hosts) para que el primero que veas
+   // arranque sin el cold-start de ~0.8s. Best-effort, 1 vez por post.
+   useEffect(() => {
+      const token = session?.access_token;
+      if (!token) return;
+      visiblePosts
+         .filter((p) => p.playback_status === "ready" && isVideoPath(p.media_url || ""))
+         .slice(0, 3)
+         .forEach((p) => { prefetchHls({ id: p.id, ownerId: p.user_id, playbackStatus: p.playback_status }, token); });
+   }, [visiblePosts, session?.access_token]);
 
    return (
       <View style={styles.container}>
