@@ -22,6 +22,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
+import { FAST_START_BUFFER } from "@/utils/videoSource";
 
 import { styles } from "./Post.styles";
 import { usePost } from './hooks/usePost';
@@ -88,6 +89,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
     const previewPlayer = useVideoPlayer(isVideo && videoSource ? videoSource : null, (p) => {
         p.loop = true;
         p.muted = muted;
+        p.bufferOptions = FAST_START_BUFFER;
     });
 
     // dev-only: log de segmentos HLS a medida que entran al buffer.

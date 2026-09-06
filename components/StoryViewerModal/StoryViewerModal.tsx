@@ -37,7 +37,7 @@ import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
 import { promptReportReason } from "@/utils/moderation";
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
-import { buildVideoSource } from "@/utils/videoSource";
+import { buildVideoSource, FAST_START_BUFFER } from "@/utils/videoSource";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
@@ -163,6 +163,7 @@ export default function StoryViewerModal({
         isVideo ? storyVideoSource : null,
         (player) => {
             player.loop = false;
+            player.bufferOptions = FAST_START_BUFFER;
         }
     );
 

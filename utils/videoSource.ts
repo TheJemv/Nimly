@@ -1,4 +1,16 @@
-import type { VideoSource } from "expo-video";
+import type { BufferOptions, VideoSource } from "expo-video";
+
+/**
+ * Buffer agresivo tipo feed: arranca apenas hay primer frame en vez de esperar
+ * a juntar segundos de video (iOS `automaticallyWaitsToMinimizeStalling`). Baja
+ * el arranque en frío de ~0.8s. En red mala puede haber un micro-stall inicial;
+ * para clips cortos casi nunca pasa y el fallback a MP4 cubre lo demás.
+ */
+export const FAST_START_BUFFER: BufferOptions = {
+    preferredForwardBufferDuration: 3,
+    waitsToMinimizeStalling: false,
+    minBufferForPlayback: 1,
+};
 
 /**
  * Base del media API self-hosted que sirve el playlist HLS autenticado de
