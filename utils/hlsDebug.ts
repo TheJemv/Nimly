@@ -41,6 +41,7 @@ export function useHlsSegmentLog(
 
             const s2 = player.addListener?.("timeUpdate", ({ currentTime, bufferedPosition }: any) => {
                 const buffered = bufferedPosition ?? 0;
+                if (buffered <= 0) return; // aún no bajó nada: no inventamos el segmento 0
                 const seg = Math.floor(buffered / SEGMENT_SECONDS);
                 if (seg > lastSeg.current) {
                     for (let s = lastSeg.current + 1; s <= seg; s++) {
