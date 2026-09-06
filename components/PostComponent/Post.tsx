@@ -57,6 +57,8 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         isMedia,
         isVideo,
         mediaUrl,
+        videoSource,
+        handleVideoError,
 
         //  Post
         postText,
@@ -80,7 +82,8 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
     const toggleMute = onToggleMuteProp ?? (() => setLocalMuted((m) => !m));
 
     // Preview en línea del video: en loop, arranca/pausa según isActive.
-    const previewPlayer = useVideoPlayer(isVideo && mediaUrl ? mediaUrl : null, (p) => {
+    // La fuente es HLS si el post ya está transcodeado ('ready'), si no el MP4.
+    const previewPlayer = useVideoPlayer(isVideo && videoSource ? videoSource : null, (p) => {
         p.loop = true;
         p.muted = muted;
     });
@@ -109,13 +112,18 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
     useEffect(() => {
         if (!isVideo) return;
         const syncStatus = () => {
-            try { setPreviewLoading(previewPlayer.status === 'loading'); } catch { /* liberado */ }
+            try {
+                const st = previewPlayer.status;
+                setPreviewLoading(st === 'loading');
+                // HLS reventó -> usePost cae al MP4 y el player se recrea con él.
+                if (st === 'error') handleVideoError();
+            } catch { /* liberado */ }
         };
         syncStatus();
         let sub: { remove: () => void } | undefined;
         try { sub = previewPlayer.addListener?.('statusChange', syncStatus); } catch { /* liberado */ }
         return () => { try { sub?.remove(); } catch { /* liberado */ } };
-    }, [isVideo, previewPlayer]);
+    }, [isVideo, previewPlayer, handleVideoError]);
 
     // Corazón grande que aparece al doble-tap, estilo Instagram.
     const heartScale = useSharedValue(0);
@@ -217,8 +225,10 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                         </View>
                     ) : null}
 
-                    {/* Si hay media (imagen/video), la mostramos debajo del texto */}
-                    {isMedia && mediaUrl ? (
+                    {/* Si hay media (imagen/video), la mostramos debajo del texto.
+                        Video: basta videoSource (HLS listo aunque el signed URL
+                        del MP4 aún no resuelva). Imagen: mediaUrl. */}
+                    {isMedia && (mediaUrl || videoSource) ? (
                         <GestureDetector gesture={imageTapGesture}>
                             <View style={styles.mediaFrame}>
                                 {isVideo ? (
@@ -246,7 +256,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                                     </>
                                 ) : (
                                     <Image
-                                        source={{ uri: mediaUrl }}
+                                        source={{ uri: mediaUrl ?? undefined }}
                                         style={styles.image}
                                         contentFit="cover"
                                         transition={400}
@@ -285,12 +295,13 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                 </View>
             </View>
 
-            {isMedia && mediaUrl ? (
+            {isMedia && (mediaUrl || videoSource) ? (
                 isVideo ? (
                     <FullscreenVideoViewer
                         visible={zoomVisible}
-                        uri={mediaUrl}
+                        uri={videoSource ?? mediaUrl}
                         onClose={() => setZoomVisible(false)}
+                        onError={handleVideoError}
                     />
                 ) : (
                     <FullscreenImageViewer

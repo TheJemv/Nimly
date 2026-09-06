@@ -10,6 +10,9 @@ export interface Story {
   media_type: 'image' | 'video';
   is_view_once: boolean;
   created_at: string;
+  // Streaming HLS: mismo pipeline que los posts. 'ready' -> sirve HLS.
+  playback_status?: 'raw' | 'ready' | 'error';
+  hls_path?: string | null;
   profiles?: {
     id: string;
     username: string;

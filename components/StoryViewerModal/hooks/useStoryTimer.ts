@@ -12,6 +12,12 @@ interface UseStoryTimerProps {
   isEnabled: boolean;
   isViewsSheetOpen: boolean;
   onMarkAsSeen?: () => void;
+  /**
+   * El player de video reventó. Devolver `true` = "lo manejé" (p. ej. caí de
+   * HLS a MP4 y el player se va a recrear) → NO saltar a la siguiente historia.
+   * `false`/undefined = saltar como antes.
+   */
+  onVideoError?: () => boolean;
 }
 
 export function useStoryTimer({
@@ -21,6 +27,7 @@ export function useStoryTimer({
   isEnabled,
   isViewsSheetOpen,
   onMarkAsSeen,
+  onVideoError,
 }: UseStoryTimerProps) {
   const [isMediaLoading, setIsMediaLoading] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
@@ -30,6 +37,9 @@ export function useStoryTimer({
   const onNextRef = useRef(onNext);
   onNextRef.current = onNext;
   const goNext = useCallback(() => onNextRef.current(), []);
+
+  const onVideoErrorRef = useRef(onVideoError);
+  onVideoErrorRef.current = onVideoError;
 
   const progressAnim = useAnimatedValue(0);
   const currentProgressVal = useRef(0);
@@ -92,7 +102,10 @@ export function useStoryTimer({
         // Cargando / buffering: spinner y la barra NO avanza.
         setIsMediaLoading(true);
       } else if (status === 'error') {
-        if (!isHoldingRef.current) goNext();
+        // Si el error lo maneja el caller (HLS -> fallback a MP4), no saltamos:
+        // el player se recrea con la nueva fuente.
+        const handled = onVideoErrorRef.current?.() ?? false;
+        if (!handled && !isHoldingRef.current) goNext();
       }
     };
     syncStatus();

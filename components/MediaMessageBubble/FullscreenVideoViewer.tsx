@@ -1,4 +1,4 @@
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer, VideoView, type VideoSource } from "expo-video";
 import React, { useEffect } from "react";
 import { Modal, StyleSheet } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
@@ -15,8 +15,11 @@ const DISMISS_VELOCITY = 800;
 
 type Props = {
    visible: boolean;
-   uri: string | null;
+   /** String (MP4 del chat) u objeto VideoSource (HLS de posts/stories, con headers). */
+   uri: string | VideoSource | null;
    onClose: () => void;
+   /** El player reventó (p. ej. HLS caído). El caller puede caer al MP4. */
+   onError?: () => void;
 };
 
 /**
@@ -24,7 +27,7 @@ type Props = {
  * Sin botón de cerrar: se desliza hacia arriba o abajo para salir, como el
  * visor de fotos e Instagram/Fotos.
  */
-export default function FullscreenVideoViewer({ visible, uri, onClose }: Props) {
+export default function FullscreenVideoViewer({ visible, uri, onClose, onError }: Props) {
    const player = useVideoPlayer(visible && uri ? uri : null, (p) => {
       p.loop = false;
       p.play();
@@ -32,6 +35,18 @@ export default function FullscreenVideoViewer({ visible, uri, onClose }: Props) 
 
    const ty = useSharedValue(0);
    const backdropOpacity = useSharedValue(1);
+
+   // Fallback ante error del player (HLS caído / signed URL vencida).
+   useEffect(() => {
+      if (!visible || !onError) return;
+      const check = () => {
+         try { if (player.status === 'error') onError(); } catch { /* liberado */ }
+      };
+      check();
+      let sub: { remove: () => void } | undefined;
+      try { sub = player.addListener?.('statusChange', check); } catch { /* liberado */ }
+      return () => { try { sub?.remove(); } catch { /* liberado */ } };
+   }, [visible, player, onError]);
 
    useEffect(() => {
       if (!visible) return;

@@ -32,9 +32,11 @@ import { styles } from "./StoryViewerModal.styles";
 
 import { blocksApi } from "@/api/blocks";
 import { reportsApi } from "@/api/reports";
+import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
 import { promptReportReason } from "@/utils/moderation";
+import { buildVideoSource } from "@/utils/videoSource";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
 interface StoryViewerModalProps {
@@ -128,8 +130,36 @@ export default function StoryViewerModal({
 
     const { isViewsSheetOpen, sheetAnim, openViewsSheet, closeViewsSheet, resetSheet } = useViewsSheet();
 
+    // Streaming HLS para el video de la story: si ya está transcodeada
+    // ('ready') servimos el playlist autenticado por el media API; si no, el
+    // signed URL del MP4 (currentStory.media_url) como siempre. Si el player
+    // revienta con HLS -> storyHlsFailed y caemos al MP4 sin saltar la story.
+    const { session } = useAuth();
+    const [storyHlsFailed, setStoryHlsFailed] = useState(false);
+    useEffect(() => { setStoryHlsFailed(false); }, [currentStory?.id]);
+
+    const storyVideoSource = useMemo(
+        () => buildVideoSource({
+            ownerId: currentStory?.user_id,
+            mediaId: currentStory?.id,
+            playbackStatus: currentStory?.playback_status,
+            mp4Url: currentStory?.media_url ?? null,
+            accessToken: session?.access_token,
+            hlsFailed: storyHlsFailed,
+        }),
+        [currentStory?.user_id, currentStory?.id, currentStory?.playback_status, currentStory?.media_url, session?.access_token, storyHlsFailed],
+    );
+
+    const handleStoryVideoError = () => {
+        if (currentStory?.playback_status === 'ready' && !storyHlsFailed) {
+            setStoryHlsFailed(true);
+            return true; // manejado: no saltar a la siguiente story
+        }
+        return false;
+    };
+
     const videoPlayer = useVideoPlayer(
-        isVideo ? currentStory?.media_url : null,
+        isVideo ? storyVideoSource : null,
         (player) => {
             player.loop = false;
         }
@@ -152,6 +182,7 @@ export default function StoryViewerModal({
         onNext: handleNextStory,
         isEnabled: visible,
         isViewsSheetOpen,
+        onVideoError: handleStoryVideoError,
         onMarkAsSeen: () => {
             if (currentStory && !currentStory.is_seen_by_me && !currentGroup.is_me) {
                 onStorySeen?.(currentStory.id, currentGroup.user_id);

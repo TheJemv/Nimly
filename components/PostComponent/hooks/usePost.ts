@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 
 import { blocksApi } from "@/api/blocks";
@@ -9,6 +9,8 @@ import { AuthContext } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { supabase } from "@/lib/supabase";
 import { promptReportReason } from "@/utils/moderation";
+import { buildVideoSource } from "@/utils/videoSource";
+import type { VideoSource } from "expo-video";
 
 /** Extrae el path dentro del bucket 'media' de un valor que puede venir como
  *  path desnudo ("userId/file.jpg") o como URL completa (.../media/userId/file.jpg). */
@@ -76,6 +78,8 @@ export function usePost(post: any, onDelete?: () => void) {
 
     // URL firmada de corta duración para el bucket privado 'media'
     // (en vez de exponer el access_token como header de la imagen).
+    // Para video sigue siendo el fallback: si el HLS no está listo o revienta,
+    // el player usa este MP4.
     const [mediaUrl, setMediaUrl] = useState<string | null>(null);
     useEffect(() => {
         let active = true;
@@ -87,6 +91,29 @@ export function usePost(post: any, onDelete?: () => void) {
             .catch(() => { if (active) setMediaUrl(null); });
         return () => { active = false; };
     }, [post.media_url]);
+
+    // Streaming HLS: si el post ya está transcodeado ('ready') servimos el
+    // playlist autenticado por el media API; si no, el MP4 de arriba.
+    // Si el player revienta con HLS (endpoint caído, signed URL vencida a
+    // mitad) -> hlsFailed y caemos al MP4 sin romper el post.
+    const [hlsFailed, setHlsFailed] = useState(false);
+    useEffect(() => { setHlsFailed(false); }, [post.id, post.playback_status]);
+
+    const handleVideoError = useCallback(() => {
+        if (post.playback_status === 'ready') setHlsFailed(true);
+    }, [post.playback_status]);
+
+    const videoSource: VideoSource = useMemo(
+        () => buildVideoSource({
+            ownerId: post.user_id,
+            mediaId: post.id,
+            playbackStatus: post.playback_status,
+            mp4Url: mediaUrl,
+            accessToken: session?.access_token,
+            hlsFailed,
+        }),
+        [post.user_id, post.id, post.playback_status, mediaUrl, session?.access_token, hlsFailed],
+    );
 
     const postText = post.content;
     const date = new Date(post.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -204,6 +231,8 @@ export function usePost(post: any, onDelete?: () => void) {
         isMedia,
         isVideo,
         mediaUrl,
+        videoSource,
+        handleVideoError,
 
         postText,
         date,

@@ -45,6 +45,11 @@ export interface Post {
     media_url: string | null; // 👈 Agregado de tu DB
     created_at: string;
 
+    // Streaming HLS (media API self-hosted). El transcode corre en el backend:
+    // 'raw' recién subido -> 'ready' (sirve HLS) | 'error' (se queda en MP4).
+    playback_status?: 'raw' | 'ready' | 'error';
+    hls_path?: string | null;
+
     // Relaciones (Cargadas mediante joins)
     author?: User;
     likes?: Like[];
@@ -125,7 +130,11 @@ export interface Story {
     media_type: "image" | "video"; // 👈 Obligatorio según DB
     is_view_once: boolean; // 👈 Corregido de tu DB
     created_at: string;
-    
+
+    // Streaming HLS (mismo pipeline que los posts). 'ready' -> sirve HLS.
+    playback_status?: 'raw' | 'ready' | 'error';
+    hls_path?: string | null;
+
     // Virtuales (Cargados desde la UI o Funciones SQL)
     is_seen_by_me?: boolean;
     is_liked_by_me?: boolean;

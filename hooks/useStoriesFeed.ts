@@ -58,6 +58,9 @@ export function useStoriesFeed() {
                 media_url: story.media_url,
                 media_type: story.media_type,
                 created_at: story.created_at,
+                // Streaming HLS: el StoryViewer decide HLS vs MP4 con esto.
+                playback_status: (story as any).playback_status,
+                hls_path: (story as any).hls_path,
                 is_seen_by_me: isSeenByMe,
                 is_view_once: story.is_view_once,
                 views_count: views.length,
