@@ -44,6 +44,18 @@ export const styles = StyleSheet.create({
         zIndex: 10,
     },
     addIcon: { color: Colors.dark.text, fontWeight: "bold", fontSize: 13 },
+    uploadingOverlay: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.55)",
+        zIndex: 20,
+    },
     usernameText: {
         color: Colors.dark.textSecondary,
         fontSize: 12,

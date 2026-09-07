@@ -3,6 +3,9 @@ import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { MessageContent } from "@/components/MessageContent";
+import { getThemeColor } from "@/constants/theme";
+
+const MUTED = getThemeColor("textSecondary");
 
 interface ReplyTarget {
    id: string;
@@ -50,14 +53,14 @@ export const ReplyPreview = memo(({ reply, isMine, friendName, currentUserId, fr
    return (
       <View style={[styles.wrap, isMine ? styles.alignEnd : styles.alignStart]}>
          <View style={styles.labelRow}>
-            <SymbolView name="arrowshape.turn.up.left.fill" size={10} tintColor="#8E8E93" />
+            <SymbolView name="arrowshape.turn.up.left.fill" size={10} tintColor={MUTED} />
             <Text style={styles.label} numberOfLines={1}>{label}</Text>
          </View>
 
          <View style={[styles.quote, isMine ? styles.quoteMine : styles.quoteTheirs]}>
             {media ? (
                <View style={styles.photoRow}>
-                  <SymbolView name={media.icon as any} size={12} tintColor="#c7c7cc" />
+                  <SymbolView name={media.icon as any} size={12} tintColor={MUTED} />
                   <Text style={styles.quoteText}>{media.label}</Text>
                </View>
             ) : (
@@ -86,7 +89,7 @@ const styles = StyleSheet.create({
       marginBottom: 4,
       paddingHorizontal: 4,
    },
-   label: { color: "#8E8E93", fontSize: 12, fontWeight: "500", flexShrink: 1 },
+   label: { color: MUTED, fontSize: 12, fontWeight: "500", flexShrink: 1 },
    quote: {
       paddingHorizontal: 12,
       paddingVertical: 7,

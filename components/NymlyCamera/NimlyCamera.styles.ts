@@ -32,7 +32,7 @@ export const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 7,
     },
-    recDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#FF3B30' },
+    recDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: TINT },
     recText: { color: '#fff', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
 
     zoomBadge: {
@@ -68,10 +68,10 @@ export const styles = StyleSheet.create({
         alignItems: 'center',
     },
     shutterOuterVideo: { borderColor: TINT },
-    shutterOuterRecording: { borderColor: '#FF3B30' },
+    shutterOuterRecording: { borderColor: TINT },
     shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
     shutterInnerVideo: { backgroundColor: TINT },
-    shutterInnerRecording: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#FF3B30' },
+    shutterInnerRecording: { width: 28, height: 28, borderRadius: 6, backgroundColor: TINT },
 
     sideBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
     sideBtnHidden: { opacity: 0 },

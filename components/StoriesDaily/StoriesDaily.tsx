@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import {
+    ActivityIndicator,
     ScrollView,
     Text,
     TouchableOpacity,
     View
 } from "react-native";
+
+import { getThemeColor } from "@/constants/theme";
 
 import NymlyCamera from "@/components/NymlyCamera";
 import StoryViewerModal from "@/components/StoryViewerModal";
@@ -22,6 +25,8 @@ interface StoriesDailyProps {
     onStoryLiked?: (storyId: string, userId: string, newLikedState: boolean) => void; // 👈
     onStoryDeleted?: (storyId: string, userId: string) => void; // 👈
     onSendStory: (uri: string, mediaType: "image" | "video") => Promise<void>;
+    /** true mientras se sube una historia propia: muestra un spinner en el ring. */
+    uploadingStory?: boolean;
 }
 
 
@@ -32,6 +37,7 @@ export default function StoriesDaily({
     onStoryLiked,
     onStoryDeleted,
     onSendStory,
+    uploadingStory = false,
 }: StoriesDailyProps) {
     const { profile: myProfileConfig } = useProfile();
 
@@ -105,6 +111,7 @@ export default function StoriesDaily({
                 {sortedStories.map((group) => {
                     const isUnseen = group.stories.some((s) => !s.is_seen_by_me);
                     const hasStories = group.stories.length > 0;
+                    const isUploadingHere = group.is_me && uploadingStory;
 
                     const ringStyle = group.is_me
                         ? hasStories
@@ -121,6 +128,7 @@ export default function StoriesDaily({
                             key={group.user_id}
                             activeOpacity={0.8}
                             style={styles.storyCard}
+                            disabled={isUploadingHere}
                             onPress={() => handleAvatarPress(group)}
                         >
                             <View style={[styles.avatarRing, ringStyle]}>
@@ -128,7 +136,13 @@ export default function StoriesDaily({
                                     <UserAvatar avatar_config={group.avatar_config} size={56} />
                                 </View>
 
-                                {group.is_me && (
+                                {isUploadingHere && (
+                                    <View style={styles.uploadingOverlay}>
+                                        <ActivityIndicator size="small" color={getThemeColor("tint")} />
+                                    </View>
+                                )}
+
+                                {group.is_me && !isUploadingHere && (
                                     <TouchableOpacity
                                         style={styles.addButton}
                                         activeOpacity={0.8}
@@ -140,7 +154,7 @@ export default function StoriesDaily({
                             </View>
 
                             <Text style={styles.usernameText} numberOfLines={1}>
-                                {group.username}
+                                {isUploadingHere ? "Uploading…" : group.username}
                             </Text>
                         </TouchableOpacity>
                     );

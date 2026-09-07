@@ -181,7 +181,7 @@ export const styles = StyleSheet.create({
         borderBottomColor: "rgba(255,255,255,0.1)",
     },
     sheetTitle: { color: "#FFF", fontSize: 18, fontWeight: "700" },
-    sheetSubTitle: { color: "#8E8E93", fontSize: 12, marginTop: 2 },
+    sheetSubTitle: { color: Colors.dark.textSecondary, fontSize: 12, marginTop: 2 },
     listContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
     viewerRow: {
         flexDirection: "row",
@@ -195,11 +195,11 @@ export const styles = StyleSheet.create({
         height: 40,
         borderRadius: 20,
         overflow: "hidden",
-        backgroundColor: "#2C2C2E",
+        backgroundColor: Colors.dark.border,
     },
     viewerUsername: { color: "#FFF", fontSize: 15, fontWeight: "600" },
     emptyContainer: { alignItems: "center", marginTop: 40, gap: 8 },
-    emptyText: { color: "#8E8E93", fontSize: 14 },
+    emptyText: { color: Colors.dark.textSecondary, fontSize: 14 },
     userTextContainer: {
         flexDirection: "column",
     },

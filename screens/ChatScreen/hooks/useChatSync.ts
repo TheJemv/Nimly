@@ -12,7 +12,7 @@ const PAGE_SIZE = 30;
 const REPLY_SELECT = `
     *,
     reply_to:reply_to_id (id, content, sender_id, type),
-    reply_to_story:reply_to_story_id (id, media_url, user_id)
+    reply_to_story:reply_to_story_id (id, media_url, user_id, media_type)
 `;
 
 export type SendResult = { ok: true } | { ok: false; reason: "invalid" | "no-key" | "send-failed" };
@@ -217,7 +217,11 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                         const handleNewMessage = async () => {
                             let finalMsg = rawMsg;
 
-                            if (rawMsg.reply_to_id) {
+                            // El payload de realtime trae solo los ids (reply_to_id /
+                            // reply_to_story_id), no las relaciones. Sin volver a pedir
+                            // la fila con el join, la respuesta a una historia entra sin
+                            // su preview y había que salir/entrar del chat para verlo.
+                            if (rawMsg.reply_to_id || rawMsg.reply_to_story_id) {
                                 const { data } = await supabase
                                     .from('messages')
                                     .select(REPLY_SELECT)

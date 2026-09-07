@@ -1,7 +1,10 @@
+import { getThemeColor } from "@/constants/theme";
 import { StyleSheet } from "react-native";
 
+const SURFACE = getThemeColor("surface");
+
 export const styles = StyleSheet.create({
-    footerWrapper: { backgroundColor: '#050505', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1C1C1E' },
+    footerWrapper: { backgroundColor: '#050505', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: SURFACE },
     inputArea: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -11,7 +14,7 @@ export const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        backgroundColor: '#1C1C1E',
+        backgroundColor: SURFACE,
         borderRadius: 99,
         paddingHorizontal: 16,
         paddingVertical: 12,

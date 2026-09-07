@@ -18,6 +18,7 @@ interface Props {
 
 export const OptionsBottomSheet = forwardRef<BottomSheetModal, Props>(({ options }, ref) => {
     const surface = getThemeColor('surface');
+    const accent = getThemeColor('tint');
 
     // Renderizado del fondo oscurecido
     const renderBackdrop = useCallback(
@@ -49,9 +50,9 @@ export const OptionsBottomSheet = forwardRef<BottomSheetModal, Props>(({ options
                         <SymbolView
                             name={opt.icon}
                             size={22}
-                            tintColor={opt.isDestructive ? '#ff453a' : '#fff'}
+                            tintColor={opt.isDestructive ? accent : '#fff'}
                         />
-                        <ThemedText style={[styles.menuText, opt.isDestructive && { color: '#ff453a' }]}>
+                        <ThemedText style={[styles.menuText, opt.isDestructive && { color: accent }]}>
                             {opt.label}
                         </ThemedText>
                     </TouchableOpacity>

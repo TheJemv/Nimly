@@ -1,5 +1,8 @@
+import { getThemeColor } from "@/constants/theme";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+
+const MUTED = getThemeColor("textSecondary");
 
 /** Separador central discreto (estilo Instagram) entre grupos de mensajes. */
 export const DateSeparator = React.memo(({ label }: { label: string }) => (
@@ -17,7 +20,7 @@ const styles = StyleSheet.create({
       marginBottom: 14,
    },
    text: {
-      color: "#8E8E93",
+      color: MUTED,
       fontSize: 11,
       fontWeight: "600",
       letterSpacing: 0.2,

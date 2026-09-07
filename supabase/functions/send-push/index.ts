@@ -29,6 +29,8 @@ Deno.serve(async (req) => {
     let targetUserId = ""
     let pushTitle = "Nimly"
     let pushBody = "You have a new update"
+    // Info extra que la app usa para abrir la pantalla correcta al tocar la push.
+    let routing: Record<string, unknown> = {}
 
     // CASE A: viene de la tabla MESSAGES
     if (table === 'messages' || record.chat_id) {
@@ -45,12 +47,22 @@ Deno.serve(async (req) => {
 
       const { data: sender } = await supabase
         .from('profiles')
-        .select('username')
+        .select('id, username, avatar_url, avatar_config, public_key')
         .eq('id', record.sender_id)
         .maybeSingle()
 
       pushTitle = `@${sender?.username || 'Someone'}`
       pushBody = record.type === 'text' ? 'sent you a message' : 'sent you a photo'
+
+      // La app abre /chat con `id` = quien envió (que para el receptor es el
+      // "amigo" de la conversación) y usa `sender` para pintar el header al
+      // instante mientras carga el perfil de la BD.
+      routing = {
+        type: 'message',
+        chatId: record.chat_id ?? null,
+        senderId: record.sender_id ?? null,
+        sender: sender ?? null,
+      }
     }
 
     // CASE B: viene de la tabla NOTIFICATIONS
@@ -58,6 +70,7 @@ Deno.serve(async (req) => {
       targetUserId = record.user_id
       pushTitle = record.title || "New Notification"
       pushBody = record.content || record.body || "Check your activity in Nimly"
+      routing = { type: 'notification', notificationType: record.type ?? null }
     }
 
     if (!targetUserId) return new Response('No target user', { status: 200 })
@@ -78,7 +91,7 @@ Deno.serve(async (req) => {
         title: pushTitle,
         body: pushBody,
         sound: 'default',
-        data: { recordId: record.id, table, senderId: record.sender_id },
+        data: { recordId: record.id, table, senderId: record.sender_id, ...routing },
       }),
     })
 

@@ -504,7 +504,7 @@ export default function ChatScreen() {
 
          {friendKeyChanged && (
             <TouchableOpacity style={styles.keyChangeBanner} onPress={handleProfile} activeOpacity={0.8}>
-               <SymbolView name="exclamationmark.shield.fill" size={16} tintColor="#E6B800" />
+               <SymbolView name="exclamationmark.shield.fill" size={16} tintColor={getThemeColor("warning")} />
                <Text style={styles.keyChangeText}>
                   @{displayName}&apos;s encryption keys changed. Messages from before then can&apos;t be read. Tap for details.
                </Text>
@@ -564,7 +564,7 @@ export default function ChatScreen() {
                      const rm = replyMediaKind(replyingTo.content, replyingTo.type);
                      return rm ? (
                         <View style={styles.replyPhotoRow}>
-                           <SymbolView name={rm.icon as any} size={12} tintColor="#8E8E93" />
+                           <SymbolView name={rm.icon as any} size={12} tintColor={getThemeColor("textSecondary")} />
                            <Text style={styles.replyPreviewText}>{rm.label}</Text>
                         </View>
                      ) : (

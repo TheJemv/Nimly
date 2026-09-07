@@ -11,6 +11,9 @@ export function useStoriesFeed() {
 
     const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
     const [loadingStories, setLoadingStories] = useState(true);
+    // true mientras se comprime + sube + registra una historia propia. El ring
+    // de "Your story" muestra un spinner encima hasta que termina.
+    const [uploadingStory, setUploadingStory] = useState(false);
 
     const channelRef = useRef<any>(null);
 
@@ -186,12 +189,15 @@ export function useStoriesFeed() {
     };
 
     const handleSendStory = async (uri: string, mediaType: "image" | "video") => {
+        setUploadingStory(true);
         try {
             await storiesApi.createStory(uri, mediaType, false);
             await reloadStories(false);
         } catch (error) {
             console.error("Error publishing story:", error);
             Alert.alert("Error", "Could not publish the story.");
+        } finally {
+            setUploadingStory(false);
         }
     };
 
@@ -213,6 +219,7 @@ export function useStoriesFeed() {
     return {
         storyGroups,
         loadingStories,
+        uploadingStory,
         currentUserId: session?.user?.id ?? null,
         reloadStories,
         handleStorySeen,

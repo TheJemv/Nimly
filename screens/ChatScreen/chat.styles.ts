@@ -1,13 +1,18 @@
 import { getThemeColor } from "@/constants/theme";
 import { Platform, StyleSheet } from "react-native";
 
+const tint = getThemeColor("tint");
+const surface = getThemeColor("surface");
+const textSecondary = getThemeColor("textSecondary");
+const warning = getThemeColor("warning");
+
 export const styles = StyleSheet.create({
    container: { flex: 1, backgroundColor: "#000" },
    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
    headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10 },
    headerAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#111', overflow: 'hidden' },
    headerName: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-   headerSub: { color: '#666', fontSize: 10 },
+   headerSub: { color: textSecondary, fontSize: 10 },
    rowContainer: { width: '100%', marginBottom: 14, position: 'relative' },
    revealRow: { width: '100%', position: 'relative' },
    bubbleColumn: { width: '100%' },
@@ -22,15 +27,15 @@ export const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'flex-end',
    },
-   timeRevealText: { color: '#8E8E93', fontSize: 10, fontWeight: '500' },
+   timeRevealText: { color: textSecondary, fontSize: 10, fontWeight: '500' },
    bubble: { maxWidth: '80%', padding: 12, borderRadius: 20 },
    bubbleImage: { maxWidth: '80%', padding: 0, borderRadius: 20 },
-   myBubble: { alignSelf: 'flex-end', backgroundColor: getThemeColor("tint") },
-   theirBubble: { alignSelf: 'flex-start', backgroundColor: '#1C1C1E' },
+   myBubble: { alignSelf: 'flex-end', backgroundColor: tint },
+   theirBubble: { alignSelf: 'flex-start', backgroundColor: surface },
    bubblePending: { opacity: 0.5 },
    plainBubbleText: { color: '#fff', fontSize: 16 },
-   sendStatusText: { color: '#8E8E93', fontSize: 11, marginTop: 3, marginHorizontal: 2 },
-   sendStatusFailed: { color: '#FF453A' },
+   sendStatusText: { color: textSecondary, fontSize: 11, marginTop: 3, marginHorizontal: 2 },
+   sendStatusFailed: { color: tint },
    readReceiptContainer: {
       position: 'absolute',
       right: 0,
@@ -59,7 +64,7 @@ export const styles = StyleSheet.create({
       overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)'
    },
    input: {
-      flex: 1, backgroundColor: '#1C1C1E', borderRadius: 20,
+      flex: 1, backgroundColor: surface, borderRadius: 20,
       color: "#fff", padding: 12, paddingHorizontal: 16
    },
    sendButton: { height: 44, width: 44, justifyContent: 'center', alignItems: 'center' },
@@ -78,10 +83,10 @@ export const styles = StyleSheet.create({
       borderTopWidth: 0.5,
       borderTopColor: '#222',
    },
-   replyAccent: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: getThemeColor("tint") },
+   replyAccent: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: tint },
    replyPreviewContent: { flex: 1 },
-   replyPreviewLabel: { color: getThemeColor("tint"), fontSize: 12, fontWeight: '700', marginBottom: 2 },
-   replyPreviewText: { color: '#c7c7cc', fontSize: 13 },
+   replyPreviewLabel: { color: tint, fontSize: 12, fontWeight: '700', marginBottom: 2 },
+   replyPreviewText: { color: textSecondary, fontSize: 13 },
    replyPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
    keyChangeBanner: {
       flexDirection: 'row',
@@ -89,11 +94,11 @@ export const styles = StyleSheet.create({
       gap: 8,
       paddingHorizontal: 16,
       paddingVertical: 10,
-      backgroundColor: 'rgba(230, 184, 0, 0.12)',
+      backgroundColor: 'rgba(201, 162, 39, 0.12)',
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: 'rgba(230, 184, 0, 0.3)',
+      borderBottomColor: 'rgba(201, 162, 39, 0.3)',
    },
-   keyChangeText: { color: '#E6B800', fontSize: 12, lineHeight: 16, flex: 1 },
+   keyChangeText: { color: warning, fontSize: 12, lineHeight: 16, flex: 1 },
    openedCapsule: { flexDirection: 'row', alignItems: 'center' },
-   openedCapsuleText: { color: '#888', fontStyle: 'italic', marginLeft: 8, fontSize: 14 },
+   openedCapsuleText: { color: textSecondary, fontStyle: 'italic', marginLeft: 8, fontSize: 14 },
 });

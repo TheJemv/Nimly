@@ -1,4 +1,7 @@
+import { getThemeColor } from "@/constants/theme";
 import { StyleSheet } from "react-native";
+
+const textSecondary = getThemeColor("textSecondary");
 
 export const styles = StyleSheet.create({
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
@@ -10,7 +13,7 @@ export const styles = StyleSheet.create({
     statNumber: { fontSize: 16, fontWeight: 'bold', marginTop: 4, color: '#fff' },
     statLabel: { fontSize: 10, opacity: 0.6, color: '#fff' },
     bioSection: { marginTop: 16 },
-    bioText: { color: '#8E8E93', fontSize: 15, lineHeight: 22 },
+    bioText: { color: textSecondary, fontSize: 15, lineHeight: 22 },
     lockedArea: { padding: 20 },
     lockedCard: { padding: 32, borderRadius: 28, borderWidth: 1, alignItems: 'center', borderStyle: 'dashed' },
     lockedTitle: { fontSize: 18, fontWeight: 'bold', marginVertical: 16, color: '#fff' },
@@ -19,5 +22,5 @@ export const styles = StyleSheet.create({
     feed: { paddingHorizontal: 16, gap: 16, paddingBottom: 60 },
     blockedArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
     blockedTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginTop: 16, textAlign: 'center' },
-    blockedSubtitle: { fontSize: 14, color: '#8E8E93', marginTop: 8, textAlign: 'center', lineHeight: 20 },
+    blockedSubtitle: { fontSize: 14, color: textSecondary, marginTop: 8, textAlign: 'center', lineHeight: 20 },
 });

@@ -222,10 +222,10 @@ export default function SettingsScreen() {
                         {/* DELETE ACCOUNT */}
                         <TouchableOpacity style={styles.menuItem} onPress={goToDeleteAccount}>
                             <View style={[styles.iconBox, { backgroundColor: '#1a0000' }]}>
-                                <SymbolView name="trash.fill" size={18} tintColor="#FF453A" />
+                                <SymbolView name="trash.fill" size={18} tintColor={accent} />
                             </View>
-                            <ThemedText style={[styles.menuText, { color: '#FF453A' }]}>Delete Account</ThemedText>
-                            <SymbolView name="chevron.right" size={14} tintColor="#FF453A" />
+                            <ThemedText style={[styles.menuText, { color: accent }]}>Delete Account</ThemedText>
+                            <SymbolView name="chevron.right" size={14} tintColor={accent} />
                         </TouchableOpacity>
                     </View>
 

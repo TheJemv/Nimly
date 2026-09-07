@@ -22,6 +22,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { getThemeColor } from "@/constants/theme";
 
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
+import { useVideoPoster } from "@/hooks/useVideoPoster";
 import { FAST_START_BUFFER } from "@/utils/videoSource";
 
 import { styles } from "./Post.styles";
@@ -94,6 +95,10 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
 
     // dev-only: log de segmentos HLS a medida que entran al buffer.
     useHlsSegmentLog(previewPlayer, videoSource, `post:${String(post.id).slice(0, 8)}`);
+
+    // Primer frame del video: se pinta de fondo mientras el player bufferea, en
+    // vez del rectángulo negro de siempre.
+    const poster = useVideoPoster(isVideo ? previewPlayer : null, post.id);
 
     // El player se recrea si cambia mediaUrl, así que hay que re-aplicar el
     // mute cada vez que cambie (propio o compartido) — no solo al crearlo.
@@ -246,6 +251,13 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                                             contentFit="cover"
                                             nativeControls={false}
                                         />
+                                        {poster && previewLoading && (
+                                            <Image
+                                                source={poster}
+                                                style={styles.posterOverlay}
+                                                contentFit="cover"
+                                            />
+                                        )}
                                         {previewLoading && isActive && (
                                             <View style={styles.playOverlay} pointerEvents="none">
                                                 <ActivityIndicator color="#fff" />

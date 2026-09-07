@@ -15,4 +15,14 @@ export const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.dark.textSecondary,
     },
+    storyReplyRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        flexShrink: 1,
+    },
+    storyReplyText: {
+        flexShrink: 1,
+        fontStyle: "italic",
+    },
 });

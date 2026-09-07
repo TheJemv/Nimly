@@ -1,7 +1,12 @@
+import { getThemeColor } from '@/constants/theme';
 import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 const LENGTH = 6;
+const TINT = getThemeColor('tint');
+const SURFACE = getThemeColor('surface');
+const BORDER = getThemeColor('border');
+const ICON = getThemeColor('icon');
 
 interface Props {
     value: string;
@@ -62,14 +67,14 @@ const styles = StyleSheet.create({
         width: 44,
         height: 52,
         borderRadius: 12,
-        backgroundColor: '#1C1C1E',
+        backgroundColor: SURFACE,
         borderWidth: 1.5,
-        borderColor: '#2C2C2E',
+        borderColor: BORDER,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    boxActive: { borderColor: '#DC143C' },
-    boxFilled: { borderColor: '#3A3A3C' },
+    boxActive: { borderColor: TINT },
+    boxFilled: { borderColor: ICON },
     dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent' },
     dotOn: { backgroundColor: '#fff' },
     // Cubre toda la fila pero es invisible: cualquier toque enfoca y abre el teclado.

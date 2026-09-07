@@ -37,7 +37,7 @@ export function useChatsList() {
                     chats (
                         id,
                         created_at,
-                        messages (content, created_at, sender_id, type, is_read)
+                        messages (content, created_at, sender_id, type, is_read, reply_to_story_id)
                     ),
                     profiles:user_id (id, username, avatar_config, avatar_url, public_key)
                 `)

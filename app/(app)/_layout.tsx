@@ -3,9 +3,9 @@ import VaultKeyGate from '@/components/VaultKeyGate';
 import { getThemeColor } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { registerForPushNotificationsAsync } from '@/hooks/notifications';
+import { useNotificationRouting } from '@/hooks/useNotificationRouting';
 import { supabase } from '@/lib/supabase';
-import * as Notifications from "expo-notifications";
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import 'react-native-reanimated';
@@ -17,7 +17,10 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const { session } = useAuth();
-  const router = useRouter();
+
+  // Abre la pantalla correcta al tocar una notificación (chat / notificaciones),
+  // tanto con la app abierta como en arranque en frío.
+  useNotificationRouting();
 
   useEffect(() => {
     // El token solo tiene sentido con sesión iniciada.
@@ -45,22 +48,6 @@ export default function RootLayout() {
     const sub = AppState.addEventListener('change', sync);
     return () => sub.remove();
   }, []);
-
-  useEffect(() => {
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data as {
-        type?: string;
-        friendId?: string;
-        user?: any;
-      };
-
-      if (data?.type === "message") {
-        router.push("/(app)/(tabs)/(messages)");
-      }
-    });
-
-    return () => responseSubscription.remove();
-  }, [router]);
 
   return (
     <VaultKeyGate>

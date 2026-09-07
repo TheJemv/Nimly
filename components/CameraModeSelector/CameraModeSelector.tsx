@@ -1,10 +1,13 @@
 // components/CameraModeSelector.tsx
+import { getThemeColor } from '@/constants/theme';
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { PILL_TRAVEL, styles } from './CameraModeSelector.styles';
+
+const MUTED = getThemeColor('textSecondary');
 
 export type CameraCaptureMode = 'photo' | 'video';
 
@@ -18,7 +21,7 @@ interface CameraModeSelectorProps {
 export default function CameraModeSelector({
     activeMode,
     onModeChange,
-    tintColor = '#DC143C',
+    tintColor = getThemeColor('tint'),
     disabled = false,
 }: CameraModeSelectorProps) {
     const pillStyle = useAnimatedStyle(() => ({
@@ -38,13 +41,13 @@ export default function CameraModeSelector({
                 <Animated.View style={[styles.pill, pillStyle, { backgroundColor: tintColor }]} />
 
                 <TouchableOpacity style={styles.tab} onPress={() => onModeChange('photo')} activeOpacity={0.8}>
-                    <SymbolView name="camera.fill" size={16} tintColor={activeMode === 'photo' ? '#FFF' : '#8E8E93'} />
-                    <Text style={[styles.tabText, { color: activeMode === 'photo' ? '#FFF' : '#8E8E93' }]}>Photo</Text>
+                    <SymbolView name="camera.fill" size={16} tintColor={activeMode === 'photo' ? '#FFF' : MUTED} />
+                    <Text style={[styles.tabText, { color: activeMode === 'photo' ? '#FFF' : MUTED }]}>Photo</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.tab} onPress={() => onModeChange('video')} activeOpacity={0.8}>
-                    <SymbolView name="video.fill" size={16} tintColor={activeMode === 'video' ? '#FFF' : '#8E8E93'} />
-                    <Text style={[styles.tabText, { color: activeMode === 'video' ? '#FFF' : '#8E8E93' }]}>Video</Text>
+                    <SymbolView name="video.fill" size={16} tintColor={activeMode === 'video' ? '#FFF' : MUTED} />
+                    <Text style={[styles.tabText, { color: activeMode === 'video' ? '#FFF' : MUTED }]}>Video</Text>
                 </TouchableOpacity>
             </BlurView>
         </View>

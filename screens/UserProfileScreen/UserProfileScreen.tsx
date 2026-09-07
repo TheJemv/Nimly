@@ -26,6 +26,8 @@ export default function UserProfileScreen() {
     const accent = getThemeColor('tint');
     const surface = getThemeColor('surface');
     const glassBorder = getThemeColor('glassBorder');
+    const success = getThemeColor('success');
+    const warning = getThemeColor('warning');
 
     // Parsear de inmediato el objeto user que vino por los parámetros de la ruta
     const routeUser = useMemo(() => {
@@ -101,7 +103,7 @@ export default function UserProfileScreen() {
 
             {theyBlockedMe ? (
                 <View style={styles.blockedArea}>
-                    <Ionicons name="ban" size={48} color="#ff3b30" />
+                    <Ionicons name="ban" size={48} color={accent} />
                     <ThemedText style={styles.blockedTitle}>Unavailable</ThemedText>
                     <ThemedText style={styles.blockedSubtitle}>This profile is not available.</ThemedText>
                 </View>
@@ -126,7 +128,7 @@ export default function UserProfileScreen() {
                 >
                     <View style={styles.headerSection}>
                         <View style={styles.topRow}>
-                            <View style={[styles.avatarWrapper, { borderColor: isAccepted ? '#4ade80' : glassBorder, display: "flex", alignItems: "center", justifyContent: "center" }]}>
+                            <View style={[styles.avatarWrapper, { borderColor: isAccepted ? success : glassBorder, display: "flex", alignItems: "center", justifyContent: "center" }]}>
                                 <ZoomableAvatar avatar_url={displayAvatarUrl} avatar_config={displayAvatarConfig} size={94} />
                             </View>
 
@@ -169,11 +171,11 @@ export default function UserProfileScreen() {
                         </View>
                     ) : !isAccepted ? (
                         <View style={styles.lockedArea}>
-                            <View style={[styles.lockedCard, { backgroundColor: surface, borderColor: isPending ? '#fbbf24' : accent }]}>
+                            <View style={[styles.lockedCard, { backgroundColor: surface, borderColor: isPending ? warning : accent }]}>
                                 <Ionicons
                                     name={isPending ? "timer-outline" : "lock-closed"}
                                     size={40}
-                                    color={isPending ? '#fbbf24' : accent}
+                                    color={isPending ? warning : accent}
                                 />
                                 <ThemedText style={styles.lockedTitle}>
                                     {isPending ? (amIReceiver ? "Action Required" : "Pending Approval") : "Private profile"}
@@ -181,7 +183,7 @@ export default function UserProfileScreen() {
                                 <TouchableOpacity
                                     style={[
                                         styles.connectBtn,
-                                        { backgroundColor: amIReceiver ? '#4ade80' : (isPending ? 'rgba(255,255,255,0.1)' : accent) }
+                                        { backgroundColor: amIReceiver ? success : (isPending ? 'rgba(255,255,255,0.1)' : accent) }
                                     ]}
                                     onPress={handleConnectAction}
                                     disabled={(isPending && !amIReceiver) || sending}

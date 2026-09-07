@@ -1,8 +1,11 @@
+import { getThemeColor } from "@/constants/theme";
 import { Dimensions, StyleSheet } from "react-native";
 const { width, height } = Dimensions.get('window');
 
+const SURFACE = getThemeColor("surface");
+
 export const styles = StyleSheet.create({
-    standardImageContainer: { width: 200, height: 250, borderRadius: 15, overflow: 'hidden', backgroundColor: '#1c1c1e' },
+    standardImageContainer: { width: 200, height: 250, borderRadius: 15, overflow: 'hidden', backgroundColor: SURFACE },
     imageMini: { width: '100%', height: '100%' },
     playOverlay: {
         position: 'absolute',
@@ -20,10 +23,10 @@ export const styles = StyleSheet.create({
         gap: 10,
         paddingHorizontal: 14,
         paddingVertical: 10,
-        backgroundColor: '#1C1C1E',
+        backgroundColor: SURFACE,
         borderRadius: 18,
         borderWidth: 1,
-        borderColor: '#1C1C1E',
+        borderColor: SURFACE,
     },
     iconCircle: {
         width: 22,

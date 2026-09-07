@@ -18,6 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PasscodeInput from './PasscodeInput';
 
 const accent = getThemeColor('tint');
+const warning = getThemeColor('warning');
+const surface = getThemeColor('surface');
+const textSecondary = getThemeColor('textSecondary');
+const border = getThemeColor('border');
 
 /**
  * Compuerta E2EE. Cubre:
@@ -323,11 +327,11 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 16 },
     title: { color: '#fff', fontSize: 23, fontWeight: '800', textAlign: 'center' },
-    body: { color: '#9A9A9A', fontSize: 14, lineHeight: 21, textAlign: 'center' },
-    warn: { color: '#E6B800' },
+    body: { color: textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center' },
+    warn: { color: warning },
     input: {
         width: '100%', height: 50, borderRadius: 12, paddingHorizontal: 16,
-        backgroundColor: '#1C1C1E', color: '#fff', borderWidth: 1, borderColor: '#2C2C2E',
+        backgroundColor: surface, color: '#fff', borderWidth: 1, borderColor: border,
     },
     primaryBtn: {
         width: '100%', height: 54, borderRadius: 12,
@@ -336,10 +340,10 @@ const styles = StyleSheet.create({
     dangerBtn: {
         width: '100%', height: 54, borderRadius: 12,
         alignItems: 'center', justifyContent: 'center', marginTop: 12,
-        backgroundColor: '#B3261E',
+        backgroundColor: accent,
     },
     btnDisabled: { opacity: 0.5 },
     primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
     link: { height: 40, alignItems: 'center', justifyContent: 'center' },
-    linkText: { color: '#9A9A9A', fontSize: 13, fontWeight: '600' },
+    linkText: { color: textSecondary, fontSize: 13, fontWeight: '600' },
 });

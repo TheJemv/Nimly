@@ -44,6 +44,7 @@ export default function HomeScreen() {
       handleStorySeen,
       handleStoryLiked,
       handleSendStory,
+      uploadingStory,
       handleStoryDeleted
    } = useStoriesFeed();
 
@@ -171,6 +172,7 @@ export default function HomeScreen() {
                      <StoriesDaily
                         storyGroups={visibleStoryGroups}
                         currentUserId={currentUserId}
+                        uploadingStory={uploadingStory}
                         onStorySeen={handleStorySeen}
                         onStoryLiked={handleStoryLiked}
                         onSendStory={handleSendStory}

@@ -32,9 +32,12 @@ const darkPalette = {
     glassHighlight: 'rgba(220, 20, 60, 0.10)',
 
     // --- Feedback Semántico ---
-    error: '#8B1538',            // Borgoña oscuro (para no competir con el brillo de tu Carmesí)
-    success: '#D6B98C',          // Oro champaña para confirmaciones con un toque de lujo
+    error: tintColorDark,        // Mismo Carmesí de marca: unifica destructivo/error en un solo rojo
+    success: '#4CAF7D',          // Verde jade desaturado, curado para no chocar con el Carmesí/Oro
     warning: '#C9A227',          // Oro viejo
+
+    // --- Neutros adicionales ---
+    border: '#2A2A2A',           // Separadores/bordes sutiles sobre el negro Ónix
 };
 
 /**

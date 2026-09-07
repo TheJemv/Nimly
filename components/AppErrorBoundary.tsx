@@ -110,9 +110,9 @@ const styles = StyleSheet.create({
    container: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center", padding: 32 },
    content: { alignItems: "center", maxWidth: 320 },
    title: { color: "#fff", fontSize: 20, fontWeight: "700", marginBottom: 10, textAlign: "center" },
-   subtitle: { color: "#8E8E93", fontSize: 14, lineHeight: 20, textAlign: "center", marginBottom: 28 },
+   subtitle: { color: getThemeColor("textSecondary"), fontSize: 14, lineHeight: 20, textAlign: "center", marginBottom: 28 },
    healingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-   healingText: { color: "#8E8E93", fontSize: 13 },
+   healingText: { color: getThemeColor("textSecondary"), fontSize: 13 },
    btn: {
       backgroundColor: getThemeColor("tint"),
       paddingHorizontal: 40,

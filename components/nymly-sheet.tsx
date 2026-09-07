@@ -1,3 +1,4 @@
+import { getThemeColor } from '@/constants/theme';
 import { BottomSheetBackdrop, BottomSheetFooterProps, BottomSheetModal } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback } from 'react';
 import { StyleSheet } from 'react-native';
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#050505',
     },
     indicator: {
-        backgroundColor: '#2C2C2E',
+        backgroundColor: getThemeColor('border'),
         width: 40,
     }
 });

@@ -1,6 +1,8 @@
+import { SymbolView } from "expo-symbols";
 import { memo } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 
+import { getThemeColor } from "@/constants/theme";
 import { useDecryptedMessage } from "../../hooks";
 import { styles } from "./LastMessageContent.styles";
 
@@ -9,6 +11,8 @@ interface LastMessageContentProps {
     friendPublicKey: string;
     isMine: boolean;
     type?: string;
+    /** The message is a reply to a story (messages.reply_to_story_id is set). */
+    isStoryReply?: boolean;
     hasUnread: boolean;
 }
 
@@ -23,18 +27,30 @@ const isMediaMessage = (content: string, type?: string) => {
     return /\//.test(content) || /\.(vault|enc|jpe?g|png|webp|heic|mp4|mov)$/i.test(content);
 };
 
-const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, hasUnread }: LastMessageContentProps) => {
+const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, isStoryReply, hasUnread }: LastMessageContentProps) => {
     const isOpenedCapsule = content === "OPENED_CAPSULE";
     const normType = (type || "").toLowerCase().replace(/[_\s]/g, "-");
     const isViewOnce = normType.includes("once");
     const isVideo = normType.includes("video") || /\.mp4/i.test(content || "");
-    const media = !isOpenedCapsule && isMediaMessage(content, type);
+    const media = !isStoryReply && !isOpenedCapsule && isMediaMessage(content, type);
 
     // Hook must run unconditionally; skip work when we already know it's media.
-    const { text, status } = useDecryptedMessage(media || isOpenedCapsule ? "" : content, friendPublicKey);
+    const { text, status } = useDecryptedMessage(media || isOpenedCapsule || isStoryReply ? "" : content, friendPublicKey);
 
     const messageStyle = hasUnread ? styles.lastMessageUnread : isMine ? styles.lastMessageMine : styles.lastMessageRead;
     const prefix = isMine ? "You: " : "";
+
+    if (isStoryReply) {
+        const tint = hasUnread ? getThemeColor("text") : getThemeColor("textSecondary");
+        return (
+            <View style={styles.storyReplyRow}>
+                <SymbolView name="arrowshape.turn.up.left.fill" size={12} tintColor={tint} />
+                <Text style={[messageStyle, styles.storyReplyText]} numberOfLines={1}>
+                    {isMine ? "Replied to their story" : "Replied to your story"}
+                </Text>
+            </View>
+        );
+    }
 
     let body: string;
     if (isOpenedCapsule) body = "👁 Opened";

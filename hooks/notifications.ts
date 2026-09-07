@@ -4,6 +4,19 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+// Sin handler, expo-notifications NO muestra la notificación cuando la app está
+// en primer plano: al usuario le llegaba el mensaje "en silencio" y parecía que
+// las notificaciones no funcionaban. Con esto se ve el banner igual que en
+// segundo plano.
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
 const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId;

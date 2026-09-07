@@ -23,6 +23,7 @@ import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { promptReportReason } from "@/utils/moderation";
 
 const accent = getThemeColor("tint");
+const warn = getThemeColor("warning");
 
 type FriendKeyInfo = {
     username?: string;
@@ -202,7 +203,7 @@ export default function ChatInfoScreen() {
                 <View style={styles.card}>
                     {localKeyChanged && (
                         <View style={styles.warnRow}>
-                            <SymbolView name="exclamationmark.triangle.fill" size={16} tintColor="#E6B800" />
+                            <SymbolView name="exclamationmark.triangle.fill" size={16} tintColor={warn} />
                             <Text style={styles.warnText}>
                                 This contact&apos;s keys changed since you last saw them on this device.
                             </Text>
@@ -230,8 +231,8 @@ export default function ChatInfoScreen() {
                         <SymbolView name="exclamationmark.bubble" size={16} tintColor="#9A9A9A" />
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} activeOpacity={0.6} onPress={handleBlock}>
-                        <Text style={[styles.rowLabel, { color: "#FF453A" }]}>Block user</Text>
-                        <SymbolView name="hand.raised" size={16} tintColor="#FF453A" />
+                        <Text style={[styles.rowLabel, { color: accent }]}>Block user</Text>
+                        <SymbolView name="hand.raised" size={16} tintColor={accent} />
                     </TouchableOpacity>
                 </View>
             </ScrollView>
@@ -277,5 +278,5 @@ const styles = StyleSheet.create({
         flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 12,
         borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.08)",
     },
-    warnText: { color: "#E6B800", fontSize: 12.5, lineHeight: 18, flex: 1 },
+    warnText: { color: warn, fontSize: 12.5, lineHeight: 18, flex: 1 },
 });

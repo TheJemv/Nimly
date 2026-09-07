@@ -1,9 +1,12 @@
+import { getThemeColor } from '@/constants/theme';
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { styles } from './LiquidGlassSelector.styles';
+
+const MUTED = getThemeColor('textSecondary');
 
 interface Props {
     activeTab: 'text' | 'media';
@@ -27,8 +30,8 @@ export default function LiquidGlassSelector({ activeTab, onTabChange, tintColor 
                     onPress={() => onTabChange('text')}
                     activeOpacity={1}
                 >
-                    <SymbolView name="text.bubble.fill" size={18} tintColor={activeTab === 'text' ? "#FFF" : "#636366"} />
-                    <Text style={[styles.tabText, { color: activeTab === 'text' ? "#FFF" : "#636366" }]}>Texto</Text>
+                    <SymbolView name="text.bubble.fill" size={18} tintColor={activeTab === 'text' ? "#FFF" : MUTED} />
+                    <Text style={[styles.tabText, { color: activeTab === 'text' ? "#FFF" : MUTED }]}>Texto</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -36,8 +39,8 @@ export default function LiquidGlassSelector({ activeTab, onTabChange, tintColor 
                     onPress={() => onTabChange('media')}
                     activeOpacity={1}
                 >
-                    <SymbolView name="play.square.stack.fill" size={18} tintColor={activeTab === 'media' ? "#FFF" : "#636366"} />
-                    <Text style={[styles.tabText, { color: activeTab === 'media' ? "#FFF" : "#636366" }]}>Media</Text>
+                    <SymbolView name="play.square.stack.fill" size={18} tintColor={activeTab === 'media' ? "#FFF" : MUTED} />
+                    <Text style={[styles.tabText, { color: activeTab === 'media' ? "#FFF" : MUTED }]}>Media</Text>
                 </TouchableOpacity>
             </BlurView>
         </View>

@@ -60,6 +60,7 @@ export default function ChatCard({ item, myId }: ChatCardProps) {
                             friendPublicKey={item.profiles?.public_key}
                             isMine={isMine}
                             type={lastMsg.type}
+                            isStoryReply={!!lastMsg.reply_to_story_id}
                             hasUnread={hasUnread}
                         />
                     ) : (

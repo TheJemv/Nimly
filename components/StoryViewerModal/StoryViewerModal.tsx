@@ -3,6 +3,7 @@ import { Colors, getThemeColor } from "@/constants/theme";
 import { StoryGroup, ViewerProfile } from "@/types/types";
 import getTimeAgo from "@/utils/getTimeAgo";
 import { SymbolView } from "expo-symbols";
+import { Image as ExpoImage } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -37,6 +38,7 @@ import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
 import { promptReportReason } from "@/utils/moderation";
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
+import { useVideoPoster } from "@/hooks/useVideoPoster";
 import { buildVideoSource, FAST_START_BUFFER } from "@/utils/videoSource";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
 
@@ -169,6 +171,10 @@ export default function StoryViewerModal({
 
     // dev-only: log de segmentos HLS a medida que entran al buffer.
     useHlsSegmentLog(videoPlayer, storyVideoSource, `story:${String(currentStory?.id ?? "?").slice(0, 8)}`);
+
+    // Primer frame de la story de video: se pinta mientras carga en lugar del
+    // fondo negro. Cacheado por id, así al volver atrás/adelante sale al instante.
+    const storyPoster = useVideoPoster(isVideo ? videoPlayer : null, currentStory?.id);
 
     const {
         progressAnim,
@@ -419,14 +425,23 @@ export default function StoryViewerModal({
 
                 <View style={[styles.mediaCard, { top: cardTop, bottom: DOCK_HEIGHT }]}>
                     {isVideo ? (
-                        <VideoView
-                            key={currentStory.id}
-                            player={videoPlayer}
-                            style={styles.storyMedia}
-                            nativeControls={false}
-                            contentFit="cover"
-                            onFirstFrameRender={handleMediaReady}
-                        />
+                        <>
+                            <VideoView
+                                key={currentStory.id}
+                                player={videoPlayer}
+                                style={styles.storyMedia}
+                                nativeControls={false}
+                                contentFit="cover"
+                                onFirstFrameRender={handleMediaReady}
+                            />
+                            {storyPoster && isMediaLoading && (
+                                <ExpoImage
+                                    source={storyPoster}
+                                    style={styles.storyMedia}
+                                    contentFit="cover"
+                                />
+                            )}
+                        </>
                     ) : (
                         <Image
                             key={currentStory.id}
@@ -567,7 +582,7 @@ export default function StoryViewerModal({
                                     <TouchableOpacity onPress={toggleLike} style={styles.likeButton} activeOpacity={0.8}>
                                         <SymbolView
                                             name={currentLikedStatus ? "heart.fill" : "heart"}
-                                            tintColor={currentLikedStatus ? getThemeColor("tint") : "#636366"}
+                                            tintColor={currentLikedStatus ? getThemeColor("tint") : getThemeColor("textSecondary")}
                                             size={22}
                                         />
                                     </TouchableOpacity>

@@ -1,4 +1,5 @@
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
+import { getThemeColor } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { createAvatar } from "@dicebear/core";
 import { useMemo } from "react";
@@ -44,7 +45,7 @@ export default function UserAvatar({ avatar_config, size = 40 }: UserAvatarProps
     // Fallback local (sin dependencias externas): ícono neutro sobre el fondo del contenedor.
     return (
         <View style={[styles.container, dimensionStyle]}>
-            <Ionicons name="person" size={Math.round(size * 0.55)} color="#5A5A5E" />
+            <Ionicons name="person" size={Math.round(size * 0.55)} color={getThemeColor("icon")} />
         </View>
     );
 }
@@ -52,7 +53,7 @@ export default function UserAvatar({ avatar_config, size = 40 }: UserAvatarProps
 const styles = StyleSheet.create({
     container: {
         overflow: "hidden",
-        backgroundColor: "#1C1C1E",
+        backgroundColor: getThemeColor("surface"),
         justifyContent: "center",
         alignItems: "center",
     },

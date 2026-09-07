@@ -1,15 +1,18 @@
 import { ThemedText } from "@/components/themed-text";
+import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+const ACCENT = getThemeColor("tint"); // Carmesí de marca, también usado para destructivo
+
 export default function DeleteAccountScreen() {
     const router = useRouter();
     const [seconds, setSeconds] = useState(15);
     const [loading, setLoading] = useState(false);
-    const accent = "#FF453A"; // Rojo Apple
+    const accent = ACCENT;
 
     useEffect(() => {
         if (seconds > 0) {
@@ -87,7 +90,7 @@ const styles = StyleSheet.create({
     warningBox: { backgroundColor: '#111', padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#222', width: '100%' },
     warningText: { color: '#fff', fontSize: 16, opacity: 0.9, lineHeight: 22, textAlign: 'center' },
     list: { marginVertical: 20, gap: 8 },
-    listItem: { color: '#FF453A', fontSize: 14, fontWeight: '600' },
+    listItem: { color: ACCENT, fontSize: 14, fontWeight: '600' },
     finalWarning: { color: '#fff', fontSize: 12, opacity: 0.5, textAlign: 'center', fontStyle: 'italic' },
     button: {
         width: '100%',

@@ -44,7 +44,7 @@ const UserSearchResult = ({ item }: { item: any }) => {
                 )}
             </View>
             <Text style={styles.usernameText}>@{item.username}</Text>
-            <SymbolView name="chevron.right" size={14} tintColor="#3A3A3C" weight="semibold" />
+            <SymbolView name="chevron.right" size={14} tintColor={getThemeColor("icon")} weight="semibold" />
         </TouchableOpacity>
     );
 };
@@ -111,11 +111,11 @@ export default function SearchScreen() {
                 <Text style={styles.headerTitle}>Discover</Text>
                 <GlassView style={styles.searchBarGlass}>
                     <View style={styles.searchInner}>
-                        <SymbolView name="magnifyingglass" size={16} tintColor="#8E8E93" />
+                        <SymbolView name="magnifyingglass" size={16} tintColor={getThemeColor("textSecondary")} />
                         <TextInput
                             style={styles.input}
                             placeholder="Search users..."
-                            placeholderTextColor="#8E8E93"
+                            placeholderTextColor={getThemeColor("textSecondary")}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             autoCapitalize="none"
@@ -162,10 +162,10 @@ const styles = StyleSheet.create({
     input: { flex: 1, marginLeft: 8, fontSize: 17, color: '#FFF' },
     listPadding: { paddingHorizontal: 20, paddingBottom: 100 },
     userRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-    avatarWrapper: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden', backgroundColor: '#1C1C1E', marginRight: 15 },
-    placeholderAvatar: { flex: 1, backgroundColor: '#2C2C2E' },
+    avatarWrapper: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden', backgroundColor: getThemeColor("surface"), marginRight: 15 },
+    placeholderAvatar: { flex: 1, backgroundColor: getThemeColor("border") },
     usernameText: { flex: 1, fontSize: 17, fontWeight: '500', color: '#FFF', letterSpacing: -0.4 },
     separator: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 55 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    emptyText: { textAlign: 'center', color: '#8E8E93', marginTop: 40, fontSize: 15 }
+    emptyText: { textAlign: 'center', color: getThemeColor("textSecondary"), marginTop: 40, fontSize: 15 }
 });
