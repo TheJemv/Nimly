@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
+import { getCachedEncryptedText } from '@/utils/mediaCache';
 
 type MediaItem = {
   filePath: string;
@@ -10,22 +10,14 @@ export async function prefetchChatMedia(items: MediaItem[]) {
   const pending = items.filter(i => !vaultRAMCache[i.filePath]);
   if (pending.length === 0) return;
 
-  const paths = pending.map(i => i.filePath);
-
-  const { data, error } = await supabase.storage
-    .from('chat-media')
-    .createSignedUrls(paths, 60);
-
-  if (error || !data) return;
-
   await Promise.all(
-    data.map(async (signed, index) => {
-      if (!signed.signedUrl) return;
-      const { filePath, friendPublicKey } = pending[index];
-
+    pending.map(async ({ filePath, friendPublicKey }) => {
       try {
-        const res = await fetch(signed.signedUrl);
-        const encryptedText = await res.text();
+        // Mismo caché de ciphertext que el bubble: descarga una vez, queda en
+        // disco y sobrevive al reinicio. El plaintext solo va a RAM.
+        const encryptedText = await getCachedEncryptedText('chat-media', filePath, 60);
+        if (!encryptedText) return;
+
         const base64Data = await vaultCrypto.decryptMessage(encryptedText.trim(), friendPublicKey);
 
         if (base64Data.startsWith("🔒")) {

@@ -36,6 +36,7 @@ import { reportsApi } from "@/api/reports";
 import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { useAnimatedValue } from "@/utils/animations";
+import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
 import { useVideoPoster } from "@/hooks/useVideoPoster";
@@ -141,16 +142,44 @@ export default function StoryViewerModal({
     const [storyHlsFailed, setStoryHlsFailed] = useState(false);
     useEffect(() => { setStoryHlsFailed(false); }, [currentStory?.id]);
 
+    // Media de la story resuelto vía caché en disco (mediaCache) por el path
+    // desnudo: 1ª vista descarga + firma, siguientes = `file://` local, cero
+    // red. Si el caché falla degrada a la URL remota (o al path, que el player
+    // ignorará).
+    //
+    // Igual que en los posts: si es video con HLS listo y sin fallo NO tocamos
+    // el MP4 (ancho de banda). Solo lo resolvemos para imagen, video sin HLS
+    // ('raw'/'error') o tras storyHlsFailed.
+    const storyMediaKey = currentStory?.media_path || currentStory?.media_url || null;
+    const storyNeedsMp4 =
+        currentStory?.media_type !== 'video' ||
+        currentStory?.playback_status !== 'ready' ||
+        storyHlsFailed;
+    const [resolvedStoryUri, setResolvedStoryUri] = useState<string | null>(null);
+    useEffect(() => {
+        let active = true;
+        if (!storyMediaKey || !storyNeedsMp4) { setResolvedStoryUri(null); return; }
+        if (/^(https?:|file:|data:)/.test(storyMediaKey)) {
+            setResolvedStoryUri(storyMediaKey);
+            return;
+        }
+        setResolvedStoryUri(null);
+        getCachedMedia('stories', storyMediaKey, { signed: true, ttl: 3600 })
+            .then((uri) => { if (active) setResolvedStoryUri(uri ?? storyMediaKey); })
+            .catch(() => { if (active) setResolvedStoryUri(storyMediaKey); });
+        return () => { active = false; };
+    }, [storyMediaKey, storyNeedsMp4]);
+
     const storyVideoSource = useMemo(
         () => buildVideoSource({
             ownerId: currentStory?.user_id,
             mediaId: currentStory?.id,
             playbackStatus: currentStory?.playback_status,
-            mp4Url: currentStory?.media_url ?? null,
+            mp4Url: resolvedStoryUri,
             accessToken: session?.access_token,
             hlsFailed: storyHlsFailed,
         }),
-        [currentStory?.user_id, currentStory?.id, currentStory?.playback_status, currentStory?.media_url, session?.access_token, storyHlsFailed],
+        [currentStory?.user_id, currentStory?.id, currentStory?.playback_status, resolvedStoryUri, session?.access_token, storyHlsFailed],
     );
 
     const handleStoryVideoError = () => {
@@ -445,7 +474,7 @@ export default function StoryViewerModal({
                     ) : (
                         <Image
                             key={currentStory.id}
-                            source={{ uri: currentStory.media_url, cache: "force-cache" }}
+                            source={{ uri: resolvedStoryUri ?? undefined, cache: "force-cache" }}
                             style={styles.storyMedia}
                             resizeMode="cover"
                             fadeDuration={0}

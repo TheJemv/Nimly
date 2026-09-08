@@ -1,12 +1,13 @@
 import { AuthContext } from "@/context/AuthContext";
 import { getThemeColor } from "@/constants/theme";
-import { supabase } from "@/lib/supabase";
+import { getCachedMedia } from "@/utils/mediaCache";
 import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { memo, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 
-// Caché simple en RAM para las Signed URLs de las historias (duran 1 hora, pero evitan fetches repetidos)
+// Caché en RAM del `file://` local ya resuelto (evita hasta el getInfoAsync del
+// disco al re-montar la burbuja). El caché real y persistente vive en mediaCache.
 const storyUrlCache: { [path: string]: string } = {};
 
 const isVideoStory = (mediaType?: string | null, path?: string | null) =>
@@ -36,22 +37,21 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
 
     useEffect(() => {
         if (cachedUrl) return;
+        if (!content.media_url) return;
 
         let isMounted = true;
-        const fetchSignedUrl = async () => {
+        const resolve = async () => {
             try {
                 setLoading(true);
                 setHasError(false);
 
-                const { data, error } = await supabase.storage
-                    .from('stories')
-                    .createSignedUrl(content.media_url, 3600);
-
-                if (error || !data?.signedUrl) throw error;
+                // 1ª vez descarga + firma; siguientes = `file://` local, cero red.
+                const uri = await getCachedMedia('stories', content.media_url, { signed: true, ttl: 3600 });
+                if (!uri) throw new Error("story media unavailable");
 
                 if (isMounted) {
-                    storyUrlCache[content.media_url] = data.signedUrl;
-                    setMediaUrl(data.signedUrl);
+                    storyUrlCache[content.media_url] = uri;
+                    setMediaUrl(uri);
                 }
             } catch {
                 if (isMounted) setHasError(true);
@@ -60,9 +60,7 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
             }
         };
 
-        if (content.media_url) {
-            fetchSignedUrl();
-        }
+        resolve();
 
         return () => { isMounted = false; };
     }, [content.media_url, session?.user, cachedUrl]);

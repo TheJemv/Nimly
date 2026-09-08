@@ -2,6 +2,7 @@ import { getThemeColor } from '@/constants/theme';
 
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
+import { getCachedEncryptedText } from '@/utils/mediaCache';
 import * as Sentry from '@sentry/react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SymbolView } from 'expo-symbols';
@@ -57,9 +58,16 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         return () => { isMounted = false; };
     }, [filePath, isViewOnce]);
 
-    const decryptToLocalFile = async (base64Data: string): Promise<string> => {
+    // Path determinista del .mp4 plaintext en disco. El plaintext-at-rest para
+    // video ya es comportamiento actual e inevitable (expo-video no descifra al
+    // vuelo); lo que evitamos ahora es RE-descargar + RE-descifrar si ya existe.
+    const localVideoTarget = (): string => {
         const safe = filePath.replace(/[^a-z0-9]/gi, '_');
-        const target = `${FileSystem.cacheDirectory}nimly_${safe}.mp4`;
+        return `${FileSystem.cacheDirectory}nimly_${safe}.mp4`;
+    };
+
+    const decryptToLocalFile = async (base64Data: string): Promise<string> => {
+        const target = localVideoTarget();
         await FileSystem.writeAsStringAsync(target, base64Data, { encoding: 'base64' });
         return target;
     };
@@ -83,13 +91,33 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         try {
             if (isMounted) setIsLoading(true);
 
-            const { data: urlData, error: urlError } = await supabase.storage
-                .from('chat-media')
-                .createSignedUrl(filePath, 60);
-            if (urlError || !urlData?.signedUrl) throw new Error("Signed URL failed");
+            // Video: si el .mp4 plaintext determinista ya existe en disco, reúsalo
+            // — nada de red ni de descifrado.
+            if (isVideo) {
+                try {
+                    const target = localVideoTarget();
+                    const info = await FileSystem.getInfoAsync(target);
+                    if (info.exists && !info.isDirectory && info.size > 0) {
+                        vaultRAMCache[filePath] = target;
+                        if (isMounted) {
+                            setMediaUri(target);
+                            if (triggerFullScreen) setIsFullScreen(true);
+                        }
+                        return;
+                    }
+                } catch {
+                    /* sigue al camino normal */
+                }
+            }
 
-            const response = await fetch(urlData.signedUrl);
-            const encryptedText = await response.text();
+            // Caché del CIFRADO en disco: 1ª vez descarga + guarda, siguientes lo
+            // lee de `file://` sin red. NUNCA se cachea el plaintext aquí.
+            // View-once: `persist: false` -> no se escribe a disco.
+            const encryptedText = await getCachedEncryptedText('chat-media', filePath, 60, {
+                persist: !isViewOnce,
+            });
+            if (!encryptedText) throw new Error("Ciphertext download failed");
+
             const base64Data = await vaultCrypto.decryptMessage(encryptedText.trim(), friendPublicKey);
 
             if (base64Data.startsWith("🔒")) {

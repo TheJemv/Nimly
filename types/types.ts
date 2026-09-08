@@ -127,6 +127,9 @@ export interface Story {
     id: string;
     user_id: string; // 👈 Faltaba tu DB
     media_url: string;
+    /** Path desnudo dentro del bucket 'stories'. Se resuelve a `file://` en el
+     *  viewer vía el caché en disco (mediaCache). Ver api/stories.ts. */
+    media_path?: string;
     media_type: "image" | "video"; // 👈 Obligatorio según DB
     is_view_once: boolean; // 👈 Corregido de tu DB
     created_at: string;

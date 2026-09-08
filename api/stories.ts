@@ -7,6 +7,10 @@ export interface Story {
   id: string;
   user_id: string;
   media_url: string;
+  /** Path desnudo dentro del bucket 'stories' ("userId/123.jpg"). Se preserva
+   *  para poder resolver el media vía el caché en disco (mediaCache) por path,
+   *  no por URL firmada — el token rota y rompería el caché. */
+  media_path?: string;
   media_type: 'image' | 'video';
   is_view_once: boolean;
   created_at: string;
@@ -90,27 +94,17 @@ export const storiesApi = {
       const stories = data as any[];
       if (stories.length === 0) return [];
 
-      // 👇 UNA sola petición para firmar TODAS las URLs, en vez de N peticiones separadas
-      const paths = stories.map((s) => s.media_url);
-      const { data: signedUrlsData, error: signError } = await supabase.storage
-        .from('stories')
-        .createSignedUrls(paths, 3600); // 👈 nota la "s" al final — versión batch
-
-      if (signError) {
-          console.error("Error generando signed URLs en batch:", signError);
-      }
-
-      // Mapeamos por path para asociar cada historia con su URL firmada correcta
-      const signedUrlMap = new Map(
-          (signedUrlsData || []).map((item) => [item.path, item.signedUrl])
-      );
-
+      // Ya NO firmamos aquí: el media se resuelve en el viewer vía el caché en
+      // disco (mediaCache) por el path desnudo. Firmar en cada `reloadStories`
+      // (y realtime dispara muchos) gastaba ancho de banda y rompía el caché.
+      // `media_url` se mantiene como el path desnudo; `media_path` lo hace
+      // explícito para el código nuevo.
       return stories.map((story) => {
           const likesList = story.story_likes || [];
           const isLikedByMe = likesList.some((l: any) => l.user_id === user.id);
           return {
               ...story,
-              media_url: signedUrlMap.get(story.media_url) || story.media_url,
+              media_path: story.media_url,
               is_liked_by_me: isLikedByMe,
           };
       });
@@ -186,24 +180,12 @@ export const storiesApi = {
 
     if (error) throw error;
 
-    const archiveWithSignedUrls = await Promise.all(
-      (data || []).map(async (story) => {
-        try {
-          const { data: signedData } = await supabase.storage
-            .from('stories')
-            .createSignedUrl(story.media_url, 3600);
-
-          return {
-            ...story,
-            media_url: signedData?.signedUrl || story.media_url,
-          };
-        } catch {
-          return story;
-        }
-      })
-    );
-
-    return archiveWithSignedUrls;
+    // Igual que `getActiveFeed`: no firmamos, preservamos el path desnudo y el
+    // viewer resuelve vía el caché en disco.
+    return (data || []).map((story) => ({
+      ...story,
+      media_path: story.media_url,
+    }));
   },
 
   async markAsSeen(storyId: string) {

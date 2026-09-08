@@ -59,6 +59,8 @@ export function useStoriesFeed() {
                 id: story.id,
                 user_id: uId, // 👈 ¡Faltaba esta línea para cumplir con la interfaz Story!
                 media_url: story.media_url,
+                // Path desnudo -> el viewer lo resuelve vía caché en disco.
+                media_path: (story as any).media_path ?? story.media_url,
                 media_type: story.media_type,
                 created_at: story.created_at,
                 // Streaming HLS: el StoryViewer decide HLS vs MP4 con esto.

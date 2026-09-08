@@ -7,7 +7,7 @@ import { reportsApi } from "@/api/reports";
 
 import { AuthContext } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
-import { supabase } from "@/lib/supabase";
+import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { buildVideoSource } from "@/utils/videoSource";
 import type { VideoSource } from "expo-video";
@@ -76,24 +76,10 @@ export function usePost(post: any, onDelete?: () => void) {
     const isMedia = Boolean(post.media_url);
     const isVideo = isMedia && isVideoPath(post.media_url);
 
-    // URL firmada de corta duración para el bucket privado 'media'
-    // (en vez de exponer el access_token como header de la imagen).
-    // Para video sigue siendo el fallback: si el HLS no está listo o revienta,
-    // el player usa este MP4.
     const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-    useEffect(() => {
-        let active = true;
-        if (!post.media_url) { setMediaUrl(null); return; }
-        supabase.storage
-            .from('media')
-            .createSignedUrl(toStoragePath(post.media_url), 3600)
-            .then(({ data }) => { if (active) setMediaUrl(data?.signedUrl ?? null); })
-            .catch(() => { if (active) setMediaUrl(null); });
-        return () => { active = false; };
-    }, [post.media_url]);
 
     // Streaming HLS: si el post ya está transcodeado ('ready') servimos el
-    // playlist autenticado por el media API; si no, el MP4 de arriba.
+    // playlist autenticado por el media API; si no, el MP4 de abajo.
     // Si el player revienta con HLS (endpoint caído, signed URL vencida a
     // mitad) -> hlsFailed y caemos al MP4 sin romper el post.
     const [hlsFailed, setHlsFailed] = useState(false);
@@ -102,6 +88,27 @@ export function usePost(post: any, onDelete?: () => void) {
     const handleVideoError = useCallback(() => {
         if (post.playback_status === 'ready') setHlsFailed(true);
     }, [post.playback_status]);
+
+    // Media del bucket 'media' resuelto vía caché en disco (mediaCache):
+    // 1ª vista descarga + firma; siguientes = `file://` local, cero red.
+    // Si el caché falla degrada a la URL remota (o null).
+    //
+    // OJO: para un video con HLS listo y sin fallo NO tocamos el MP4 — son
+    // decenas de MB y el tubo del server es de 10 Mbps. Solo lo resolvemos si
+    // de verdad se va a reproducir: imagen, video sin HLS ('raw'/'error'), o
+    // después de que el HLS reviente (hlsFailed).
+    useEffect(() => {
+        let active = true;
+        if (!post.media_url) { setMediaUrl(null); return; }
+
+        const needsMp4 = !isVideo || post.playback_status !== 'ready' || hlsFailed;
+        if (!needsMp4) { setMediaUrl(null); return; }
+
+        getCachedMedia('media', toStoragePath(post.media_url), { signed: true, ttl: 3600 })
+            .then((uri) => { if (active) setMediaUrl(uri); })
+            .catch(() => { if (active) setMediaUrl(null); });
+        return () => { active = false; };
+    }, [post.media_url, isVideo, post.playback_status, hlsFailed]);
 
     const videoSource: VideoSource = useMemo(
         () => buildVideoSource({
