@@ -67,10 +67,9 @@ export default function NewPostScreen() {
          const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images', 'videos'],
             allowsEditing: true,
-            quality: 0.8,
-            // Passthrough: dejamos el video original tal cual. compressVideoForUpload
-            // (react-native-compressor, parcheado para tone-map HDR->SDR) hace el
-            // único transcode -- así no doble-procesamos.
+            // Sin pre-compresión del picker: optimizeImageForUpload / compressVideoForUpload
+            // (en createPost) hacen el único procesado, a calidad de feed.
+            quality: 1,
          });
 
          if (!result.canceled) {

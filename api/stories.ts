@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
-import { compressVideoForUpload } from '@/utils/compressVideo';
+import { IMAGE_QUALITY, optimizeImageForUpload } from '@/utils/compressImage';
+import { VIDEO_QUALITY, compressVideoForUpload } from '@/utils/compressVideo';
 import { User } from '@supabase/supabase-js';
-import * as ImageManipulator from 'expo-image-manipulator';
 
 export interface Story {
   id: string;
@@ -30,19 +30,10 @@ export const storiesApi = {
 
     let fileUri = localUri;
     if (mediaType === 'image') {
-      try {
-        const manipResult = await ImageManipulator.manipulateAsync(
-          localUri,
-          [{ resize: { width: 1080 } }],
-          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        fileUri = manipResult.uri;
-      } catch (err) {
-        console.warn("No se pudo comprimir la imagen, usando original:", err);
-      }
+      fileUri = await optimizeImageForUpload(localUri, IMAGE_QUALITY.story);
     } else {
-      // Video -> ~720p (13s: ~26MB -> ~3-4MB). Nunca falla.
-      fileUri = await compressVideoForUpload(localUri);
+      // Video -> 1080p / 5.5 Mbps. Nunca falla: usa el original si no puede.
+      fileUri = await compressVideoForUpload(localUri, VIDEO_QUALITY.feed);
     }
 
     const fileExt = mediaType === 'video' ? 'mp4' : 'jpg';

@@ -24,6 +24,9 @@ export const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    iconBtnActive: {
+        backgroundColor: TINT,
+    },
     recPill: {
         flex: 1,
         flexDirection: 'row',
@@ -36,16 +39,14 @@ export const styles = StyleSheet.create({
     recText: { color: '#fff', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
 
     zoomBadge: {
-        position: 'absolute',
         alignSelf: 'center',
-        bottom: 190,
+        marginBottom: 14,
         backgroundColor: 'rgba(0,0,0,0.5)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
-        zIndex: 10,
     },
     zoomText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
 
@@ -69,6 +70,7 @@ export const styles = StyleSheet.create({
     },
     shutterOuterVideo: { borderColor: TINT },
     shutterOuterRecording: { borderColor: TINT },
+    shutterBusy: { opacity: 0.5 },
     shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
     shutterInnerVideo: { backgroundColor: TINT },
     shutterInnerRecording: { width: 28, height: 28, borderRadius: 6, backgroundColor: TINT },
@@ -78,6 +80,16 @@ export const styles = StyleSheet.create({
 
     previewContainer: { flex: 1, backgroundColor: '#000' },
     previewMedia: { flex: 1, width: '100%' },
+
+    strippingOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    strippingText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
     decisionPanel: {
         position: 'absolute',

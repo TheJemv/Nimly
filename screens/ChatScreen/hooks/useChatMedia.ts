@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { compressVideoForUpload } from '@/utils/compressVideo';
+import { VIDEO_QUALITY, compressVideoForUpload } from '@/utils/compressVideo';
 import { vaultCrypto } from '@/utils/crypto';
 import * as Sentry from '@sentry/react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -30,8 +30,9 @@ export function useChatMedia(chatId: string, currentUserId: string) {
                     console.warn("No se pudo comprimir la imagen para E2EE, usando original:", manipError);
                 }
             } else if (type === 'video') {
-                // ~720p antes de cifrar+subir. Nunca falla: usa el original si no puede.
-                fileUri = await compressVideoForUpload(imageUri);
+                // 720p / 3.5 Mbps antes de cifrar+subir (el video va en RAM como
+                // base64, por eso más conservador que el feed). Nunca falla.
+                fileUri = await compressVideoForUpload(imageUri, VIDEO_QUALITY.chat);
             }
 
             const base64 = await FileSystem.readAsStringAsync(fileUri, {
