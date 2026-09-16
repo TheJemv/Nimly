@@ -273,7 +273,7 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
                 icon="camera.fill"
                 title="Camera Access"
                 subtitle="Nimly needs access to your camera and microphone to capture photos and videos."
-                confirmLabel="Allow Access"
+                confirmLabel="Continue"
                 onRequest={handleRequestPermissions}
                 onClose={onClose}
             />
