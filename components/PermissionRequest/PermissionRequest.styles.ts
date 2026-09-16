@@ -46,12 +46,4 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
     },
-    skipBtn: {
-        paddingVertical: 12,
-    },
-    skipText: {
-        color: '#666',
-        fontSize: 14,
-        fontWeight: '500',
-    },
 });
