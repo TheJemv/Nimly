@@ -22,12 +22,12 @@ export function useStoryNavigation({
     const currentStory = localStories[currentStoryIdx] || currentGroup?.stories[currentStoryIdx];
     const isVideo = currentStory?.media_type === "video";
 
-    // Sincronizar historias locales cuando cambia el grupo o usuario
+    // Sync local stories when the group or user changes
     useEffect(() => {
         if (currentGroup) setLocalStories(currentGroup.stories || []);
     }, [currentUserIdx, storyGroups]);
 
-    // Posicionar en el usuario/historia inicial al abrir el modal
+    // Position at the initial user/story when opening the modal
     useEffect(() => {
         if (visible && initialUserId) {
             const foundIdx = storyGroups.findIndex((g) => g.user_id === initialUserId);

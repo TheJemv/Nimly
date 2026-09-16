@@ -33,7 +33,7 @@ export const MessageContent = memo(({ content, friendPublicKey, style, numberOfL
 
         const cached = vaultRAMCache[content];
         if (cached && !cached.startsWith("🔒")) {
-            setDecryptedText(cached); // 👈 antes solo hacía "return"
+            setDecryptedText(cached); // 👈 previously this only did "return"
             return;
         }
 

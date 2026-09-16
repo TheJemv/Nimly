@@ -16,8 +16,8 @@ export function useProtectedRoute(session: Session | null, isLoading: boolean) {
         if (!session && !inAuthGroup) target = '/(auth)';
         else if (session && inAuthGroup) target = '/(app)/(tabs)/(home)';
 
-        // Evita disparar el mismo replace repetidamente mientras `segments`
-        // se estabiliza tras la navegación.
+        // Avoids triggering the same replace repeatedly while `segments`
+        // stabilizes after navigation.
         if (target && lastRedirect.current !== target) {
             lastRedirect.current = target;
             router.replace(target as any);

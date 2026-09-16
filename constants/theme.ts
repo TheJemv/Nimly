@@ -1,50 +1,50 @@
 /**
- * Colores oficiales para Floxly - Estética "Crimson Glass VIP"
- * Configurado exclusivamente para Dark Mode para mantener máxima privacidad.
+ * Official colors for Floxly - "Crimson Glass VIP" aesthetic
+ * Configured exclusively for Dark Mode to maintain maximum privacy.
  */
 
 import { Platform } from 'react-native';
 
-// El AccentPrimary: Carmesí / Rojo Rubí (Alto contraste, exclusivo y llamativo)
+// The AccentPrimary: Crimson / Ruby Red (high contrast, exclusive, and eye-catching)
 const tintColorDark = '#DC143C';
 
 const darkPalette = {
-    // --- Tipografía ---
-    text: '#F2E8D8',             // Marfil (Ivory) para una lectura suave, descansa la vista y se ve premium
-    textSecondary: '#8A8A8A',    // Gris neutro apagado para información secundaria
+    // --- Typography ---
+    text: '#F2E8D8',             // Ivory for smooth reading, easy on the eyes, and looks premium
+    textSecondary: '#8A8A8A',    // Muted neutral gray for secondary information
 
-    // --- Fondos y Superficies ---
-    background: '#000000',       // Negro Ónix: El negro profundo de la alta costura
-    surface: '#161616',          // Gris carbón levísimo para darle profundidad a las tarjetas base
+    // --- Backgrounds and Surfaces ---
+    background: '#000000',       // Onyx black: the deep black of haute couture
+    surface: '#161616',          // Very subtle charcoal gray to add depth to base cards
 
-    // --- Acentos e Íconos ---
+    // --- Accents and Icons ---
     tint: tintColorDark,
-    icon: '#4A4A4A',             // Íconos inactivos muy discretos para mantener la vibra privada
+    icon: '#4A4A4A',             // Very discreet inactive icons to keep the private vibe
     tabIconDefault: '#4A4A4A',
-    tabIconSelected: tintColorDark, // El Carmesí brillará guiando al usuario
+    tabIconSelected: tintColorDark, // The Crimson will shine to guide the user
     activeIcon: tintColorDark,
 
-    // --- Efecto "Liquid Glass" (Premium Glassmorphism) ---
-    // Reflejos sutiles usando el código RGB del Carmesí (220, 20, 60)
-    // Esto hace que el cristal oscuro tenga un levísimo tinte rojizo, muy elegante.
+    // --- "Liquid Glass" effect (premium glassmorphism) ---
+    // Subtle reflections using the Crimson's RGB code (220, 20, 60)
+    // This gives the dark glass a very slight reddish tint, very elegant.
     glassBorder: 'rgba(220, 20, 60, 0.15)',
     glassBackground: 'rgba(220, 20, 60, 0.03)',
     glassHighlight: 'rgba(220, 20, 60, 0.10)',
 
-    // --- Feedback Semántico ---
-    error: tintColorDark,        // Mismo Carmesí de marca: unifica destructivo/error en un solo rojo
-    success: '#4CAF7D',          // Verde jade desaturado, curado para no chocar con el Carmesí/Oro
-    warning: '#C9A227',          // Oro viejo
+    // --- Semantic Feedback ---
+    error: tintColorDark,        // Same brand Crimson: unifies destructive/error into a single red
+    success: '#4CAF7D',          // Desaturated jade green, curated to not clash with the Crimson/Gold
+    warning: '#C9A227',          // Old gold
 
-    // --- Neutros adicionales ---
-    border: '#2A2A2A',           // Separadores/bordes sutiles sobre el negro Ónix
+    // --- Additional neutrals ---
+    border: '#2A2A2A',           // Subtle separators/borders over the Onyx black
 };
 
 /**
- * Nimly es una app dark-only (ver app.json → userInterfaceStyle: "dark").
- * Exponemos `light` y `dark` con la MISMA paleta para que cualquier consumidor
- * (p. ej. useThemeColor) sea seguro aunque useColorScheme() devuelva 'light'
- * o null durante el primer render.
+ * Nimly is a dark-only app (see app.json → userInterfaceStyle: "dark").
+ * We expose `light` and `dark` with the SAME palette so any consumer
+ * (e.g. useThemeColor) stays safe even if useColorScheme() returns 'light'
+ * or null during the first render.
  */
 export const Colors = {
   dark: darkPalette,

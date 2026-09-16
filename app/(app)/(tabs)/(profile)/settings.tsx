@@ -20,14 +20,14 @@ import {
     View
 } from "react-native";
 
-// 👇 1. Importamos los contextos
+// 👇 1. Import the contexts
 import { useAuth } from "@/context/AuthContext";
 import { useProfile } from "@/context/ProfileContext";
 
 export default function SettingsScreen() {
     const router = useRouter();
 
-    // 👇 2. Obtenemos sesión y perfil global directamente de la caché
+    // 👇 2. Get the session and global profile directly from the cache
     const { session } = useAuth();
     const { profile, refreshProfile } = useProfile();
 
@@ -35,12 +35,12 @@ export default function SettingsScreen() {
     const [initialBio, setInitialBio] = useState("");
     const [updating, setUpdating] = useState(false);
 
-    // --- Info de versión / OTA (expo-updates) ---
+    // --- Version / OTA info (expo-updates) ---
     const { currentlyRunning, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
     const [otaStatus, setOtaStatus] = useState<string | null>(null);
     const [checkingOta, setCheckingOta] = useState(false);
 
-    // Huella de la anon key (para diagnosticar env vars mal bundleadas sin exponer el valor).
+    // Fingerprint of the anon key (to diagnose badly bundled env vars without exposing the value).
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
     const anonKeyFP = anonKey ? `…${anonKey.slice(-6)} (${anonKey.length})` : "MISSING";
 
@@ -65,7 +65,7 @@ export default function SettingsScreen() {
         `Platform: ${Platform.OS}`;
 
     async function checkForOta() {
-        // Si ya hay uno descargado esperando, reiniciar es lo único que falta.
+        // If one is already downloaded and waiting, restarting is all that's left.
         if (isUpdatePending) {
             await Updates.reloadAsync();
             return;
@@ -97,14 +97,14 @@ export default function SettingsScreen() {
         setOtaStatus("Diagnostics copied to clipboard.");
     }
 
-    // Temas del sistema
+    // System theme colors
     const bg = getThemeColor('background');
     const surface = getThemeColor('surface');
     const accent = getThemeColor('tint');
     const textSec = getThemeColor('textSecondary');
     const glassBorder = getThemeColor('glassBorder');
 
-    // 👇 3. Sincronizamos el estado local cuando el perfil esté listo
+    // 👇 3. Sync local state once the profile is ready
     useEffect(() => {
         if (profile) {
             const currentBio = profile.description || "";
@@ -121,12 +121,12 @@ export default function SettingsScreen() {
             const { error } = await supabase
                 .from('profiles')
                 .update({ description: bio })
-                .eq('id', session.user.id); // 👈 Usamos el ID directamente
+                .eq('id', session.user.id); // 👈 Use the ID directly
 
             if (error) throw error;
 
             setInitialBio(bio);
-            await refreshProfile(); // 👈 Forzamos recarga en el contexto global para que el resto de la app lo sepa de inmediato
+            await refreshProfile(); // 👈 Force a reload in the global context so the rest of the app knows immediately
             Alert.alert("Success", "Identity profile updated.");
         } catch (error: any) {
             Alert.alert("Error", error.message);
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
         }
     }
 
-    // SIGN OUT: las llaves E2EE viven solo en este dispositivo y no hay respaldo.
+    // SIGN OUT: the E2EE keys live only on this device and there is no backup.
     async function handleLogout() {
         Alert.alert(
             "Sign Out",
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
         );
     }
 
-    // DELETE ACCOUNT: Redirección a la página del timer
+    // DELETE ACCOUNT: Redirect to the timer page
     async function goToDeleteAccount() {
         router.push("/(app)/delete-account");
     }
@@ -188,7 +188,7 @@ export default function SettingsScreen() {
             >
                 <View style={styles.container}>
 
-                    {/* SECCIÓN: IDENTITY */}
+                    {/* SECTION: IDENTITY */}
                     <View style={styles.section}>
                         <ThemedText style={[styles.label, { color: accent }]}>PUBLIC IDENTITY</ThemedText>
                         <View style={[styles.inputContainer, { backgroundColor: surface, borderColor: glassBorder }]}>
@@ -206,7 +206,7 @@ export default function SettingsScreen() {
                         </View>
                     </View>
 
-                    {/* SECCIÓN: SECURITY */}
+                    {/* SECTION: SECURITY */}
                     <View style={styles.section}>
                         <ThemedText style={[styles.label, { color: accent }]}>SECURITY & PRIVACY</ThemedText>
 
@@ -229,7 +229,7 @@ export default function SettingsScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* SECCIÓN: SYSTEM / OTA */}
+                    {/* SECTION: SYSTEM / OTA */}
                     <View style={styles.section}>
                         <ThemedText style={[styles.label, { color: accent }]}>SYSTEM</ThemedText>
 
@@ -292,7 +292,7 @@ export default function SettingsScreen() {
                         </ThemedText>
                     </View>
 
-                    {/* Versión actualizada */}
+                    {/* Updated version */}
                     <ThemedText style={styles.versionText}>
                         Nimly v{appVersion}
                     </ThemedText>

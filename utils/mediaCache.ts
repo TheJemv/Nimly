@@ -3,38 +3,38 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
 /**
- * Caché de media EN DISCO por *path del storage* (no por URL firmada).
+ * Media cache ON DISK keyed by *storage path* (not by signed URL).
  *
- * Motivo: el backend vive en un servidor casero con ~10 Mbps de subida y TODO
- * el media sale por ese tubo. La app firma URLs (`createSignedUrl`) y el token
- * rota en cada render, así que ni Cloudflare ni el caché de disco de
- * `expo-image` pueden reutilizar nada: pagamos ancho de banda por ver la misma
- * imagen varias veces por sesión y de cero al reabrir la app.
+ * Why: the backend lives on a home server with ~10 Mbps upload, and ALL
+ * media goes through that pipe. The app signs URLs (`createSignedUrl`) and the
+ * token rotates on every render, so neither Cloudflare nor `expo-image`'s disk
+ * cache can reuse anything: we pay bandwidth to view the same image multiple
+ * times per session, and from scratch again when reopening the app.
  *
- * Este caché guarda el archivo en `FileSystem.cacheDirectory` con un nombre
- * determinista derivado de `bucket + path`. Sobrevive al cierre de la app y al
- * reinicio del teléfono. Flujo:
- *   1ª vista  -> descarga (lento, inevitable con 10 Mbps)
- *   siguientes -> `file://` local instantáneo, cero red (ni la llamada a firmar)
+ * This cache stores the file in `FileSystem.cacheDirectory` under a
+ * deterministic name derived from `bucket + path`. It survives app close and
+ * phone restarts. Flow:
+ *   1st view   -> download (slow, unavoidable at 10 Mbps)
+ *   next views -> instant local `file://`, zero network (not even the sign call)
  *
- * SOLO para media NO cifrada (posts, historias). Para el chat E2EE ver
- * `getCachedEncryptedText` más abajo: ahí se cachea el CIFRADO, nunca el
- * plaintext.
+ * ONLY for UNENCRYPTED media (posts, stories). For E2EE chat see
+ * `getCachedEncryptedText` below: there it's the CIPHERTEXT that gets cached,
+ * never the plaintext.
  *
- * Todo es best-effort: si algo falla se degrada (URL remota o `null`), nunca
- * tira.
+ * Everything is best-effort: if something fails it degrades gracefully
+ * (remote URL or `null`), never throws.
  */
 
 const CACHE_DIR = `${FileSystem.cacheDirectory}media-cache/`;
 
-// Tope del caché en disco. Al pasarlo, la eviction LRU borra los archivos más
-// viejos (por `modificationTime`) hasta bajar de EVICT_TARGET_BYTES. Corre en
-// background, nunca bloquea la descarga.
+// Disk cache cap. Once exceeded, LRU eviction deletes the oldest files
+// (by `modificationTime`) until dropping below EVICT_TARGET_BYTES. Runs in
+// the background, never blocks the download.
 const MAX_CACHE_BYTES = 300 * 1024 * 1024; // ~300 MB
-const EVICT_TARGET_BYTES = 270 * 1024 * 1024; // ~90% — evita thrashing
+const EVICT_TARGET_BYTES = 270 * 1024 * 1024; // ~90% — avoids thrashing
 
-// Descargas en vuelo: dos componentes pidiendo el mismo media a la vez hacen
-// UNA sola descarga. Clave = path local determinista.
+// In-flight downloads: two components requesting the same media at once
+// result in ONE single download. Key = deterministic local path.
 const inFlightBinary = new Map<string, Promise<string | null>>();
 const inFlightText = new Map<string, Promise<string | null>>();
 
@@ -48,7 +48,7 @@ async function ensureDir(): Promise<void> {
                 await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
             }
         })().catch((e) => {
-            // Falló crear el dir -> reintentar en la próxima llamada.
+            // Failed to create the dir -> retry on the next call.
             dirReady = null;
             throw e;
         });
@@ -56,7 +56,7 @@ async function ensureDir(): Promise<void> {
     return dirReady;
 }
 
-// Hash determinista (djb2) para evitar colisiones tras sanitizar el path.
+// Deterministic hash (djb2) to avoid collisions after sanitizing the path.
 function hashKey(s: string): string {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -64,8 +64,8 @@ function hashKey(s: string): string {
 }
 
 /**
- * Path local determinista para un `bucket + path`. `suffix` fuerza la extensión
- * (lo usa el caché de ciphertext del chat con `'enc'`).
+ * Deterministic local path for a `bucket + path`. `suffix` forces the extension
+ * (used by the chat ciphertext cache with `'enc'`).
  */
 function localPathFor(bucket: string, path: string, suffix?: string): string {
     const ext =
@@ -93,7 +93,7 @@ async function resolveRemoteUrl(
 
 let evicting = false;
 
-/** Eviction LRU best-effort. Corre en background, no bloquea. */
+/** Best-effort LRU eviction. Runs in the background, non-blocking. */
 async function evictIfNeeded(): Promise<void> {
     if (evicting) return;
     evicting = true;
@@ -103,7 +103,7 @@ async function evictIfNeeded(): Promise<void> {
         let total = 0;
 
         for (const name of names) {
-            if (name.endsWith('.dl')) continue; // descargas a medias
+            if (name.endsWith('.dl')) continue; // partial downloads
             try {
                 const uri = `${CACHE_DIR}${name}`;
                 const info = await FileSystem.getInfoAsync(uri);
@@ -112,20 +112,20 @@ async function evictIfNeeded(): Promise<void> {
                     total += info.size;
                 }
             } catch {
-                /* ignorar entrada ilegible */
+                /* ignore unreadable entry */
             }
         }
 
         if (total <= MAX_CACHE_BYTES) return;
 
-        entries.sort((a, b) => a.mtime - b.mtime); // más viejos primero
+        entries.sort((a, b) => a.mtime - b.mtime); // oldest first
         for (const e of entries) {
             if (total <= EVICT_TARGET_BYTES) break;
             try {
                 await FileSystem.deleteAsync(e.uri, { idempotent: true });
                 total -= e.size;
             } catch {
-                /* ignorar */
+                /* ignore */
             }
         }
     } catch {
@@ -156,7 +156,7 @@ async function downloadBinary(
         try {
             await FileSystem.deleteAsync(tmp, { idempotent: true });
         } catch {
-            /* ignorar */
+            /* ignore */
         }
 
         const res = await FileSystem.downloadAsync(remoteUrl, tmp);
@@ -164,9 +164,9 @@ async function downloadBinary(
             try {
                 await FileSystem.deleteAsync(tmp, { idempotent: true });
             } catch {
-                /* ignorar */
+                /* ignore */
             }
-            return remoteUrl; // degradar: la URL remota
+            return remoteUrl; // degrade: fall back to the remote URL
         }
 
         const info = await FileSystem.getInfoAsync(tmp);
@@ -174,27 +174,27 @@ async function downloadBinary(
             try {
                 await FileSystem.deleteAsync(tmp, { idempotent: true });
             } catch {
-                /* ignorar */
+                /* ignore */
             }
             return remoteUrl;
         }
 
-        // `.dl` -> destino final en un solo paso: nunca queda un archivo a medias
-        // con el nombre "bueno".
+        // `.dl` -> final destination in a single step: never leaves a partial
+        // file under the "good" name.
         await FileSystem.moveAsync({ from: tmp, to: local });
         scheduleEviction();
         return local;
     } catch {
-        return remoteUrl; // si falla algo, la URL remota (o null)
+        return remoteUrl; // if anything fails, the remote URL (or null)
     }
 }
 
 /**
- * Devuelve un `file://` local para `bucket/path`, descargándolo la primera vez.
- * Si la descarga falla, devuelve la URL remota como fallback; si ni eso, `null`.
+ * Returns a local `file://` for `bucket/path`, downloading it the first time.
+ * If the download fails, returns the remote URL as a fallback; if that fails too, `null`.
  *
- * @param opts.signed  `true` -> firma con `createSignedUrl`; `false` -> `getPublicUrl`.
- * @param opts.ttl     segundos de validez del signed URL (default 3600).
+ * @param opts.signed  `true` -> sign with `createSignedUrl`; `false` -> `getPublicUrl`.
+ * @param opts.ttl     seconds the signed URL stays valid for (default 3600).
  */
 export async function getCachedMedia(
     bucket: string,
@@ -203,7 +203,7 @@ export async function getCachedMedia(
 ): Promise<string | null> {
     if (!path) return null;
 
-    // Si ya nos pasan una URL/archivo resuelto, no hay nada que cachear.
+    // If we're already given a resolved URL/file, there's nothing to cache.
     if (/^(https?:|file:|data:)/.test(path)) return path;
 
     const { signed = false, ttl = 3600 } = opts;
@@ -217,7 +217,7 @@ export async function getCachedMedia(
                 return local;
             }
         } catch {
-            /* sigue al miss */
+            /* fall through to miss */
         }
 
         const existing = inFlightBinary.get(local);
@@ -238,11 +238,11 @@ export async function getCachedMedia(
 }
 
 /**
- * Chat E2EE: cachea el TEXTO CIFRADO (nunca el plaintext — eso rompería la
- * propiedad E2EE-at-rest). Devuelve el ciphertext desde disco local o
- * descargándolo y guardándolo.
+ * E2EE chat: caches the ENCRYPTED TEXT (never the plaintext — that would break
+ * the E2EE-at-rest property). Returns the ciphertext from local disk, or
+ * downloads and stores it.
  *
- * @param opts.persist  `false` -> no escribe a disco (media de una sola vista).
+ * @param opts.persist  `false` -> don't write to disk (view-once media).
  */
 export async function getCachedEncryptedText(
     bucket: string,
@@ -263,7 +263,7 @@ export async function getCachedEncryptedText(
                     return await FileSystem.readAsStringAsync(local, { encoding: 'utf8' });
                 }
             } catch {
-                /* sigue al miss */
+                /* fall through to miss */
             }
         }
 
@@ -290,7 +290,7 @@ export async function getCachedEncryptedText(
                         await FileSystem.moveAsync({ from: tmp, to: local });
                         scheduleEviction();
                     } catch {
-                        /* el ciphertext igual se devuelve desde RAM */
+                        /* the ciphertext is still returned from RAM */
                     }
                 }
                 return text;
@@ -307,7 +307,7 @@ export async function getCachedEncryptedText(
     }
 }
 
-/** Borra todo el caché de media en disco (p. ej. al cerrar sesión). */
+/** Clears the entire on-disk media cache (e.g. on logout). */
 export async function clearMediaCache(): Promise<void> {
     try {
         await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });

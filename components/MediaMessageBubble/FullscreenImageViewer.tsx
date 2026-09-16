@@ -24,13 +24,13 @@ type Props = {
 };
 
 /**
- * Visor de imagen a pantalla completa con:
- *  - Pellizco (dos dedos) para hacer zoom, con doble‑tap para acercar/alejar.
- *  - Arrastre para desplazar la imagen cuando está ampliada.
- *  - Deslizar hacia abajo/arriba para cerrar cuando está en 1x.
+ * Fullscreen image viewer with:
+ *  - Pinch (two fingers) to zoom, with double-tap to zoom in/out.
+ *  - Drag to pan the image when zoomed in.
+ *  - Swipe down/up to close when at 1x.
  *
- * Todo se maneja con Reanimated en el hilo de UI (sin mezclar drivers como el
- * `PanResponder` anterior) y el estado se reinicia cada vez que se abre.
+ * Everything is handled with Reanimated on the UI thread (no mixing drivers
+ * like the previous `PanResponder`) and the state resets every time it opens.
  */
 export default function FullscreenImageViewer({ visible, uri, onClose }: Props) {
    const scale = useSharedValue(1);
@@ -40,7 +40,7 @@ export default function FullscreenImageViewer({ visible, uri, onClose }: Props) 
    const savedTx = useSharedValue(0);
    const savedTy = useSharedValue(0);
 
-   // Reinicia la transformación cada vez que el visor se vuelve a abrir.
+   // Resets the transform every time the viewer reopens.
    useEffect(() => {
       if (!visible) return;
       scale.value = 1;

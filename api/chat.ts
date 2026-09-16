@@ -10,7 +10,7 @@ export const chatApi = {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("User not authenticated");
 
-        // Buscar chat compartido
+        // Look for a shared chat
         const { data: myChats } = await supabase
             .from('chat_participants')
             .select('chat_id')
@@ -26,7 +26,7 @@ export const chatApi = {
 
         if (common) return common.chat_id;
 
-        // Crear nuevo chat
+        // Create a new chat
         const { data: newChat, error: e1 } = await supabase.from('chats').insert({}).select().single();
         if (e1) throw e1;
 
@@ -62,7 +62,7 @@ export const chatApi = {
     },
 
     /**
-     * PURGE: Elimina físicamente el archivo .vault de la bóveda y el mensaje de la base de datos.
+     * PURGE: Physically deletes the .vault file from the vault and the message from the database.
      */
     async burnMedia(messageId: string, filePath: string) {
         try {
@@ -74,15 +74,15 @@ export const chatApi = {
     },
 
     /**
-     * BURN HISTORY: Elimina todos los mensajes y archivos .vault de un chat específico,
-     * manteniendo la sala de chat abierta.
+     * BURN HISTORY: Deletes all messages and .vault files for a specific chat,
+     * while keeping the chat room open.
      */
 /**
-     * BURN HISTORY: Elimina todos los mensajes y archivos .vault de un chat específico.
+     * BURN HISTORY: Deletes all messages and .vault files for a specific chat.
      */
     async burnChatHistory(chatId: string) {
         try {
-            // 1. Obtener todos los mensajes para identificar cuáles son multimedia
+            // 1. Fetch all messages to identify which ones are media
             const { data: messages, error: fetchError } = await supabase
                 .from('messages')
                 .select('id, content, type')
@@ -91,7 +91,7 @@ export const chatApi = {
             if (fetchError) throw fetchError;
             if (!messages || messages.length === 0) return { success: true };
 
-            // 2. Filtrar y borrar archivos físicos del Storage
+            // 2. Filter and delete the physical files from Storage
             const mediaFiles = messages
                 .filter(m => m.type === 'image' || m.type === 'video' || m.type === 'image-view-once')
                 .map(m => m.content);
@@ -99,30 +99,30 @@ export const chatApi = {
             if (mediaFiles.length > 0) {
                 if (__DEV__) console.log(`Vault: Burning ${mediaFiles.length} physical files...`);
                 const { error: storageError } = await supabase.storage.from('chat-media').remove(mediaFiles);
-                if (storageError) console.error("⚠️ Aviso: Algunos archivos no se borraron del storage:", storageError);
+                if (storageError) console.error("⚠️ Warning: some files were not deleted from storage:", storageError);
             }
 
             const messageIds = messages.map(m => m.id);
 
-            // 3. Destruir metadatos (Revisión estricta de errores)
+            // 3. Destroy metadata (strict error check)
             const { error: mediaError } = await supabase
                 .from('messages_media')
                 .delete()
                 .in('message_id', messageIds);
 
             if (mediaError) {
-                console.error("❌ Error DB al borrar messages_media (¿Restricción de llave foránea?):", mediaError);
+                console.error("❌ DB error deleting messages_media (foreign key constraint?):", mediaError);
                 throw mediaError;
             }
 
-            // 4. Destrucción final de los textos (Revisión estricta de errores)
+            // 4. Final destruction of the text messages (strict error check)
             const { error: msgError } = await supabase
                 .from('messages')
                 .delete()
                 .eq('chat_id', chatId);
 
             if (msgError) {
-                console.error("❌ Error DB al borrar messages (¡Probablemente RLS!):", msgError);
+                console.error("❌ DB error deleting messages (probably RLS!):", msgError);
                 throw msgError;
             }
 
@@ -147,7 +147,7 @@ export const chatApi = {
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error("❌ [API_READ] Error en la bóveda al marcar lectura:", error);
+            console.error("❌ [API_READ] Vault error while marking as read:", error);
             return { success: false, error };
         }
     },

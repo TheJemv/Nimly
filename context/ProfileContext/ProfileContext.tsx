@@ -34,9 +34,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
             if (error) throw error;
 
-            // Red de seguridad: si por alguna razón el perfil quedó sin avatar
-            // (trigger no aplicado, cuenta antigua, etc.) generamos uno a partir
-            // del username y lo persistimos una sola vez.
+            // Safety net: if for some reason the profile ended up without an avatar
+            // (trigger not applied, old account, etc.) we generate one from the
+            // username and persist it once.
             if (data && !data.avatar_config && data.username) {
                 const avatar_config = buildDefaultAvatarConfig(data.username);
                 const avatar_url = buildDefaultAvatarUrl(data.username);
@@ -46,7 +46,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
                     .from('profiles')
                     .update({ avatar_config, avatar_url })
                     .eq('id', session.user.id);
-                if (patchError && __DEV__) console.warn('No se pudo guardar el avatar por defecto:', patchError.message);
+                if (patchError && __DEV__) console.warn('Could not save the default avatar:', patchError.message);
             } else {
                 setProfile(data);
             }
@@ -64,7 +64,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // Carga inicial
+        // Initial load
         loadProfile();
         const channel = supabase
             .channel('global-profile-changes')
@@ -77,7 +77,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
                 },
                 (payload) => {
                     if (__DEV__) console.log("Global profile updated");
-                    setProfile(payload.new as Profile); // Actualización instantánea en memoria
+                    setProfile(payload.new as Profile); // Instant in-memory update
                 }
             )
             .subscribe();

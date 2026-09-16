@@ -11,8 +11,8 @@ export function useStoriesFeed() {
 
     const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
     const [loadingStories, setLoadingStories] = useState(true);
-    // true mientras se comprime + sube + registra una historia propia. El ring
-    // de "Your story" muestra un spinner encima hasta que termina.
+    // true while a story of your own is being compressed + uploaded + registered.
+    // The "Your story" ring shows a spinner on top until it finishes.
     const [uploadingStory, setUploadingStory] = useState(false);
 
     const channelRef = useRef<any>(null);
@@ -57,13 +57,13 @@ export function useStoriesFeed() {
 
             groupsMap[uId].stories.push({
                 id: story.id,
-                user_id: uId, // 👈 ¡Faltaba esta línea para cumplir con la interfaz Story!
+                user_id: uId, // 👈 This line was missing to satisfy the Story interface!
                 media_url: story.media_url,
-                // Path desnudo -> el viewer lo resuelve vía caché en disco.
+                // Bare path -> the viewer resolves it via the disk cache.
                 media_path: (story as any).media_path ?? story.media_url,
                 media_type: story.media_type,
                 created_at: story.created_at,
-                // Streaming HLS: el StoryViewer decide HLS vs MP4 con esto.
+                // HLS streaming: the StoryViewer decides HLS vs MP4 using this.
                 playback_status: (story as any).playback_status,
                 hls_path: (story as any).hls_path,
                 is_seen_by_me: isSeenByMe,
@@ -80,7 +80,7 @@ export function useStoriesFeed() {
 
     const reloadStories = useCallback(async (showLoading = true) => {
         const userId = session?.user?.id;
-        if (!userId) return; // 👈 sin sesión, no hay nada que cargar
+        if (!userId) return; // 👈 no session, nothing to load
 
         try {
             if (showLoading) setLoadingStories(true);
@@ -99,7 +99,7 @@ export function useStoriesFeed() {
         let isMounted = true;
         let retryTimeout: ReturnType<typeof setTimeout> | null = null;
         let retryCount = 0;
-        let isIntentionalClose = false; // 👈 nueva bandera
+        let isIntentionalClose = false; // 👈 new flag
         const MAX_RETRY_DELAY = 15000;
 
         const initRealtime = async () => {
@@ -109,7 +109,7 @@ export function useStoriesFeed() {
             await reloadStories(true);
 
             if (channelRef.current) {
-                isIntentionalClose = true; // 👈 marcamos ANTES de remover
+                isIntentionalClose = true; // 👈 flag it BEFORE removing
                 supabase.removeChannel(channelRef.current);
             }
 
@@ -127,12 +127,12 @@ export function useStoriesFeed() {
 
                     if (status === 'SUBSCRIBED') {
                         retryCount = 0;
-                        isIntentionalClose = false; // 👈 resetear una vez conectado bien
+                        isIntentionalClose = false; // 👈 reset once successfully connected
                         return;
                     }
 
                     if (status === 'CLOSED' && isIntentionalClose) {
-                        // 👈 este cierre lo causamos nosotros al remover el canal viejo — ignorar
+                        // 👈 this close was caused by us removing the old channel — ignore
                         isIntentionalClose = false;
                         return;
                     }
@@ -177,7 +177,7 @@ export function useStoriesFeed() {
                 }))
             );
         } catch (e) {
-            console.error("Error al marcar historia como vista:", e);
+            console.error("Error marking story as seen:", e);
         }
     };
 
@@ -186,7 +186,7 @@ export function useStoriesFeed() {
             await storiesApi.toggleLike(storyId, reaction);
             reloadStories(false);
         } catch (e) {
-            console.error("Error al dar like a la historia:", e);
+            console.error("Error liking the story:", e);
         }
     };
 

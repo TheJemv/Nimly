@@ -20,7 +20,7 @@ export function useChatsList() {
     const [myId, setMyId] = useState<string | null>(null);
 
     const cancelledRef = useRef(false);
-    // Se incrementa al volver de segundo plano para recrear el canal de realtime.
+    // Incremented when returning from the background to recreate the realtime channel.
     const [resyncNonce, setResyncNonce] = useState(0);
 
     const fetchChats = async (showLoading = true) => {
@@ -47,8 +47,8 @@ export function useChatsList() {
             if (cancelledRef.current) return;
 
             const normalized = (data || []).map((row: any) => {
-                // Ordenamos los mensajes por fecha en el cliente: no dependemos del
-                // orden que devuelva PostgREST para el recurso embebido.
+                // Sort messages by date on the client: we don't rely on the
+                // order PostgREST returns for the embedded resource.
                 const msgs: any[] = row.chats?.messages || [];
                 msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
                 return row;
@@ -74,10 +74,10 @@ export function useChatsList() {
     useEffect(() => {
         cancelledRef.current = false;
         if (resyncNonce === 0) fetchChats();
-        else fetchChats(false); // al reconectar no mostramos el spinner de carga
+        else fetchChats(false); // when reconnecting, don't show the loading spinner
 
-        // RLS limita el realtime a mis chats; el debounce evita un refetch por
-        // cada mensaje individual cuando llegan varios seguidos.
+        // RLS limits realtime to my chats; the debounce avoids a refetch for
+        // every individual message when several arrive in a row.
         const debouncedRefetch = debounce(() => fetchChats(false), 700);
 
         const channel = supabase
@@ -96,7 +96,7 @@ export function useChatsList() {
         };
     }, [resyncNonce]);
 
-    // Al volver a primer plano: recrear canal + refetch (el WS pudo morir).
+    // When returning to the foreground: recreate the channel + refetch (the WS may have died).
     useAppForeground(() => setResyncNonce((n) => n + 1));
 
     return { chats, loading, refreshing, myId, onRefresh };

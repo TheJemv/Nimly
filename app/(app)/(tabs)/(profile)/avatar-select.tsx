@@ -6,12 +6,12 @@ import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SvgXml } from "react-native-svg";
-// Cambiamos SafeAreaView por el de safe-area-context como pide el warning
+// Switched to the SafeAreaView from safe-area-context as the warning asks
 import { supabase } from "@/lib/supabase";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface AvatarConfig {
-   [key: string]: any; // Esto permite que el objeto tenga propiedades dinámicas
+   [key: string]: any; // This allows the object to have dynamic properties
    backgroundColor: string[];
    seed: string;
 }
@@ -31,22 +31,22 @@ const getValidOptions = (collection: any, category: string) => {
 
 const getDynamicTabs = (collection: any) => {
    const schema = collection.schema.properties;
-   // "style" y "backgroundColor" ya se agregan a mano abajo — algunas colecciones
-   // (ej. avataaars) tienen SU PROPIA propiedad de schema llamada literalmente
-   // "style" (circle/default), lo que duplicaba el tab y hacía tronar React con
-   // "Encountered two children with the same key".
+   // "style" and "backgroundColor" are already added by hand below — some
+   // collections (e.g. avataaars) have THEIR OWN schema property literally
+   // called "style" (circle/default), which duplicated the tab and made React
+   // blow up with "Encountered two children with the same key".
    const ignore = [
       'seed', 'flip', 'rotate', 'scale', 'radius', 'backgroundColor', 'style',
       'backgroundType', 'backgroundRotation', 'translateX', 'translateY', 'clip'
    ];
 
    return ["style", "backgroundColor", ...Object.keys(schema).filter(key => {
-      // 1. Ignorar campos técnicos
+      // 1. Ignore technical fields
       if (ignore.includes(key)) return false;
-      // 2. Ignorar campos que terminen en "Probability" o "Rotation"
+      // 2. Ignore fields ending in "Probability" or "Rotation"
       if (key.toLowerCase().includes('probability') || key.toLowerCase().includes('rotation')) return false;
 
-      // 3. Solo incluir propiedades que tengan un listado de opciones (enum)
+      // 3. Only include properties that have a list of options (enum)
       const prop = schema[key];
       return (prop.items && prop.items.enum) || prop.enum;
    })];
@@ -55,7 +55,7 @@ const getDynamicTabs = (collection: any) => {
 export default function AvatarSelectScreen() {
    const router = useRouter();
 
-   // Estados
+   // State
    const [loading, setLoading] = useState(true);
    const [activeStyle, setActiveStyle] = useState(ESTILOS_DICEBEAR[0]);
    const [activeTab, setActiveTab] = useState("style");
@@ -68,7 +68,7 @@ export default function AvatarSelectScreen() {
    const svgString = useMemo(() => {
       if (!config || !config.backgroundColor) return "";
 
-      // Agregamos 'as any' a la colección y al config
+      // Adding 'as any' to the collection and the config
       const avatar = createAvatar(activeStyle.collection as any, config as any);
 
       return avatar.toString();
@@ -77,9 +77,9 @@ export default function AvatarSelectScreen() {
    const handleStyleChange = (nuevoEstilo: any) => {
       setActiveStyle(nuevoEstilo);
       setActiveTab("style");
-      // Reseteamos el config (las opciones de un estilo no sirven en otro),
-      // pero mantenemos fondo y seed — si no, cada cambio de estilo perdía
-      // la seed del username y todos terminaban con el mismo avatar "user".
+      // Reset the config (one style's options don't work on another),
+      // but keep background and seed — otherwise every style change lost
+      // the username seed and everyone ended up with the same "user" avatar.
       setConfig({
          backgroundColor: config.backgroundColor || ["DC143C"],
          seed: config.seed || "user"
@@ -96,7 +96,7 @@ export default function AvatarSelectScreen() {
    const renderGridItem = ({ item }: { item: any }) => {
       const currentBg = config?.backgroundColor?.[0] || "161616";
 
-      // Si es estilo o color, usa la lógica actual
+      // For style or color, use the current logic
       if (activeTab === "style") {
          const isSelected = activeStyle.id === item.id;
          const previewSvg = createAvatar(item.collection as any, { seed: "VIP", backgroundColor: ["transparent"] }).toString();
@@ -114,11 +114,11 @@ export default function AvatarSelectScreen() {
          );
       }
 
-      // --- AQUÍ ESTÁ EL CAMBIO PARA OTRAS PROPIEDADES ---
+      // --- THIS IS THE HANDLING FOR OTHER PROPERTIES ---
       const currentOptions = config[activeTab] || [];
       const isSelected = currentOptions[0] === item;
 
-      // Crear configuración para previsualizar sin romper nada
+      // Create a config to preview without breaking anything
       const previewConfig = { ...config, [activeTab]: [item] };
       const previewSvg = createAvatar(activeStyle.collection as any, previewConfig as any).toString();
 
@@ -142,14 +142,14 @@ export default function AvatarSelectScreen() {
             options: config
          };
 
-         // Convertimos el objeto config en parámetros de URL (ej: &backgroundColor=ff0000&top=long)
+         // Convert the config object into URL params (e.g. &backgroundColor=ff0000&top=long)
          const params = Object.entries(config)
             .map(([key, value]) => `${key}=${Array.isArray(value) ? value[0] : value}`)
             .join('&');
 
-         // La API REST de DiceBear usa slugs kebab-case (ej. "adventurer-neutral"),
-         // pero nuestros ids son camelCase ("adventurerNeutral") — sin este mapeo
-         // la URL quedaba rota (404) para más de la mitad de los estilos.
+         // DiceBear's REST API uses kebab-case slugs (e.g. "adventurer-neutral"),
+         // but our ids are camelCase ("adventurerNeutral") — without this mapping
+         // the URL was broken (404) for more than half of the styles.
          const apiSlug = activeStyle.id.replace(/([A-Z])/g, "-$1").toLowerCase();
          const dynamicAvatarUrl = `https://api.dicebear.com/7.x/${apiSlug}/svg?${params}`;
 
@@ -157,7 +157,7 @@ export default function AvatarSelectScreen() {
             .from('profiles')
             .update({
                avatar_config: payload,
-               avatar_url: dynamicAvatarUrl // Ahora la URL guardada tiene el diseño real
+               avatar_url: dynamicAvatarUrl // Now the saved URL has the actual design
             })
             .eq('id', user.id);
 
@@ -174,20 +174,20 @@ export default function AvatarSelectScreen() {
    }, []);
 
    useEffect(() => {
-      // Si el tab actual no existe en el nuevo estilo, vuelve a "style"
+      // If the current tab doesn't exist in the new style, go back to "style"
       if (!currentTabs.includes(activeTab)) {
          setActiveTab("style");
       }
    }, [currentTabs]);
 
-   // Dentro de AvatarSelectScreen...
+   // Inside AvatarSelectScreen...
 
    async function loadCurrentAvatar() {
       try {
          const { data: { user } } = await supabase.auth.getUser();
          if (!user) return;
 
-         // 1. Traemos tanto la config como el username
+         // 1. Fetch both the config and the username
          const { data, error } = await supabase
             .from('profiles')
             .select('avatar_config, username')
@@ -201,10 +201,10 @@ export default function AvatarSelectScreen() {
             if (savedStyle) setActiveStyle(savedStyle);
             setConfig(data.avatar_config.options);
          } else if (data?.username) {
-            // 2. Si no hay config, usamos el username como semilla por defecto
+            // 2. If there's no config, use the username as the default seed
             setConfig(prev => ({
                ...prev,
-               seed: data.username // <-- Aquí aplicamos tu lógica de seed por username
+               seed: data.username // <-- Here we apply the username-based seed logic
             }));
          }
       } catch (error) {
@@ -230,7 +230,7 @@ export default function AvatarSelectScreen() {
             }}
          />
 
-         {/* Fondo Dinámico */}
+         {/* Dynamic Background */}
          <View style={[styles.topBackground, { backgroundColor: `#${config?.backgroundColor?.[0] || 'DC143C'}` }]} />
 
          <SafeAreaView style={{ flex: 1 }} edges={['top']}>
@@ -258,12 +258,12 @@ export default function AvatarSelectScreen() {
                </View>
 
                {/*
-                  Antes esto era un FlatList con numColumns=4. Con listas tan chicas
-                  (máx. ~22 items) la virtualización de FlatList no aporta nada y sí
-                  suma riesgo: sin `extraData`, las celdas ya montadas no se enteran
-                  cuando cambia `config`/`activeStyle` por closure (no por `data`), así
-                  que el borde de selección y el preview se quedaban pegados a una
-                  opción vieja. Un View con flexWrap siempre usa el closure actual.
+                  This used to be a FlatList with numColumns=4. With lists this small
+                  (~22 items max), FlatList's virtualization doesn't help and adds
+                  risk: without `extraData`, already-mounted cells don't find out
+                  when `config`/`activeStyle` change via closure (not via `data`), so
+                  the selection border and the preview stayed stuck on an old
+                  option. A View with flexWrap always uses the current closure.
                */}
                <ScrollView contentContainerStyle={styles.gridContainer} keyboardShouldPersistTaps="handled">
                   <View style={styles.gridWrap}>

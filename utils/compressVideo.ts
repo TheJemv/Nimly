@@ -1,11 +1,11 @@
 /**
- * Presets de compresión de video por destino. El servidor luego hace un
- * transcode a HLS para streaming, así que esto define la calidad *fuente*: si
- * subes 480p/2Mbps, el stream nunca puede verse mejor que eso.
+ * Video compression presets by destination. The server later transcodes to
+ * HLS for streaming, so this defines the *source* quality: if you upload
+ * 480p/2Mbps, the stream can never look better than that.
  *
- *  - `feed`  posts e historias: 1080p, bitrate alto. Se ve nítido.
- *  - `chat`  mensajes E2EE: el video se mete en RAM como base64 antes de cifrar,
- *            así que se mantiene más contenido (720p) para no inflar la memoria.
+ *  - `feed`  posts and stories: 1080p, high bitrate. Looks sharp.
+ *  - `chat`  E2EE messages: the video gets loaded into RAM as base64 before
+ *            encrypting, so it's kept smaller (720p) to avoid bloating memory.
  */
 export const VIDEO_QUALITY = {
     feed: { maxSize: 1920, bitrate: 5_500_000 },
@@ -15,16 +15,16 @@ export const VIDEO_QUALITY = {
 export type VideoQualityPreset = { maxSize: number; bitrate: number };
 
 /**
- * Comprime un video antes de subirlo. Un clip de 12s en `feed` (1080p/5.5Mbps)
- * pesa ~8-9MB; en `chat` (720p/3.5Mbps) ~5MB. De paso re-codifica a H.264/SDR,
- * así que también corrige el brillo raro del HDR.
+ * Compresses a video before uploading. A 12s clip in `feed` (1080p/5.5Mbps)
+ * weighs ~8-9MB; in `chat` (720p/3.5Mbps) ~5MB. Along the way it re-encodes to
+ * H.264/SDR, which also fixes the odd HDR brightness.
  *
- * Nunca lanza: si la compresión falla, devuelve el uri original para no
- * bloquear el envío (subir el original es mejor que no subir nada).
+ * Never throws: if compression fails, it returns the original uri so it
+ * doesn't block sending (uploading the original is better than uploading nothing).
  *
- * El módulo nativo se carga en diferido -- así, si corre sobre un binario
- * que todavía no lo tiene (ej. un OTA sobre una build vieja), no truena ni
- * ensucia el arranque; simplemente cae al fallback.
+ * The native module is lazy-loaded -- this way, if it runs on a binary that
+ * doesn't have it yet (e.g. an OTA update over an old build), it doesn't crash
+ * or pollute startup; it simply falls back.
  */
 export async function compressVideoForUpload(
     uri: string,
@@ -51,11 +51,11 @@ export async function compressVideoForUpload(
 }
 
 /**
- * Devuelve una copia del video SIN pista de audio, ya en specs de subida de
- * feed (1080p), así el `compressVideoForUpload` de después casi no re-procesa.
+ * Returns a copy of the video WITHOUT an audio track, already at feed upload
+ * specs (1080p), so the subsequent `compressVideoForUpload` barely has to reprocess it.
  *
- * Nunca lanza: si algo falla devuelve el uri original (con audio) para no
- * bloquear el envío. Módulo nativo cargado en diferido, igual que arriba.
+ * Never throws: if something fails, it returns the original uri (with audio)
+ * so it doesn't block sending. Native module lazy-loaded, same as above.
  */
 export async function stripVideoAudio(uri: string): Promise<string> {
     try {

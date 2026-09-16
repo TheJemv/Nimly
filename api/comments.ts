@@ -20,7 +20,7 @@ export const getComments = async (postId: string, page: number = 0) => {
 
 export const createComment = async (postId: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Debes iniciar sesión para comentar");
+    if (!user) throw new Error("You must be signed in to comment");
     const { data, error } = await supabase
         .from('comments')
         .insert({

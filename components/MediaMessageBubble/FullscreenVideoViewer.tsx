@@ -15,17 +15,17 @@ const DISMISS_VELOCITY = 800;
 
 type Props = {
    visible: boolean;
-   /** String (MP4 del chat) u objeto VideoSource (HLS de posts/stories, con headers). */
+   /** String (chat MP4) or VideoSource object (HLS for posts/stories, with headers). */
    uri: string | VideoSource | null;
    onClose: () => void;
-   /** El player reventó (p. ej. HLS caído). El caller puede caer al MP4. */
+   /** The player crashed (e.g. HLS down). The caller can fall back to MP4. */
    onError?: () => void;
 };
 
 /**
- * Reproductor de video a pantalla completa con controles nativos.
- * Sin botón de cerrar: se desliza hacia arriba o abajo para salir, como el
- * visor de fotos e Instagram/Fotos.
+ * Fullscreen video player with native controls.
+ * No close button: swipe up or down to exit, like the photo viewer and
+ * Instagram/Photos.
  */
 export default function FullscreenVideoViewer({ visible, uri, onClose, onError }: Props) {
    const player = useVideoPlayer(visible && uri ? uri : null, (p) => {
@@ -36,16 +36,16 @@ export default function FullscreenVideoViewer({ visible, uri, onClose, onError }
    const ty = useSharedValue(0);
    const backdropOpacity = useSharedValue(1);
 
-   // Fallback ante error del player (HLS caído / signed URL vencida).
+   // Fallback for player errors (HLS down / expired signed URL).
    useEffect(() => {
       if (!visible || !onError) return;
       const check = () => {
-         try { if (player.status === 'error') onError(); } catch { /* liberado */ }
+         try { if (player.status === 'error') onError(); } catch { /* released */ }
       };
       check();
       let sub: { remove: () => void } | undefined;
-      try { sub = player.addListener?.('statusChange', check); } catch { /* liberado */ }
-      return () => { try { sub?.remove(); } catch { /* liberado */ } };
+      try { sub = player.addListener?.('statusChange', check); } catch { /* released */ }
+      return () => { try { sub?.remove(); } catch { /* released */ } };
    }, [visible, player, onError]);
 
    useEffect(() => {
@@ -55,11 +55,11 @@ export default function FullscreenVideoViewer({ visible, uri, onClose, onError }
       try {
          player.currentTime = 0;
          player.play();
-      } catch { /* player liberado */ }
+      } catch { /* player released */ }
    }, [visible, player, ty, backdropOpacity]);
 
-   // Solo vertical: si el arrastre es más horizontal (ej. la barra de progreso
-   // de los controles nativos), este gesto falla y les deja el toque a ellos.
+   // Vertical only: if the drag is more horizontal (e.g. the native controls'
+   // progress bar), this gesture fails and lets them handle the touch.
    const pan = Gesture.Pan()
       .activeOffsetY([-10, 10])
       .failOffsetX([-15, 15])

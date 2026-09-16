@@ -6,7 +6,7 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-const ACCENT = getThemeColor("tint"); // Carmesí de marca, también usado para destructivo
+const ACCENT = getThemeColor("tint"); // Brand crimson, also used for destructive actions
 
 export default function DeleteAccountScreen() {
     const router = useRouter();

@@ -6,7 +6,7 @@ import { styles } from './PermissionRequest.styles';
 
 type PermissionRequestProps = {
     visible: boolean;
-    icon: SFSymbol; // nombre del SF Symbol, ej: 'camera.fill', 'mic.fill', 'photo.on.rectangle'
+    icon: SFSymbol; // SF Symbol name, e.g. 'camera.fill', 'mic.fill', 'photo.on.rectangle'
     title: string;
     subtitle: string;
     confirmLabel?: string;

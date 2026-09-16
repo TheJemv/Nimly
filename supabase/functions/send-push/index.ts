@@ -1,12 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Inyectadas automáticamente por Supabase en el servicio `functions`.
+// Automatically injected by Supabase in the `functions` service.
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? 'http://kong:8000'
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-// Si defines WEBHOOK_SECRET en el env del servicio `functions` y lo mandas como
-// header `x-webhook-secret` desde el Database Webhook, se rechaza cualquier
-// llamada que no lo traiga. Si no está definido, no se valida (compat hacia atrás).
+// If you set WEBHOOK_SECRET in the `functions` service env and send it as the
+// `x-webhook-secret` header from the Database Webhook, any call that doesn't
+// include it is rejected. If it's not set, no validation happens (backward compat).
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET')
 
 const errorMessage = (e: unknown): string =>
@@ -29,12 +29,12 @@ Deno.serve(async (req) => {
     let targetUserId = ""
     let pushTitle = "Nimly"
     let pushBody = "You have a new update"
-    // Info extra que la app usa para abrir la pantalla correcta al tocar la push.
+    // Extra info the app uses to open the right screen when the push is tapped.
     let routing: Record<string, unknown> = {}
 
-    // CASE A: viene de la tabla MESSAGES
+    // CASE A: comes from the MESSAGES table
     if (table === 'messages' || record.chat_id) {
-      // Puede haber 0 o varias filas: no usamos .single() (que lanzaría).
+      // There can be 0 or several rows: we don't use .single() (which would throw).
       const { data: recipients } = await supabase
         .from('chat_participants')
         .select('user_id')
@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
       pushTitle = `@${sender?.username || 'Someone'}`
       pushBody = record.type === 'text' ? 'sent you a message' : 'sent you a photo'
 
-      // La app abre /chat con `id` = quien envió (que para el receptor es el
-      // "amigo" de la conversación) y usa `sender` para pintar el header al
-      // instante mientras carga el perfil de la BD.
+      // The app opens /chat with `id` = whoever sent it (which for the recipient is the
+      // "friend" in the conversation) and uses `sender` to paint the header
+      // instantly while the profile loads from the DB.
       routing = {
         type: 'message',
         chatId: record.chat_id ?? null,
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // CASE B: viene de la tabla NOTIFICATIONS
+    // CASE B: comes from the NOTIFICATIONS table
     else if (table === 'notifications' || record.user_id) {
       targetUserId = record.user_id
       pushTitle = record.title || "New Notification"

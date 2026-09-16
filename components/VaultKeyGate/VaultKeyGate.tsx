@@ -24,11 +24,11 @@ const textSecondary = getThemeColor('textSecondary');
 const border = getThemeColor('border');
 
 /**
- * Compuerta E2EE. Cubre:
- *  - `needs_passcode`   → crear el PIN de 6 dígitos (recuperación / 2º factor).
- *  - `device_locked`    → la cuenta está activa en otro equipo: solo sign out, o
- *                         tomar el control con el PIN (o la contraseña como fallback).
- *  - `needs_new_identity`→ migración (dispositivo sin llaves, cuenta libre).
+ * E2EE gate. Covers:
+ *  - `needs_passcode`    → create the 6-digit PIN (recovery / 2nd factor).
+ *  - `device_locked`     → the account is active on another device: sign out only, or
+ *                          take over control with the PIN (or the password as a fallback).
+ *  - `needs_new_identity`→ migration (device with no keys, free account).
  */
 const GATED: string[] = ['needs_passcode', 'locked_timeout', 'device_locked', 'needs_new_identity'];
 
@@ -52,7 +52,7 @@ export default function VaultKeyGate({ children }: { children: React.ReactNode }
     );
 }
 
-// --- Auto-lock periódico (cada 12h) ----------------------------------------
+// --- Periodic auto-lock (every 12h) ----------------------------------------
 function UnlockTimeout() {
     const { vault } = useAuth();
     const [code, setCode] = useState('');
@@ -67,7 +67,7 @@ function UnlockTimeout() {
         if (!res.ok) {
             fails.current += 1;
             setCode('');
-            // Retraso creciente tras varios fallos (protege contra fuerza bruta local).
+            // Increasing delay after multiple failures (protects against local brute-force attempts).
             if (fails.current >= 5) {
                 const wait = Math.min(60, (fails.current - 4) * 15);
                 setError(`Wrong passcode. Try again in ${wait}s.`);
@@ -100,7 +100,7 @@ function UnlockTimeout() {
     );
 }
 
-// --- Crear passcode (primer inicio de sesión) --------------------------------
+// --- Create passcode (first sign-in) --------------------------------
 function CreatePasscode() {
     const { vault } = useAuth();
     const [step, setStep] = useState<'enter' | 'confirm'>('enter');
@@ -170,7 +170,7 @@ function CreatePasscode() {
     );
 }
 
-// --- Cuenta bloqueada en otro dispositivo -----------------------------------
+// --- Account locked on another device -----------------------------------
 function DeviceLocked() {
     const { vault } = useAuth();
     const [mode, setMode] = useState<'idle' | 'passcode' | 'password'>('idle');
@@ -278,7 +278,7 @@ function DeviceLocked() {
     );
 }
 
-// --- Migración (dispositivo sin llaves, cuenta libre) -----------------------
+// --- Migration (device with no keys, free account) -----------------------
 function Migrate() {
     const { vault } = useAuth();
     const [busy, setBusy] = useState(false);

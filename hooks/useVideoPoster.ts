@@ -2,22 +2,22 @@ import { useEffect, useState } from "react";
 import type { VideoPlayer, VideoThumbnail } from "expo-video";
 
 /**
- * Portadas (primer frame) de videos de post/story, cacheadas por id de media.
- * La caché vive lo que dure la sesión, así que al hacer scroll de vuelta a un
- * video del feed o al reabrir el viewer de historias la portada aparece al
- * instante en vez de un rectángulo negro mientras el player bufferea.
+ * Post/story video posters (first frame), cached by media id.
+ * The cache lives for the duration of the session, so scrolling back to a
+ * video in the feed or reopening the story viewer shows the poster instantly
+ * instead of a black rectangle while the player buffers.
  */
 const posterCache = new Map<string, VideoThumbnail>();
 
 /**
- * Devuelve la portada del video en cuanto el player tiene datos suficientes
- * (`readyToPlay`). Best-effort total: si `generateThumbnailsAsync` falla
- * (HLS sin key-frame accesible, player liberado, web) simplemente no hay
- * portada y el consumidor cae a su placeholder de siempre.
+ * Returns the video's poster as soon as the player has enough data
+ * (`readyToPlay`). Fully best-effort: if `generateThumbnailsAsync` fails
+ * (HLS with no accessible key-frame, player released, web) there's simply no
+ * poster and the consumer falls back to its usual placeholder.
  *
- * @param player   el mismo `useVideoPlayer` que ya usa el componente, o `null`
- *                 cuando el media no es video.
- * @param mediaId  id del post o de la story (clave de caché).
+ * @param player   the same `useVideoPlayer` the component already uses, or
+ *                 `null` when the media isn't a video.
+ * @param mediaId  id of the post or story (cache key).
  */
 export function useVideoPoster(player: VideoPlayer | null, mediaId?: string | null): VideoThumbnail | null {
     const [poster, setPoster] = useState<VideoThumbnail | null>(
@@ -52,12 +52,12 @@ export function useVideoPoster(player: VideoPlayer | null, mediaId?: string | nu
         try {
             sub = player.addListener?.("statusChange", grab);
         } catch {
-            /* player liberado */
+            /* player released */
         }
 
         return () => {
             cancelled = true;
-            try { sub?.remove(); } catch { /* liberado */ }
+            try { sub?.remove(); } catch { /* released */ }
         };
     }, [player, mediaId]);
 

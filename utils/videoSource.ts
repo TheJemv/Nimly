@@ -1,10 +1,11 @@
 import type { BufferOptions, VideoSource } from "expo-video";
 
 /**
- * Buffer agresivo tipo feed: arranca apenas hay primer frame en vez de esperar
- * a juntar segundos de video (iOS `automaticallyWaitsToMinimizeStalling`). Baja
- * el arranque en frío de ~0.8s. En red mala puede haber un micro-stall inicial;
- * para clips cortos casi nunca pasa y el fallback a MP4 cubre lo demás.
+ * Aggressive feed-style buffer: starts as soon as there's a first frame instead
+ * of waiting to gather seconds of video (iOS `automaticallyWaitsToMinimizeStalling`).
+ * Cuts cold start by ~0.8s. On bad networks there can be a brief initial
+ * micro-stall; for short clips this almost never happens, and the MP4 fallback
+ * covers the rest.
  */
 export const FAST_START_BUFFER: BufferOptions = {
     preferredForwardBufferDuration: 3,
@@ -13,50 +14,51 @@ export const FAST_START_BUFFER: BufferOptions = {
 };
 
 /**
- * Base del media API self-hosted que sirve el playlist HLS autenticado de
- * posts y stories. Los segmentos vienen embebidos como signed URLs de Supabase
- * (válidas 6h) y los sirve Supabase directo, no este endpoint.
+ * Base of the self-hosted media API that serves the authenticated HLS
+ * playlist for posts and stories. The segments come embedded as Supabase
+ * signed URLs (valid 6h) and are served directly by Supabase, not this endpoint.
  */
 export const MEDIA_API_BASE =
     process.env.EXPO_PUBLIC_MEDIA_API_BASE ?? "https://media.platosmart.com";
 
 interface BuildVideoSourceOpts {
-    /** Dueño del post/story (el `{user_id}` de la ruta). */
+    /** Owner of the post/story (the route's `{user_id}`). */
     ownerId?: string | null;
-    /** Id del post o de la story (el `{id}` de la ruta). */
+    /** Id of the post or story (the route's `{id}`). */
     mediaId?: string | null;
     /** `posts.playback_status` / `stories.playback_status`: 'raw' | 'ready' | 'error'. */
     playbackStatus?: string | null;
-    /** Signed URL del MP4 original (bucket privado). El fallback de siempre. */
+    /** Signed URL of the original MP4 (private bucket). The always-available fallback. */
     mp4Url?: string | null;
-    /** access_token de la sesión de Supabase. Va como `Authorization` header. */
+    /** access_token of the Supabase session. Sent as the `Authorization` header. */
     accessToken?: string | null;
-    /** Si el player ya reventó con HLS: forzamos el MP4. */
+    /** If the player already choked on HLS: we force the MP4. */
     hlsFailed?: boolean;
 }
 
 /**
- * Decide la fuente del player de un video de post/story:
+ * Decides the player source for a post/story video:
  *
- * - `playback_status === 'ready'` (ya transcodeado) + hay token + no falló antes
- *   → objeto HLS autenticado por el media API. `expo-video` manda el header
- *     `Authorization` tanto al playlist como a cada segmento (verificado en
- *     iOS `AVURLAssetHTTPHeaderFieldsKey` y Android OkHttp).
- * - Cualquier otro caso ('raw', 'error', sin token, o `hlsFailed`)
- *   → el string del signed URL del MP4, exactamente como antes.
+ * - `playback_status === 'ready'` (already transcoded) + there's a token + it
+ *   hasn't failed before
+ *   → HLS object authenticated by the media API. `expo-video` sends the
+ *     `Authorization` header both to the playlist and to each segment
+ *     (verified on iOS via `AVURLAssetHTTPHeaderFieldsKey` and on Android via OkHttp).
+ * - Any other case ('raw', 'error', no token, or `hlsFailed`)
+ *   → the MP4 signed URL string, exactly as before.
  *
- * Un post/story NUNCA se rompe ni se oculta por el estado del transcode.
+ * A post/story NEVER breaks or gets hidden because of the transcode state.
  */
 const prefetched = new Set<string>();
 
 /**
- * Calienta la reproducción HLS de un post/story ANTES de que llegue a pantalla:
- *   1. abre conexión (TLS) a la media API y la deja en el pool -> AVPlayer la reusa
- *   2. fuerza a la API a validar permiso + firmar los segmentos ya
- *   3. toca el primer segmento (Range 0-1) -> calienta TLS al Storage
+ * Warms up HLS playback for a post/story BEFORE it reaches the screen:
+ *   1. opens a (TLS) connection to the media API and leaves it in the pool -> AVPlayer reuses it
+ *   2. forces the API to validate permissions + sign the segments right away
+ *   3. touches the first segment (Range 0-1) -> warms up TLS to Storage
  *
- * Best-effort total: cualquier fallo se traga. Una vez por id por sesión.
- * Baja el arranque en frío (~0.8s) del primer video que ves en el feed.
+ * Fully best-effort: any failure is swallowed. Once per id per session.
+ * Cuts the cold start (~0.8s) of the first video you see in the feed.
  */
 export async function prefetchHls(
     opts: { id?: string | null; ownerId?: string | null; playbackStatus?: string | null },
@@ -82,7 +84,7 @@ export async function prefetchHls(
         if (firstSeg) {
             await fetch(firstSeg, { headers: { Range: "bytes=0-1" } }).catch(() => {});
         }
-        if (__DEV__) console.log(`[hls:prefetch] ${tag} listo`);
+        if (__DEV__) console.log(`[hls:prefetch] ${tag} ready`);
     } catch {
         /* best-effort */
     }

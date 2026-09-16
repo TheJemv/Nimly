@@ -5,17 +5,17 @@ import { createClient } from '@supabase/supabase-js';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-/** true si la app se compiló sin las variables de entorno de Supabase. */
+/** true if the app was built without the Supabase environment variables. */
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
 if (!isSupabaseConfigured) {
     const message =
-        'Supabase no está configurado: faltan EXPO_PUBLIC_SUPABASE_URL y/o ' +
-        'EXPO_PUBLIC_SUPABASE_ANON_KEY. Añádelas a tu .env (o al perfil de EAS) y reconstruye.';
-    // En desarrollo fallamos fuerte para no perseguir errores de red confusos.
+        'Supabase is not configured: EXPO_PUBLIC_SUPABASE_URL and/or ' +
+        'EXPO_PUBLIC_SUPABASE_ANON_KEY are missing. Add them to your .env (or your EAS profile) and rebuild.';
+    // In development we fail hard so we don't chase confusing network errors.
     if (__DEV__) throw new Error(`❌ ${message}`);
-    // En producción no reventamos el arranque: el chequeo de conexión del layout
-    // raíz detectará el fallo y mostrará la pantalla de error.
+    // In production we don't crash the startup: the root layout's connection
+    // check will detect the failure and show the error screen.
     console.error(`❌ ${message}`);
 }
 

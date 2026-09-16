@@ -4,13 +4,12 @@ import { assertUuid } from '@/utils/validation';
 
 export const blocksApi = {
     /**
-     * Bloquea a un usuario. Inserta en blocked_users.
-     * Lanza error "AlreadyBlocked" si ya existe el bloqueo.
+     * Blocks a user. Inserts into blocked_users.
+     * Throws an "AlreadyBlocked" error if the block already exists.
      *
-     * Además registra un reporte de moderación para que el desarrollador quede
-     * notificado del contenido/comportamiento inapropiado (requisito de la
-     * App Store Guideline 1.2). El fallo al registrar el reporte NO impide el
-     * bloqueo.
+     * Also files a moderation report so the developer is notified of the
+     * inappropriate content/behavior (App Store Guideline 1.2 requirement).
+     * A failure to file the report does NOT prevent the block.
      */
     async blockUser(blockedId: string, reason: ReportReason = 'other', details?: string) {
         assertUuid(blockedId, 'blockedId');
@@ -49,9 +48,9 @@ export const blocksApi = {
             .delete()
             .or(`and(from_id.eq.${blockerId},to_id.eq.${blockedId}),and(from_id.eq.${blockedId},to_id.eq.${blockerId})`);
 
-        // Notificar al desarrollador (moderación). Best-effort: si ya existe un
-        // reporte de este usuario hacia ese target, la unicidad lo rechaza y lo
-        // ignoramos.
+        // Notify the developer (moderation). Best-effort: if a report from this
+        // user toward that target already exists, the uniqueness constraint
+        // rejects it and we ignore that.
         try {
             const { error: reportError } = await supabase
                 .from('reports')
@@ -62,17 +61,17 @@ export const blocksApi = {
                     details: details ?? 'Filed automatically when the user blocked this account.',
                 });
             if (reportError && reportError.code !== '23505' && __DEV__) {
-                console.warn('No se pudo registrar el reporte de bloqueo:', reportError.message);
+                console.warn('Could not file the block report:', reportError.message);
             }
         } catch (e) {
-            if (__DEV__) console.warn('No se pudo registrar el reporte de bloqueo:', e);
+            if (__DEV__) console.warn('Could not file the block report:', e);
         }
 
         return { success: true };
     },
 
     /**
-     * Quita el bloqueo.
+     * Removes the block.
      */
     async unblockUser(blockedId: string) {
         assertUuid(blockedId, 'blockedId');
@@ -91,7 +90,7 @@ export const blocksApi = {
     },
 
     /**
-     * Revisa si el usuario actual bloqueó a `targetId`, o si fue bloqueado por él.
+     * Checks whether the current user blocked `targetId`, or was blocked by them.
      */
     async getBlockStatus(targetId: string) {
         const safeTarget = assertUuid(targetId, 'targetId');
@@ -113,8 +112,8 @@ export const blocksApi = {
     },
 
     /**
-     * Devuelve la lista de IDs de usuarios bloqueados por el usuario actual.
-     * Útil para filtrar el feed instantáneamente.
+     * Returns the list of user IDs blocked by the current user.
+     * Useful for filtering the feed instantly.
      */
     async getBlockedIds(): Promise<string[]> {
         const { data: userData } = await supabase.auth.getUser();

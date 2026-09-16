@@ -1,18 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { VideoSource } from "expo-video";
 
-/** Igual que el `-hls_time` del transcoder. Cada segmento .ts dura esto. */
+/** Same as the transcoder's `-hls_time`. Each .ts segment lasts this long. */
 const SEGMENT_SECONDS = 4;
 
 /**
- * Log de progreso de descarga HLS. SOLO corre en __DEV__.
+ * HLS download progress log. ONLY runs in __DEV__.
  *
- * expo-video NO expone un evento por segmento (AVPlayer / ExoPlayer bajan los
- * .ts en código nativo y no lo avisan a JS). Aproximamos: cada vez que
- * `bufferedPosition` cruza un múltiplo de la duración de segmento, ese
- * segmento ya entró al buffer -> lo logueamos.
+ * expo-video does NOT expose a per-segment event (AVPlayer / ExoPlayer download
+ * the .ts files in native code and don't notify JS). We approximate: every time
+ * `bufferedPosition` crosses a multiple of the segment duration, that segment
+ * has already entered the buffer -> we log it.
  *
- * Para ver los `GET .../seg_NNN.ts` reales: Proxyman o Charles.
+ * To see the actual `GET .../seg_NNN.ts` requests: Proxyman or Charles.
  */
 export function useHlsSegmentLog(
     player: any,
@@ -41,12 +41,12 @@ export function useHlsSegmentLog(
 
             const s2 = player.addListener?.("timeUpdate", ({ currentTime, bufferedPosition }: any) => {
                 const buffered = bufferedPosition ?? 0;
-                if (buffered <= 0) return; // aún no bajó nada: no inventamos el segmento 0
+                if (buffered <= 0) return; // nothing downloaded yet: don't invent segment 0
                 const seg = Math.floor(buffered / SEGMENT_SECONDS);
                 if (seg > lastSeg.current) {
                     for (let s = lastSeg.current + 1; s <= seg; s++) {
                         console.log(
-                            `[hls:${label}] segment ~${String(s).padStart(3, "0")} en buffer ` +
+                            `[hls:${label}] segment ~${String(s).padStart(3, "0")} in buffer ` +
                             `(buffered=${buffered.toFixed(1)}s · playhead=${(currentTime ?? 0).toFixed(1)}s)`,
                         );
                     }
@@ -60,7 +60,7 @@ export function useHlsSegmentLog(
             });
             if (s3) subs.push(s3);
         } catch (e) {
-            console.log(`[hls:${label}] no pude enganchar listeners`, e);
+            console.log(`[hls:${label}] could not attach listeners`, e);
         }
 
         return () => { subs.forEach((s) => { try { s.remove(); } catch { /* noop */ } }); };

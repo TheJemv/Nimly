@@ -7,14 +7,14 @@ export interface Story {
   id: string;
   user_id: string;
   media_url: string;
-  /** Path desnudo dentro del bucket 'stories' ("userId/123.jpg"). Se preserva
-   *  para poder resolver el media vía el caché en disco (mediaCache) por path,
-   *  no por URL firmada — el token rota y rompería el caché. */
+  /** Bare path inside the 'stories' bucket ("userId/123.jpg"). Preserved so the
+   *  media can be resolved via the disk cache (mediaCache) by path, not by
+   *  signed URL — the token rotates and would break the cache. */
   media_path?: string;
   media_type: 'image' | 'video';
   is_view_once: boolean;
   created_at: string;
-  // Streaming HLS: mismo pipeline que los posts. 'ready' -> sirve HLS.
+  // HLS streaming: same pipeline as posts. 'ready' -> serves HLS.
   playback_status?: 'raw' | 'ready' | 'error';
   hls_path?: string | null;
   profiles?: {
@@ -36,7 +36,7 @@ export const storiesApi = {
     if (mediaType === 'image') {
       fileUri = await optimizeImageForUpload(localUri, IMAGE_QUALITY.story);
     } else {
-      // Video -> 1080p / 5.5 Mbps. Nunca falla: usa el original si no puede.
+      // Video -> 1080p / 5.5 Mbps. Never fails: falls back to the original if it can't.
       fileUri = await compressVideoForUpload(localUri, VIDEO_QUALITY.feed);
     }
 
@@ -94,11 +94,11 @@ export const storiesApi = {
       const stories = data as any[];
       if (stories.length === 0) return [];
 
-      // Ya NO firmamos aquí: el media se resuelve en el viewer vía el caché en
-      // disco (mediaCache) por el path desnudo. Firmar en cada `reloadStories`
-      // (y realtime dispara muchos) gastaba ancho de banda y rompía el caché.
-      // `media_url` se mantiene como el path desnudo; `media_path` lo hace
-      // explícito para el código nuevo.
+      // We no longer sign here: the media is resolved in the viewer via the
+      // disk cache (mediaCache) by the bare path. Signing on every
+      // `reloadStories` (and realtime fires many) wasted bandwidth and broke
+      // the cache. `media_url` is kept as the bare path; `media_path` makes
+      // that explicit for the newer code.
       return stories.map((story) => {
           const likesList = story.story_likes || [];
           const isLikedByMe = likesList.some((l: any) => l.user_id === user.id);
@@ -110,12 +110,12 @@ export const storiesApi = {
       });
   },
 
-  // 💖 TOGGLE LIKE CORREGIDO Y BLINDADO
+  // 💖 TOGGLE LIKE — FIXED AND HARDENED
   async toggleLike(storyId: string, reaction: string = '❤️') {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // 1. Validar si ya existe el like usando las columnas reales de la tabla
+    // 1. Check whether the like already exists using the table's actual columns
     const { data: existingLike, error: fetchError } = await supabase
         .from('story_likes')
         .select('story_id, user_id')
@@ -124,12 +124,12 @@ export const storiesApi = {
         .maybeSingle();
 
     if (fetchError) {
-        console.error("Error buscando like previo:", fetchError);
+        console.error("Error looking up existing like:", fetchError);
         throw fetchError;
     }
 
     if (existingLike) {
-        // 2. Si ya existe, lo borramos (Unlike)
+        // 2. If it already exists, delete it (Unlike)
         const { error: deleteError } = await supabase
             .from('story_likes')
             .delete()
@@ -137,12 +137,12 @@ export const storiesApi = {
             .eq('user_id', user.id);
 
         if (deleteError) {
-            console.error("Error al quitar like:", deleteError);
+            console.error("Error removing like:", deleteError);
             throw deleteError;
         }
         return { action: 'unliked' };
     } else {
-        // 3. Si no existe, lo insertamos (Like)
+        // 3. If it doesn't exist, insert it (Like)
         const { error: insertError } = await supabase
             .from('story_likes')
             .insert({
@@ -152,12 +152,12 @@ export const storiesApi = {
             });
 
         if (insertError) {
-            // 🛡️ Si otra llamada concurrente ya insertó el mismo like (condición de carrera),
-            // no es un error real: el resultado final deseado (like existente) ya se cumplió.
+            // 🛡️ If a concurrent call already inserted the same like (race condition),
+            // this isn't a real error: the desired end state (an existing like) is already met.
             if (insertError.code === '23505') {
                 return { action: 'liked' };
             }
-            console.error("Error al insertar like:", insertError);
+            console.error("Error inserting like:", insertError);
             throw insertError;
         }
         return { action: 'liked' };
@@ -180,8 +180,8 @@ export const storiesApi = {
 
     if (error) throw error;
 
-    // Igual que `getActiveFeed`: no firmamos, preservamos el path desnudo y el
-    // viewer resuelve vía el caché en disco.
+    // Same as `getActiveFeed`: we don't sign, we preserve the bare path, and
+    // the viewer resolves it via the disk cache.
     return (data || []).map((story) => ({
       ...story,
       media_path: story.media_url,
@@ -203,7 +203,7 @@ export const storiesApi = {
       );
 
     if (error) {
-      console.warn("Error registrando vista de historia:", error);
+      console.warn("Error recording story view:", error);
     }
   },
 

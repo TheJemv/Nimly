@@ -33,7 +33,7 @@ type FriendKeyInfo = {
     public_key_updated_at?: string | null;
 };
 
-/** Trae el perfil del contacto tolerando que `public_key_updated_at` no exista aún. */
+/** Fetches the contact's profile, tolerating `public_key_updated_at` not existing yet. */
 async function fetchFriendKeyInfo(friendId: string): Promise<FriendKeyInfo | null> {
     const full = await supabase
         .from("profiles")
@@ -71,8 +71,8 @@ export default function ChatInfoScreen() {
                     chatId
                         ? supabase.from("messages").select("*", { count: "exact", head: true }).eq("chat_id", chatId)
                         : Promise.resolve({ count: 0 } as any),
-                    // "Media" = todo mensaje cuyo type no sea 'text' (image, etc.).
-                    // Los view-once consumidos pasan a 'text' → dejan de contar, correcto.
+                    // "Media" = any message whose type isn't 'text' (image, etc.).
+                    // Consumed view-once messages switch to 'text' → stop counting, as intended.
                     chatId
                         ? supabase
                             .from("messages")

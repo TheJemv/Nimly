@@ -1,7 +1,7 @@
 export type PostType = "IMAGE" | "TEXT" | "VIDEO";
 
 export interface User {
-    id: string; // UUID de auth.users / public.profiles
+    id: string; // UUID from auth.users / public.profiles
     username: string;
     avatar_url: string | null;
     avatar_config?: any; // jsonb
@@ -11,18 +11,18 @@ export interface User {
     public_key?: string | null;
     created_at: string;
 
-    // Relaciones opcionales (se llenan al consultar)
+    // Optional relations (populated when queried)
     friends?: Friend[];
     friend_requests?: Request[];
 }
 
 export interface Friend {
     id: string;
-    user_id: string; // 👈 Corregido de user_id_1
-    friend_id: string; // 👈 Corregido de user_id_2
+    user_id: string; // 👈 Corrected from user_id_1
+    friend_id: string; // 👈 Corrected from user_id_2
     created_at: string;
 
-    // El objeto del amigo tras el join
+    // The friend's object after the join
     friend_profile?: User;
 }
 
@@ -33,7 +33,7 @@ export interface Request {
     status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
     created_at: string;
 
-    // Quién envió la solicitud
+    // Who sent the request
     sender?: User;
 }
 
@@ -42,20 +42,20 @@ export interface Post {
     user_id: string;
     type: PostType;
     content: string | null;
-    media_url: string | null; // 👈 Agregado de tu DB
+    media_url: string | null; // 👈 Added from your DB
     created_at: string;
 
-    // Streaming HLS (media API self-hosted). El transcode corre en el backend:
-    // 'raw' recién subido -> 'ready' (sirve HLS) | 'error' (se queda en MP4).
+    // HLS streaming (self-hosted media API). Transcoding runs on the backend:
+    // 'raw' just uploaded -> 'ready' (serves HLS) | 'error' (stays on MP4).
     playback_status?: 'raw' | 'ready' | 'error';
     hls_path?: string | null;
 
-    // Relaciones (Cargadas mediante joins)
+    // Relations (loaded via joins)
     author?: User;
     likes?: Like[];
     comments?: Comment[];
 
-    // Campos calculados (conteo)
+    // Calculated fields (counts)
     likes_count?: number;
     comments_count?: number;
 }
@@ -66,7 +66,7 @@ export interface Like {
     post_id: string;
     created_at: string;
 
-    // Usuario que dio like
+    // User who liked it
     user?: User;
 }
 
@@ -77,7 +77,7 @@ export interface Comment {
     content: string;
     created_at: string;
 
-    // Usuario que comentó
+    // User who commented
     author?: User;
 }
 
@@ -85,23 +85,23 @@ export interface Chat {
     id: string;
     created_at: string;
 
-    // Relaciones para mensajería
+    // Relations for messaging
     messages?: Message[];
-    participants?: User[]; // Usuarios en el chat (Muchos a Muchos)
-    last_message?: Message; // El último mensaje enviado
+    participants?: User[]; // Users in the chat (Many to Many)
+    last_message?: Message; // The last message sent
 }
 
 export interface Message {
     id: string;
     chat_id: string;
     sender_id: string;
-    receiver_id: string | null; // 👈 Agregado de tu DB
+    receiver_id: string | null; // 👈 Added from your DB
     content: string | null;
-    image_url: string | null; // 👈 Agregado de tu DB
-    type: string; // En DB es un enum 'message_content_type'
+    image_url: string | null; // 👈 Added from your DB
+    type: string; // In the DB this is a 'message_content_type' enum
     is_read: boolean;
-    
-    // 👈 Agregados campos de Cifrado y Respuestas de tu DB
+
+    // 👈 Added encryption and reply fields from your DB
     encryption_iv?: string | null;
     encryption_tag?: string | null;
     reply_to_id?: string | null;
@@ -109,7 +109,7 @@ export interface Message {
     
     created_at: string;
 
-    // Quién envió el mensaje
+    // Who sent the message
     sender?: User;
 }
 
@@ -125,20 +125,20 @@ export interface ViewerProfile {
 
 export interface Story {
     id: string;
-    user_id: string; // 👈 Faltaba tu DB
+    user_id: string; // 👈 Was missing from your DB
     media_url: string;
-    /** Path desnudo dentro del bucket 'stories'. Se resuelve a `file://` en el
-     *  viewer vía el caché en disco (mediaCache). Ver api/stories.ts. */
+    /** Bare path inside the 'stories' bucket. Resolved to `file://` in the
+     *  viewer via the disk cache (mediaCache). See api/stories.ts. */
     media_path?: string;
-    media_type: "image" | "video"; // 👈 Obligatorio según DB
-    is_view_once: boolean; // 👈 Corregido de tu DB
+    media_type: "image" | "video"; // 👈 Required per the DB
+    is_view_once: boolean; // 👈 Corrected from your DB
     created_at: string;
 
-    // Streaming HLS (mismo pipeline que los posts). 'ready' -> sirve HLS.
+    // HLS streaming (same pipeline as posts). 'ready' -> serves HLS.
     playback_status?: 'raw' | 'ready' | 'error';
     hls_path?: string | null;
 
-    // Virtuales (Cargados desde la UI o Funciones SQL)
+    // Virtual fields (loaded from the UI or SQL functions)
     is_seen_by_me?: boolean;
     is_liked_by_me?: boolean;
     views_count?: number;

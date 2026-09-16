@@ -90,8 +90,8 @@ export class AppErrorBoundary extends React.Component<{ children: React.ReactNod
 
    componentDidCatch(error: unknown, info: { componentStack?: string | null }) {
       console.error("❌ [APP] Fatal render error:", error, info);
-      // Este boundary "maneja" el error, así que el handler global de Sentry no
-      // lo vería — lo reportamos explícitamente.
+      // This boundary "handles" the error, so Sentry's global handler wouldn't
+      // see it — we report it explicitly.
       Sentry.captureException(error, {
          contexts: { react: { componentStack: info?.componentStack ?? undefined } },
          tags: { boundary: "app-root" },

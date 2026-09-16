@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 export function useVaultChat(chatId: string) {
     const [isEncrypting, setIsEncrypting] = useState(false);
 
-    // Encriptar un mensaje saliente
+    // Encrypt an outgoing message
     const encryptMessage = useCallback(async (text: string) => {
         setIsEncrypting(true);
         try {
@@ -15,7 +15,7 @@ export function useVaultChat(chatId: string) {
         }
     }, [chatId]);
 
-    // Desencriptar un mensaje entrante
+    // Decrypt an incoming message
     const decryptMessage = useCallback(async (cipherText: string) => {
         return await vaultCrypto.decryptMessage(cipherText, chatId);
     }, [chatId]);

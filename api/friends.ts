@@ -4,7 +4,7 @@ import { assertUuid } from '@/utils/validation';
 
 export const friendsApi = {
     /**
-     * Envía una solicitud de conexión.
+     * Sends a connection request.
      */
     async sendRequest(targetId: string) {
         assertUuid(targetId, 'targetId');
@@ -22,14 +22,14 @@ export const friendsApi = {
     },
 
     /**
-     * Verifica el estado de la relación de forma bidireccional.
+     * Checks the relationship status bidirectionally.
      */
     async getStatus(targetId: string) {
         const safeTarget = assertUuid(targetId, 'targetId');
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return null;
 
-        // 1. Primero checamos si ya son amigos en la tabla 'friends'
+        // 1. First check whether they're already friends in the 'friends' table
         const { data: friendship } = await supabase
             .from('friends')
             .select('*')
@@ -38,7 +38,7 @@ export const friendsApi = {
 
         if (friendship) return { status: 'ACCEPTED' };
 
-        // 2. Si no son amigos, checamos si hay solicitud PENDING en cualquier dirección
+        // 2. If they're not friends, check whether there's a PENDING request in either direction
         const { data: request } = await supabase
             .from('friend_requests')
             .select('id, status, from_id, to_id')
@@ -51,7 +51,7 @@ export const friendsApi = {
                 status: 'PENDING',
                 from_id: request.from_id,
                 to_id: request.to_id,
-                isReceiver: request.to_id === user.id, // ¿Yo soy el que debe aceptar?
+                isReceiver: request.to_id === user.id, // Am I the one who needs to accept?
                 requestId: request.id
             };
         }
@@ -60,7 +60,7 @@ export const friendsApi = {
     },
 
     async acceptFriendship(notification: any) {
-        // 1. Actualizar estado de la solicitud
+        // 1. Update the request status
         const { error: requestError } = await supabase
             .from('friend_requests')
             .update({ status: 'ACCEPTED' })
@@ -68,7 +68,7 @@ export const friendsApi = {
 
         if (requestError) throw requestError;
 
-        // 2. Insertar en la tabla friends
+        // 2. Insert into the friends table
         const { error: friendError } = await supabase
             .from('friends')
             .insert([{
@@ -78,7 +78,7 @@ export const friendsApi = {
 
         if (friendError) throw friendError;
 
-        // 3. Opcional: Actualizar notificación si existe
+        // 3. Optional: update the notification if it exists
         if (notification.id) {
             await supabase
                 .from('notifications')

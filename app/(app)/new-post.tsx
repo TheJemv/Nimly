@@ -29,7 +29,7 @@ const SURFACE = getThemeColor("surface");
 const TEXT_SECONDARY = getThemeColor("textSecondary");
 const ICON = getThemeColor("icon");
 
-// 1. 👇 Importamos tus contextos
+// 1. 👇 Import your contexts
 import UserAvatar from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 
@@ -55,7 +55,7 @@ export default function NewPostScreen() {
       p.play();
    });
 
-   // LÓGICA DE PERMISOS Y MULTIMEDIA
+   // PERMISSIONS AND MEDIA LOGIC
    const pickMedia = async () => {
       try {
          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -67,8 +67,8 @@ export default function NewPostScreen() {
          const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images', 'videos'],
             allowsEditing: true,
-            // Sin pre-compresión del picker: optimizeImageForUpload / compressVideoForUpload
-            // (en createPost) hacen el único procesado, a calidad de feed.
+            // No pre-compression from the picker: optimizeImageForUpload / compressVideoForUpload
+            // (in createPost) do the only processing, at feed quality.
             quality: 1,
          });
 
@@ -83,7 +83,7 @@ export default function NewPostScreen() {
       }
    };
 
-   // NORMALIZACIÓN DE TEXTO
+   // TEXT NORMALIZATION
    const handleTextChange = (inputText: string) => {
       const cleanedText = inputText
          .replace(/[\r\n]+/g, '. ')
@@ -92,7 +92,7 @@ export default function NewPostScreen() {
       setText(cleanedText);
    };
 
-   // ACCIÓN DE POST
+   // POST ACTION
    const handlePost = async () => {
       if (!canPost || !session?.user?.id) return;
 
@@ -104,7 +104,7 @@ export default function NewPostScreen() {
       setIsPosting(true);
       try {
          const finalCleanText = text.trim();
-         // 4. 👇 Usamos el session.user.id directamente
+         // 4. 👇 Use session.user.id directly
          await createPost(session.user.id, finalCleanText, media);
          router.back();
       } catch (error: any) {

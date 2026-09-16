@@ -5,15 +5,15 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 
 interface BlockedUsersContextValue {
-    /** IDs de usuarios que YO he bloqueado. */
+    /** IDs of users that I have blocked. */
     blockedIds: Set<string>;
-    /** `true` si el usuario está bloqueado por mí. */
+    /** `true` if the user is blocked by me. */
     isBlocked: (userId?: string | null) => boolean;
-    /** Oculta a un usuario al instante (antes de que responda el servidor). */
+    /** Hides a user instantly (before the server responds). */
     blockLocally: (userId: string) => void;
-    /** Revierte un bloqueo local. */
+    /** Reverts a local block. */
     unblockLocally: (userId: string) => void;
-    /** Vuelve a leer la lista desde el servidor. */
+    /** Re-reads the list from the server. */
     refresh: () => Promise<void>;
 }
 
@@ -41,7 +41,7 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
             const ids = await blocksApi.getBlockedIds();
             setBlockedIds(new Set(ids));
         } catch (e) {
-            if (__DEV__) console.warn("No se pudo cargar la lista de bloqueados:", e);
+            if (__DEV__) console.warn("Could not load the blocked users list:", e);
         }
     }, [userId]);
 

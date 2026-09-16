@@ -18,24 +18,24 @@ export const unstable_settings = {
 export default function RootLayout() {
   const { session } = useAuth();
 
-  // Abre la pantalla correcta al tocar una notificación (chat / notificaciones),
-  // tanto con la app abierta como en arranque en frío.
+  // Opens the right screen when tapping a notification (chat / notifications),
+  // whether the app is already open or on a cold start.
   useNotificationRouting();
 
   useEffect(() => {
-    // El token solo tiene sentido con sesión iniciada.
+    // The token only makes sense with an active session.
     if (session) registerForPushNotificationsAsync();
   }, [session]);
 
-  // React Native mantiene los timers congelados en segundo plano: hay que
-  // arrancar/parar el auto-refresh del token de Supabase con el AppState, y
-  // reconectar el socket de realtime al volver (iOS mata la conexión).
+  // React Native keeps timers frozen in the background: we need to
+  // start/stop the Supabase token auto-refresh based on AppState, and
+  // reconnect the realtime socket on return (iOS kills the connection).
   useEffect(() => {
     const sync = (state: string) => {
       if (state === 'active') {
         supabase.auth.startAutoRefresh();
-        // Si el socket murió mientras estábamos fuera, lo reabrimos. Los
-        // canales suscritos se vuelven a unir solos al reconectar.
+        // If the socket died while we were away, reopen it. Subscribed
+        // channels rejoin automatically on reconnect.
         if (!supabase.realtime.isConnected()) {
           supabase.realtime.connect();
         }

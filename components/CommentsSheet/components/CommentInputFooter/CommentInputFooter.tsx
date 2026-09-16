@@ -21,9 +21,10 @@ export default function CommentInputFooter({
     const [text, setText] = useState("");
     const [isPosting, setIsPosting] = useState(false);
 
-    // El inset del safe-area de abajo (home indicator) solo hace falta cuando
-    // el teclado está cerrado -- con el teclado abierto ya cubre esa zona, y
-    // sumarlo igual dejaba un hueco negro entre el input y el teclado.
+    // The bottom safe-area inset (home indicator) is only needed when the
+    // keyboard is closed -- with the keyboard open it already covers that
+    // area, and adding it anyway left a black gap between the input and the
+    // keyboard.
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     useEffect(() => {
         const showSub = Keyboard.addListener('keyboardWillShow', () => setKeyboardVisible(true));

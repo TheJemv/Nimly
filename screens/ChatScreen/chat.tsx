@@ -50,7 +50,7 @@ import { chatApi } from "@/api/chat";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
 
-// Distancia máxima (px) que se desliza la burbuja al hacer swipe para ver la hora.
+// Maximum distance (px) the bubble slides when swiping to reveal the time.
 const MAX_REVEAL = 64;
 
 export default function ChatScreen() {
@@ -61,7 +61,7 @@ export default function ChatScreen() {
    const [isCameraVisible, setCameraVisible] = useState(false);
    const [replyingTo, setReplyingTo] = useState<any>(null);
 
-   // Parsear el objeto user que viene por parámetro de ruta (si existe).
+   // Parse the user object that comes in as a route param (if present).
    const routeUser = useMemo(() => {
       if (!routeUserParam) return null;
       try {
@@ -104,9 +104,9 @@ export default function ChatScreen() {
 
    const listRef = useRef<FlatList<any> | null>(null);
 
-   // Swipe hacia la izquierda para revelar la hora de cada mensaje. Solo se
-   // desplaza la burbuja propia (hacia el centro, nunca se recorta); en los
-   // mensajes recibidos la hora simplemente aparece en el hueco de la derecha.
+   // Swipe left to reveal the time of each message. Only your own bubble
+   // shifts (toward the center, never clipped); on received messages the
+   // time simply appears in the gap on the right.
    const revealX = useSharedValue(0);
    const bubbleShiftStyle = useAnimatedStyle(() => ({ transform: [{ translateX: revealX.value }] }));
    const timeFadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, -revealX.value / MAX_REVEAL) }));
@@ -125,9 +125,9 @@ export default function ChatScreen() {
       [revealX]
    );
 
-   // Mensajes con metadatos de agrupación y separadores de tiempo. Se reutiliza
-   // la referencia previa de cada mensaje si su render no cambió, para que un
-   // mensaje nuevo no fuerce el re-render de toda la lista visible.
+   // Messages with grouping metadata and time separators. Reuses each
+   // message's previous reference if its render didn't change, so a new
+   // message doesn't force a re-render of the whole visible list.
    const decoratedCache = useRef<Map<string, DecoratedMessage>>(new Map());
    const decoratedMessages = useMemo(() => {
       const next = new Map<string, DecoratedMessage>();
@@ -169,7 +169,7 @@ export default function ChatScreen() {
       return max || null;
    }, [messages, hiddenIds]);
 
-   // Prioridad: Perfil de BD > Parámetro de ruta > 'User'
+   // Priority: DB profile > route param > 'User'
    const displayName = friendProfile?.username || routeUser?.username || 'User';
    const avatarConfig = friendProfile?.avatar_config || routeUser?.avatar_config;
    const avatarUrl = friendProfile?.avatar_url || routeUser?.avatar_url;
@@ -315,7 +315,7 @@ export default function ChatScreen() {
       const keyToUse = friendProfile?.public_key || routeUser?.public_key || "";
       const showReadReceipt = item.id === lastReadMessageId;
 
-      // Cápsula view-once ya consumida: el emisor la marca content='OPENED_CAPSULE'
+      // View-once capsule already opened: the sender marks content='OPENED_CAPSULE'
       const isOpenedCapsule = item.content === 'OPENED_CAPSULE';
       const isText = !isOpenedCapsule && (item.type === 'text' || !item.type);
       const isViewOnceSender = item.type === 'image-view-once' && mine;

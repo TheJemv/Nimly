@@ -11,8 +11,8 @@ export const REPORT_REASONS: { label: string; value: ReportReason }[] = [
 ];
 
 /**
- * Muestra un selector nativo con los motivos de reporte y resuelve con el motivo
- * elegido, o `null` si el usuario cancela.
+ * Shows a native picker with the report reasons and resolves with the chosen
+ * reason, or `null` if the user cancels.
  */
 export function promptReportReason(
     title = "Report",

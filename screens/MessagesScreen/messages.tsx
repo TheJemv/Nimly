@@ -31,7 +31,7 @@ export default function MessagesScreen() {
                 <Animated.FlatList
                     data={chats}
                     keyExtractor={(item) => item.chat_id}
-                    // Anima el reordenamiento cuando un chat sube por un mensaje nuevo.
+                    // Animates the reordering when a chat moves up due to a new message.
                     itemLayoutAnimation={LinearTransition.duration(320)}
                     renderItem={({ item }) => (
                         <Animated.View entering={FadeIn.duration(200)}>

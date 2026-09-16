@@ -36,7 +36,7 @@ export function useReplyStory(currentGroup: any, currentStoryId: any, onSent?: (
             const friendProfile = profRes.data
             if (!friendProfile?.public_key) {
                 console.error("Friend profile has no public_key:", friendProfile);
-                throw new Error("El destinatario no tiene una llave pública configurada.");
+                throw new Error("The recipient doesn't have a public key configured.");
             }
 
             const encryptedContent = await vaultCrypto.encryptMessage(cleanedMessage, friendProfile.public_key);

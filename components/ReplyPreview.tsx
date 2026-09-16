@@ -25,7 +25,7 @@ interface ReplyPreviewProps {
    friendPublicKey: string;
 }
 
-/** Devuelve icono + etiqueta si el mensaje citado es multimedia. */
+/** Returns icon + label if the quoted message is media. */
 export const replyMediaKind = (content?: string | null, type?: string | null): { icon: string; label: string } | null => {
    const t = (type || "").toLowerCase();
    if (content === "OPENED_CAPSULE") return { icon: "photo.fill", label: "Photo" };
