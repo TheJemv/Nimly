@@ -10,7 +10,6 @@ type PermissionRequestProps = {
     title: string;
     subtitle: string;
     confirmLabel?: string;
-    skipLabel?: string;
     onRequest: () => void;
     onClose: () => void;
 };
@@ -20,8 +19,7 @@ export default function PermissionRequest({
     icon,
     title,
     subtitle,
-    confirmLabel = "Enable",
-    skipLabel = "Not Now",
+    confirmLabel = "Continue",
     onRequest,
     onClose,
 }: PermissionRequestProps) {
@@ -42,10 +40,6 @@ export default function PermissionRequest({
 
                     <TouchableOpacity onPress={onRequest} style={styles.confirmBtn}>
                         <Text style={styles.confirmText}>{confirmLabel}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={onClose} style={styles.skipBtn}>
-                        <Text style={styles.skipText}>{skipLabel}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
