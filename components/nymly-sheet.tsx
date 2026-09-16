@@ -37,10 +37,10 @@ const NymlySheet = forwardRef<BottomSheetModal, NymlySheetProps>(
                 backdropComponent={renderBackdrop}
                 footerComponent={footerComponent}
 
-                // Bloqueamos el tamaño automático para evitar el estado "mini"
+                // We block automatic sizing to avoid the "mini" state
                 enableDynamicSizing={false}
 
-                // Efecto Instagram
+                // Instagram-style effect
                 keyboardBehavior="extend"
                 android_keyboardInputMode="adjustResize"
                 keyboardBlurBehavior="restore"

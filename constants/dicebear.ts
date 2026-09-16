@@ -24,9 +24,9 @@ import * as pixelArtNeutral from '@dicebear/pixel-art-neutral';
 import * as thumbs from '@dicebear/thumbs';
 import * as toonHead from '@dicebear/toon-head';
 
-// Los 8 originales + los 5 pasteles clásicos de DiceBear (b6e3f4...ffdfbf, los
-// mismos que usa su propio playground por default) + un espectro de vivos y
-// neutros, para que se sienta tan variado como el selector de la web.
+// The original 8 + DiceBear's 5 classic pastels (b6e3f4...ffdfbf, the same
+// ones its own playground uses by default) + a spectrum of vivid and neutral
+// tones, so it feels as varied as the web selector.
 export const COLORES_FONDO = [
     "DC143C", "D27D46", "76C2D9", "E5A0A0", "B2A4D4", "94C9A9", "E6C975", "161616",
     "B6E3F4", "C0AEDE", "D1D4F9", "FFD5DC", "FFDFBF",
@@ -35,9 +35,9 @@ export const COLORES_FONDO = [
 ];
 
 /**
- * Avatar por defecto derivado del username. Debe coincidir con lo que genera el
- * trigger `handle_new_user_profile` en la base de datos, para que un perfil
- * creado por el trigger y uno reparado desde el cliente se vean idénticos.
+ * Default avatar derived from the username. Must match what the
+ * `handle_new_user_profile` database trigger generates, so a profile created
+ * by the trigger and one repaired from the client look identical.
  */
 export const DEFAULT_AVATAR_STYLE_ID = "adventurer";
 export const DEFAULT_AVATAR_BG = "b6e3f4";

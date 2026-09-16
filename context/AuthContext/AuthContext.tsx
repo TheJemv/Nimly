@@ -24,15 +24,15 @@ interface AuthContextValue {
     isLoading: boolean;
     vault: {
         state: VaultState;
-        /** Migración legítima: crea identidad nueva en este dispositivo. */
+        /** Legitimate migration: creates a new identity on this device. */
         confirmNewIdentity: () => Promise<void>;
-        /** Crea el PIN de 6 dígitos (pantalla 'needs_passcode'). */
+        /** Creates the 6-digit PIN (the 'needs_passcode' screen). */
         createPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Desbloqueo del auto-lock de 12h (pantalla 'locked_timeout'). */
+        /** Unlocks the 12h auto-lock (the 'locked_timeout' screen). */
         unlockWithPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Cuenta bloqueada en otro dispositivo → takeover con el PIN. */
+        /** Account locked on another device → takeover with the PIN. */
         takeoverWithPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Fallback: takeover con la contraseña de la cuenta. */
+        /** Fallback: takeover with the account password. */
         forceTakeover: (password: string) => Promise<PasscodeResult>;
     };
 }
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Adjunta solo el id a los eventos de Sentry (sin PII: nada de email / IP).
+    // Attaches only the id to Sentry events (no PII: no email / IP).
     useEffect(() => {
         Sentry.setUser(session?.user?.id ? { id: session.user.id } : null);
     }, [session?.user?.id]);
@@ -91,8 +91,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setSession(currentSession);
                 setIsLoading(false);
 
-                // El vault decide por sí mismo cuándo reclamar el dispositivo
-                // (solo si la bóveda queda usable aquí, no en 'needs_new_identity').
+                // The vault decides for itself when to claim the device
+                // (only if the vault ends up usable here, not in 'needs_new_identity').
                 if (currentSession) setupVaultIdentity(currentSession);
             } catch (e) {
                 console.error("Session check failed:", e);

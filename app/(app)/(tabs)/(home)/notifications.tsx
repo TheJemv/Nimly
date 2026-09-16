@@ -36,7 +36,7 @@ export default function NotificationsScreen() {
     const warningColor = getThemeColor("warning");
     const mutedColor = getThemeColor("textSecondary");
 
-    // 1. FUNCIÓN PARA MARCAR TODO COMO LEÍDO EN LA BASE DE DATOS
+    // 1. FUNCTION TO MARK EVERYTHING AS READ IN THE DATABASE
     const markAllAsSeen = async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -51,11 +51,11 @@ export default function NotificationsScreen() {
 
             if (error) throw error;
         } catch (e) {
-            console.error("Error al marcar todo como leído:", e);
+            console.error("Error marking all as read:", e);
         }
     };
 
-    // 2. CARGA DE DATOS (envuelto en useCallback para mantener estabilidad referencial)
+    // 2. DATA LOADING (wrapped in useCallback to keep referential stability)
     const fetchNotifications = useCallback(async (pageNumber: number, isRefresh = false) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -189,10 +189,10 @@ export default function NotificationsScreen() {
                                 text: "Accept",
                                 onPress: async () => {
                                     try {
-                                        // La notificación no trae el id de friend_requests,
-                                        // así que lo buscamos antes de aceptar -- si no, la
-                                        // fila se queda huérfana en PENDING para siempre
-                                        // (ver useProfileActions, que sí lo pasa bien).
+                                        // The notification doesn't carry the friend_requests id,
+                                        // so we look it up before accepting -- otherwise the
+                                        // row stays orphaned in PENDING forever (see
+                                        // useProfileActions, which does pass it correctly).
                                         const status = await friendsApi.getStatus(item.actor_id);
                                         if (status?.status === 'PENDING' && status.requestId) {
                                             await friendsApi.acceptFriendship({

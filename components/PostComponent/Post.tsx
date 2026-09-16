@@ -33,16 +33,16 @@ interface Props {
     onDelete?: () => void;
     onCommentPress?: () => void;
     /**
-     * Solo importa si el post es video. Quién controla el feed (Home) decide
-     * cuál post-video es "el más visible" y solo a ese le pasa `true` — así
-     * nunca hay dos reproduciendo al mismo tiempo. Si nadie lo controla (ej.
-     * el grid del perfil, que no trackea scroll), por default se reproduce
-     * solo, sin depender de esto.
+     * Only matters if the post is a video. Whoever controls the feed (Home)
+     * decides which video-post is "the most visible" and only passes `true`
+     * to that one — so two never play at the same time. If nothing controls
+     * it (e.g. the profile grid, which doesn't track scroll), it plays on its
+     * own by default, without relying on this.
      */
     isActive?: boolean;
-    /** Mute compartido entre todos los videos del feed (como Instagram: se
-     *  desmutea uno y los demás seguirán así al llegar). Si no se pasa, cada
-     *  post lleva su propio mute independiente. */
+    /** Mute shared across all videos in the feed (like Instagram: unmute one
+     *  and the rest will stay unmuted when you reach them). If not passed,
+     *  each post keeps its own independent mute. */
     muted?: boolean;
     onToggleMute?: () => void;
 }
@@ -77,49 +77,49 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         handleReportPost
     } = usePost(post, onDelete)
 
-    // Zoom a pantalla completa (tap sencillo sobre la imagen).
+    // Full-screen zoom (single tap on the image).
     const [zoomVisible, setZoomVisible] = useState(false);
 
-    // Mute propio si nadie lo controla desde afuera (ver comentario del prop).
+    // Own mute state if nothing controls it from outside (see prop comment above).
     const [localMuted, setLocalMuted] = useState(true);
     const muted = mutedProp ?? localMuted;
     const toggleMute = onToggleMuteProp ?? (() => setLocalMuted((m) => !m));
 
-    // Preview en línea del video: en loop, arranca/pausa según isActive.
-    // La fuente es HLS si el post ya está transcodeado ('ready'), si no el MP4.
+    // Inline video preview: loops, starts/pauses based on isActive.
+    // The source is HLS if the post is already transcoded ('ready'), otherwise the MP4.
     const previewPlayer = useVideoPlayer(isVideo && videoSource ? videoSource : null, (p) => {
         p.loop = true;
         p.muted = muted;
         p.bufferOptions = FAST_START_BUFFER;
     });
 
-    // dev-only: log de segmentos HLS a medida que entran al buffer.
+    // dev-only: logs HLS segments as they enter the buffer.
     useHlsSegmentLog(previewPlayer, videoSource, `post:${String(post.id).slice(0, 8)}`);
 
-    // Primer frame del video: se pinta de fondo mientras el player bufferea, en
-    // vez del rectángulo negro de siempre.
+    // First frame of the video: painted as background while the player buffers,
+    // instead of the usual black rectangle.
     const poster = useVideoPoster(isVideo ? previewPlayer : null, post.id);
 
-    // El player se recrea si cambia mediaUrl, así que hay que re-aplicar el
-    // mute cada vez que cambie (propio o compartido) — no solo al crearlo.
+    // The player is recreated if mediaUrl changes, so we need to re-apply the
+    // mute every time it changes (own or shared) — not just when it's created.
     useEffect(() => {
-        try { previewPlayer.muted = muted; } catch { /* player liberado */ }
+        try { previewPlayer.muted = muted; } catch { /* player released */ }
     }, [muted, previewPlayer]);
 
-    // Solo reproduce si es el video "activo" del feed Y no está abierto en
-    // pantalla completa (evita que suenen dos audios a la vez).
+    // Only plays if it's the feed's "active" video AND it's not open in
+    // full screen (avoids two audio tracks playing at once).
     useEffect(() => {
         if (!isVideo) return;
         try {
             if (isActive && !zoomVisible) previewPlayer.play();
             else previewPlayer.pause();
-        } catch { /* player liberado */ }
+        } catch { /* player released */ }
     }, [isVideo, isActive, zoomVisible, previewPlayer]);
 
-    // "no inicia hasta después de un rato": antes se mostraba un botón de
-    // play sobre un frame congelado sin indicar que estaba cargando. Ahora
-    // mostramos un spinner mientras el player buffer-ea, solo si es el que
-    // debería estar reproduciendo ahora mismo.
+    // "doesn't start for a while": we used to show a play button over a
+    // frozen frame without indicating it was loading. Now we show a spinner
+    // while the player buffers, but only if it's the one that should be
+    // playing right now.
     const [previewLoading, setPreviewLoading] = useState(true);
     useEffect(() => {
         if (!isVideo) return;
@@ -127,17 +127,17 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
             try {
                 const st = previewPlayer.status;
                 setPreviewLoading(st === 'loading');
-                // HLS reventó -> usePost cae al MP4 y el player se recrea con él.
+                // HLS blew up -> usePost falls back to the MP4 and the player is recreated with it.
                 if (st === 'error') handleVideoError();
-            } catch { /* liberado */ }
+            } catch { /* released */ }
         };
         syncStatus();
         let sub: { remove: () => void } | undefined;
-        try { sub = previewPlayer.addListener?.('statusChange', syncStatus); } catch { /* liberado */ }
-        return () => { try { sub?.remove(); } catch { /* liberado */ } };
+        try { sub = previewPlayer.addListener?.('statusChange', syncStatus); } catch { /* released */ }
+        return () => { try { sub?.remove(); } catch { /* released */ } };
     }, [isVideo, previewPlayer, handleVideoError]);
 
-    // Corazón grande que aparece al doble-tap, estilo Instagram.
+    // Big heart that appears on double-tap, Instagram style.
     const heartScale = useSharedValue(0);
     const heartOpacity = useSharedValue(0);
     const triggerHeartBurst = () => {
@@ -158,23 +158,23 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         handleDoubleTapLike();
     };
 
-    // Botón de mute: su propio gesto, separado del de la imagen. Un
-    // TouchableOpacity normal montado ENCIMA de una View con GestureDetector
-    // no basta para que gane la prioridad -- son dos sistemas de touch
-    // distintos y ambos se disparaban a la vez (tocar mute también abría el
-    // zoom). Con requireExternalGestureToFail de abajo, el tap sencillo
-    // espera a que el de mute falle (o sea, que el toque haya caído fuera de
-    // su botón) antes de intentar activarse.
+    // Mute button: its own gesture, separate from the image's. A normal
+    // TouchableOpacity mounted ON TOP of a View with GestureDetector isn't
+    // enough to win priority -- they're two different touch systems and both
+    // fired at once (tapping mute also opened the zoom). With
+    // requireExternalGestureToFail below, the single tap waits for the mute
+    // gesture to fail (i.e. the touch landed outside its button) before
+    // trying to activate.
     const muteTap = Gesture.Tap()
         .hitSlop({ top: 10, bottom: 10, left: 10, right: 10 })
         .onEnd(() => {
             runOnJS(toggleMute)();
         });
 
-    // Doble-tap = like + animación. Tap sencillo = zoom a pantalla completa.
-    // El single-tap espera a que el doble-tap (y el de mute) fallen para no
-    // dispararse solo. Los callbacks de gesture-handler corren en el hilo de
-    // UI, así que hay que cruzar a JS con runOnJS para tocar estado de React.
+    // Double-tap = like + animation. Single tap = full-screen zoom.
+    // The single-tap waits for the double-tap (and the mute one) to fail so
+    // it doesn't fire on its own. gesture-handler callbacks run on the UI
+    // thread, so we need to cross to JS with runOnJS to touch React state.
     const doubleTap = Gesture.Tap()
         .numberOfTaps(2)
         .maxDuration(250)
@@ -229,7 +229,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                     )}
                 </View>
 
-                {/* 🟢 CONTENIDO UNIFICADO: Texto y Media pueden coexistir */}
+                {/* UNIFIED CONTENT: Text and Media can coexist */}
                 <View style={styles.contentContainer}>
                     {postText ? (
                         <View style={styles.textFrame}>
@@ -237,9 +237,9 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                         </View>
                     ) : null}
 
-                    {/* Si hay media (imagen/video), la mostramos debajo del texto.
-                        Video: basta videoSource (HLS listo aunque el signed URL
-                        del MP4 aún no resuelva). Imagen: mediaUrl. */}
+                    {/* If there's media (image/video), we show it below the text.
+                        Video: videoSource alone is enough (HLS ready even if the
+                        signed URL for the MP4 hasn't resolved yet). Image: mediaUrl. */}
                     {isMedia && (mediaUrl || videoSource) ? (
                         <GestureDetector gesture={imageTapGesture}>
                             <View style={styles.mediaFrame}>

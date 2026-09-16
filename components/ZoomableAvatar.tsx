@@ -11,16 +11,16 @@ interface ZoomableAvatarProps {
     avatar_url?: string | null;
     avatar_config?: any;
     size?: number;
-    /** Se ejecuta con un toque simple (long‑press siempre abre el visor). */
+    /** Runs on a simple tap (long-press always opens the viewer). */
     onPress?: () => void;
-    /** Desactiva el long‑press para ampliar. */
+    /** Disables the long-press to zoom in. */
     zoomDisabled?: boolean;
 }
 
 /**
- * Avatar que se puede "espiar" al estilo Instagram: al dejar presionado se abre
- * un visor a pantalla completa con el avatar ampliado y blur detrás, sin botones.
- * Se cierra al tocar en cualquier parte.
+ * Avatar that can be "peeked" Instagram-style: holding it down opens a
+ * full-screen viewer with the enlarged avatar and a blur behind it, no buttons.
+ * Closes on tapping anywhere.
  */
 export default function ZoomableAvatar({
     avatar_url,

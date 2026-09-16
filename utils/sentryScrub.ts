@@ -1,10 +1,10 @@
-// Scrubbing de datos sensibles antes de que salgan a Sentry.
-// Nimly es E2EE: nada de texto descifrado, llaves, seeds ni passcodes debe salir
-// del dispositivo, ni siquiera en un stack trace o un breadcrumb.
+// Scrubbing of sensitive data before it goes out to Sentry.
+// Nimly is E2EE: no decrypted text, keys, seeds, or passcodes should leave
+// the device, not even in a stack trace or a breadcrumb.
 
 const SENSITIVE_KEY = /pass(code|word)|priv(ate)?.?key|secret|mnemonic|\bseed\b|_hash\b|\bcontent\b|cipher|\btoken\b|encrypt/i;
 
-// Bloques largos base64 / hex (paquetes cifrados, llaves, tokens).
+// Long base64 / hex blobs (encrypted packets, keys, tokens).
 const LONG_BLOB = /[A-Za-z0-9+/=_-]{80,}/g;
 const FULL_BLOB = /^(?:v2:)?[A-Za-z0-9+/=:_-]{64,}$/;
 
@@ -27,7 +27,7 @@ const scrub = (value: unknown, key = ''): unknown => {
     return value;
 };
 
-/** `beforeSend` de Sentry. Nunca lanza: ante la duda deja pasar el evento. */
+/** Sentry's `beforeSend`. Never throws: when in doubt, lets the event through. */
 export function scrubSentryEvent(event: any): any {
     try {
         if (event.extra) event.extra = scrub(event.extra);
@@ -42,12 +42,12 @@ export function scrubSentryEvent(event: any): any {
             if (bc.data) bc.data = scrub(bc.data);
         }
     } catch {
-        /* no bloqueamos el envío por un fallo del scrub */
+        /* don't block sending due to a scrub failure */
     }
     return event;
 }
 
-/** `beforeBreadcrumb`: descarta ruido de consola de bajo nivel, redacta el resto. */
+/** `beforeBreadcrumb`: discards low-level console noise, redacts the rest. */
 export function scrubBreadcrumb(bc: any): any {
     if (bc.category === 'console' && bc.level !== 'error' && bc.level !== 'warning') return null;
     if (typeof bc.message === 'string') bc.message = redactString(bc.message);

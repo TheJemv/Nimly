@@ -16,7 +16,7 @@ interface Props {
     editable?: boolean;
 }
 
-/** Campo de PIN de 6 dígitos: 6 casillas + un TextInput oculto que las alimenta. */
+/** 6-digit PIN field: 6 boxes + a hidden TextInput that feeds them. */
 export default function PasscodeInput({ value, onChange, onFilled, autoFocus, editable = true }: Props) {
     const ref = useRef<TextInput>(null);
 
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     boxFilled: { borderColor: ICON },
     dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent' },
     dotOn: { backgroundColor: '#fff' },
-    // Cubre toda la fila pero es invisible: cualquier toque enfoca y abre el teclado.
+    // Covers the whole row but is invisible: any touch focuses it and opens the keyboard.
     hiddenInput: {
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,

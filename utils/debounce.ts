@@ -1,6 +1,6 @@
 /**
- * Agrupa llamadas seguidas en una sola ejecución `wait` ms después de la última.
- * `cancel()` descarta cualquier ejecución pendiente (útil en cleanup de efectos).
+ * Groups consecutive calls into a single execution `wait` ms after the last one.
+ * `cancel()` discards any pending execution (useful in effect cleanup).
  */
 export function debounce<A extends any[]>(
     fn: (...args: A) => void,

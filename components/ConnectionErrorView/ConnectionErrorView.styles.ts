@@ -41,7 +41,7 @@ export const styles = StyleSheet.create({
         paddingVertical: 14,
         paddingHorizontal: 32,
         borderRadius: 25,
-        width: 240, // Ancho controlado para que se vea simétrico y estilizado
+        width: 240, // Fixed width so it looks symmetric and polished
         alignItems: 'center',
         height: 50,
         justifyContent: 'center',

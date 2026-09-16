@@ -2,12 +2,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Image } from 'react-native';
 
 /**
- * Presets de calidad de imagen por destino. JPEG con factor alto: el "se ve
- * pixelado / lavado" venía de bajar demasiado el `compress` (0.7) y el ancho.
+ * Image quality presets by destination. High-factor JPEG: the "looks
+ * pixelated / washed out" issue came from dropping `compress` (0.7) and width too low.
  *
- *  - `post`   feed: hasta 2400px, q0.92. Nítido; el tope de ancho evita subir
- *             el RAW de 4000px+ de la cámara.
- *  - `story`  pantalla completa vertical: hasta 1440px, q0.88.
+ *  - `post`   feed: up to 2400px, q0.92. Sharp; the width cap avoids uploading
+ *             the camera's 4000px+ RAW.
+ *  - `story`  full vertical screen: up to 1440px, q0.88.
  */
 export const IMAGE_QUALITY = {
     post: { maxWidth: 2400, compress: 0.92 },
@@ -22,10 +22,10 @@ const getWidth = (uri: string): Promise<number> =>
     });
 
 /**
- * Normaliza una imagen para subir: la reescala SOLO si supera `maxWidth` (nunca
- * la agranda) y la re-comprime a JPEG con el factor del preset.
+ * Normalizes an image for upload: it's rescaled ONLY if it exceeds `maxWidth`
+ * (never upscaled), then re-compressed to JPEG using the preset's factor.
  *
- * Nunca lanza: si algo falla devuelve el uri original.
+ * Never throws: if something fails, it returns the original uri.
  */
 export async function optimizeImageForUpload(
     uri: string,

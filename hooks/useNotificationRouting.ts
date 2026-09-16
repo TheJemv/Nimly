@@ -2,9 +2,9 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
 
-// Id de la última notificación que ya abrimos. Es módulo (no ref) para que
-// sobreviva a remounts del layout —p. ej. cuando el VaultKeyGate se cierra y
-// se vuelve a abrir— y no re-navegar dos veces por la misma push.
+// Id of the last notification we already opened. It's module-level (not a ref)
+// so it survives layout remounts —e.g. when the VaultKeyGate closes and
+// reopens— and we don't navigate twice for the same push.
 let handledNotificationId: string | null = null;
 
 interface PushData {
@@ -16,14 +16,14 @@ interface PushData {
 }
 
 /**
- * Enruta la app cuando el usuario toca una notificación:
- *  - mensajes  → abre /chat con la conversación de quien escribió
- *  - el resto  → abre la pantalla de notificaciones
+ * Routes the app when the user taps a notification:
+ *  - messages         → opens /chat with the conversation of whoever wrote it
+ *  - everything else  → opens the notifications screen
  *
- * Usa `useLastNotificationResponse`, que cubre tanto la app abierta como el
- * arranque en frío (app cerrada). Antes solo había un listener que se montaba
- * DESPUÉS de que el SO ya había entregado el tap, así que en cold start la
- * notificación "no hacía nada".
+ * Uses `useLastNotificationResponse`, which covers both the app already open
+ * and a cold start (app closed). Before, there was only a listener that
+ * mounted AFTER the OS had already delivered the tap, so on cold start the
+ * notification "did nothing".
  */
 export function useNotificationRouting() {
     const router = useRouter();
@@ -31,7 +31,7 @@ export function useNotificationRouting() {
 
     useEffect(() => {
         if (!response) return;
-        // Solo el tap sobre la notificación en sí (no acciones/botones).
+        // Only a tap on the notification itself (not actions/buttons).
         if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
 
         const request = response.notification.request;
@@ -42,8 +42,8 @@ export function useNotificationRouting() {
         const isMessage =
             data.type === "message" || data.table === "messages" || !!data.senderId;
 
-        // Defer pequeño: en cold start este efecto puede correr en el mismo tick
-        // en que el navegador aún está montando la primera pantalla.
+        // Small defer: on cold start this effect can run in the same tick in
+        // which the navigator is still mounting the first screen.
         const t = setTimeout(() => {
             try {
                 if (isMessage && data.senderId) {

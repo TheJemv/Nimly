@@ -12,20 +12,20 @@ import { promptReportReason } from "@/utils/moderation";
 import { buildVideoSource } from "@/utils/videoSource";
 import type { VideoSource } from "expo-video";
 
-/** Extrae el path dentro del bucket 'media' de un valor que puede venir como
- *  path desnudo ("userId/file.jpg") o como URL completa (.../media/userId/file.jpg). */
+/** Extracts the path inside the 'media' bucket from a value that may come as a
+ *  bare path ("userId/file.jpg") or a full URL (.../media/userId/file.jpg). */
 const toStoragePath = (value: string): string => {
     const marker = "/media/";
     const i = value.lastIndexOf(marker);
     return i >= 0 ? value.slice(i + marker.length) : value;
 };
 
-// La columna `type` de posts nunca se guardaba bien para video (createPost
-// no la seteaba), así que no es confiable — detectamos por extensión del
-// archivo en vez de por esa columna. Cubre .mov (lo que graba la cámara en
-// iOS) y .mp4/.m4v (lo que puede venir de la librería).
-// Exportado: el feed (home) también lo necesita para decidir qué post-video
-// es "el más visible" sin duplicar la regex.
+// The posts `type` column was never saved correctly for video (createPost
+// didn't set it), so it's unreliable — we detect by file extension instead
+// of that column. Covers .mov (what the iOS camera records) and .mp4/.m4v
+// (what may come from the library).
+// Exported: the feed (home) also needs it to decide which video-post is
+// "the most visible" without duplicating the regex.
 export const isVideoPath = (path: string): boolean => /\.(mp4|mov|m4v|avi|webm)$/i.test(path);
 
 //  useLike / usePost
@@ -51,8 +51,8 @@ export function usePost(post: any, onDelete?: () => void) {
         }
     };
 
-    // Doble-tap sobre la imagen (estilo Instagram): SOLO da like, nunca lo
-    // quita — si ya tenía like, el doble-tap no debe des-likearlo.
+    // Double-tap on the image (Instagram style): ONLY likes, never unlikes
+    // — if it was already liked, double-tap must not unlike it.
     const handleDoubleTapLike = () => {
         if (!isLiked) handleLike();
     };
@@ -78,10 +78,10 @@ export function usePost(post: any, onDelete?: () => void) {
 
     const [mediaUrl, setMediaUrl] = useState<string | null>(null);
 
-    // Streaming HLS: si el post ya está transcodeado ('ready') servimos el
-    // playlist autenticado por el media API; si no, el MP4 de abajo.
-    // Si el player revienta con HLS (endpoint caído, signed URL vencida a
-    // mitad) -> hlsFailed y caemos al MP4 sin romper el post.
+    // HLS streaming: if the post is already transcoded ('ready') we serve
+    // the playlist authenticated via the media API; otherwise the MP4 below.
+    // If the player blows up with HLS (endpoint down, signed URL expired
+    // mid-stream) -> hlsFailed and we fall back to the MP4 without breaking the post.
     const [hlsFailed, setHlsFailed] = useState(false);
     useEffect(() => { setHlsFailed(false); }, [post.id, post.playback_status]);
 
@@ -89,14 +89,14 @@ export function usePost(post: any, onDelete?: () => void) {
         if (post.playback_status === 'ready') setHlsFailed(true);
     }, [post.playback_status]);
 
-    // Media del bucket 'media' resuelto vía caché en disco (mediaCache):
-    // 1ª vista descarga + firma; siguientes = `file://` local, cero red.
-    // Si el caché falla degrada a la URL remota (o null).
+    // Media from the 'media' bucket resolved via disk cache (mediaCache):
+    // 1st view downloads + signs; subsequent ones = local `file://`, zero network.
+    // If the cache fails it degrades to the remote URL (or null).
     //
-    // OJO: para un video con HLS listo y sin fallo NO tocamos el MP4 — son
-    // decenas de MB y el tubo del server es de 10 Mbps. Solo lo resolvemos si
-    // de verdad se va a reproducir: imagen, video sin HLS ('raw'/'error'), o
-    // después de que el HLS reviente (hlsFailed).
+    // NOTE: for a video with HLS ready and no failure we do NOT touch the
+    // MP4 — those are tens of MB and the server's pipe is 10 Mbps. We only
+    // resolve it if it's actually going to play: image, video without HLS
+    // ('raw'/'error'), or after the HLS blows up (hlsFailed).
     useEffect(() => {
         let active = true;
         if (!post.media_url) { setMediaUrl(null); return; }
@@ -131,7 +131,7 @@ export function usePost(post: any, onDelete?: () => void) {
     const handleDelete = () => {
         const performDelete = async () => {
             try {
-                // 🟢 CORREGIDO: Pasamos post.media_url para que borre el archivo correcto del storage
+                // FIXED: we pass post.media_url so it deletes the correct file from storage
                 await deletePost(post.id, isMedia ? post.media_url : null);
                 if (onDelete) onDelete();
             } catch {
@@ -203,7 +203,7 @@ export function usePost(post: any, onDelete?: () => void) {
         );
     };
 
-    // Menú de moderación del botón "⚠️" en posts ajenos.
+    // Moderation menu for the "⚠️" button on other people's posts.
     const handleReportPost = (postId: string) => {
         const authorLabel = `@${post.username || 'user'}`;
         if (Platform.OS === 'ios') {

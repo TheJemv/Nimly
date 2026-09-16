@@ -134,22 +134,23 @@ export default function StoryViewerModal({
 
     const { isViewsSheetOpen, sheetAnim, openViewsSheet, closeViewsSheet, resetSheet } = useViewsSheet();
 
-    // Streaming HLS para el video de la story: si ya está transcodeada
-    // ('ready') servimos el playlist autenticado por el media API; si no, el
-    // signed URL del MP4 (currentStory.media_url) como siempre. Si el player
-    // revienta con HLS -> storyHlsFailed y caemos al MP4 sin saltar la story.
+    // HLS streaming for the story's video: if it's already transcoded
+    // ('ready') we serve the playlist authenticated via the media API;
+    // otherwise the MP4 signed URL (currentStory.media_url) as always. If
+    // the player blows up with HLS -> storyHlsFailed and we fall back to the
+    // MP4 without skipping the story.
     const { session } = useAuth();
     const [storyHlsFailed, setStoryHlsFailed] = useState(false);
     useEffect(() => { setStoryHlsFailed(false); }, [currentStory?.id]);
 
-    // Media de la story resuelto vía caché en disco (mediaCache) por el path
-    // desnudo: 1ª vista descarga + firma, siguientes = `file://` local, cero
-    // red. Si el caché falla degrada a la URL remota (o al path, que el player
-    // ignorará).
+    // Story media resolved via disk cache (mediaCache) by the bare path:
+    // 1st view downloads + signs, subsequent ones = local `file://`, zero
+    // network. If the cache fails it degrades to the remote URL (or to the
+    // path, which the player will ignore).
     //
-    // Igual que en los posts: si es video con HLS listo y sin fallo NO tocamos
-    // el MP4 (ancho de banda). Solo lo resolvemos para imagen, video sin HLS
-    // ('raw'/'error') o tras storyHlsFailed.
+    // Same as with posts: if it's a video with HLS ready and no failure we
+    // do NOT touch the MP4 (bandwidth). We only resolve it for images, video
+    // without HLS ('raw'/'error'), or after storyHlsFailed.
     const storyMediaKey = currentStory?.media_path || currentStory?.media_url || null;
     const storyNeedsMp4 =
         currentStory?.media_type !== 'video' ||
@@ -185,7 +186,7 @@ export default function StoryViewerModal({
     const handleStoryVideoError = () => {
         if (currentStory?.playback_status === 'ready' && !storyHlsFailed) {
             setStoryHlsFailed(true);
-            return true; // manejado: no saltar a la siguiente story
+            return true; // handled: don't skip to the next story
         }
         return false;
     };
@@ -198,11 +199,11 @@ export default function StoryViewerModal({
         }
     );
 
-    // dev-only: log de segmentos HLS a medida que entran al buffer.
+    // dev-only: logs HLS segments as they enter the buffer.
     useHlsSegmentLog(videoPlayer, storyVideoSource, `story:${String(currentStory?.id ?? "?").slice(0, 8)}`);
 
-    // Primer frame de la story de video: se pinta mientras carga en lugar del
-    // fondo negro. Cacheado por id, así al volver atrás/adelante sale al instante.
+    // First frame of the video story: painted while it loads instead of the
+    // black background. Cached by id, so going back/forward shows it instantly.
     const storyPoster = useVideoPoster(isVideo ? videoPlayer : null, currentStory?.id);
 
     const {
@@ -275,9 +276,9 @@ export default function StoryViewerModal({
 
     const handleClose = () => {
         resetTimer();
-        // expo-video puede haber liberado el player nativo (fin de historias /
-        // desmontaje): la llamada lanza NotFoundException si no se protege.
-        try { if (isVideo && videoPlayer) videoPlayer.pause(); } catch { /* player liberado */ }
+        // expo-video may have released the native player (end of stories /
+        // unmount): the call throws NotFoundException if not guarded.
+        try { if (isVideo && videoPlayer) videoPlayer.pause(); } catch { /* player released */ }
         resetSheet();
         onClose();
     };
@@ -287,7 +288,7 @@ export default function StoryViewerModal({
     const reportedStoryIdsRef = useRef<Set<string>>(new Set());
     const isReportingRef = useRef(false);
 
-    // --- ANIMACIÓN PARA DESLIZAR Y CERRAR ---
+    // --- SWIPE-TO-CLOSE ANIMATION ---
     const panY = useAnimatedValue(0)
     const isViewsSheetOpenRef = useRef(isViewsSheetOpen);
     useEffect(() => {
@@ -566,10 +567,10 @@ export default function StoryViewerModal({
                                 </TouchableOpacity>
                             </View>
                         ) : (
-                            // ScrollView (scroll activo, sólo acotado por maxHeight)
-                            // para que keyboardShouldPersistTaps surta efecto: sin
-                            // esto el primer tap al botón se lo come el cierre del
-                            // teclado. Ver facebook/react-native#28871.
+                            // ScrollView (active scroll, only capped by maxHeight)
+                            // so keyboardShouldPersistTaps takes effect: without
+                            // this, the first tap on the button gets eaten by the
+                            // keyboard closing. See facebook/react-native#28871.
                             <ScrollView
                                 style={styles.replyRowScroll}
                                 contentContainerStyle={styles.actionsContainer}
@@ -594,8 +595,8 @@ export default function StoryViewerModal({
                                 />
 
                                 {replyTextStory ? (
-                                    // onPressIn (no onPress): fallback extra por si
-                                    // el tap se pierde al cerrarse el teclado.
+                                    // onPressIn (not onPress): extra fallback in
+                                    // case the tap gets lost when the keyboard closes.
                                     <TouchableOpacity disabled={loadingReplyStory} onPressIn={handleReplyStory} hitSlop={8} style={styles.likeButton} activeOpacity={0.8}>
                                         {loadingReplyStory ? (
                                             <ActivityIndicator color={getThemeColor("tint")} />
@@ -629,9 +630,9 @@ export default function StoryViewerModal({
                             <View style={styles.sheetHandle} />
 
                             <View style={styles.sheetHeader}>
-                                <Text style={styles.sheetTitle}>Espectadores</Text>
+                                <Text style={styles.sheetTitle}>Viewers</Text>
                                 <Text style={styles.sheetSubTitle}>
-                                    {currentStory.views_count || 0} personas vieron tu historia
+                                    {currentStory.views_count || 0} people viewed your story
                                 </Text>
                             </View>
 
@@ -656,7 +657,7 @@ export default function StoryViewerModal({
                                 ListEmptyComponent={
                                     <View style={styles.emptyContainer}>
                                         <SymbolView name="eye.slash" size={36} tintColor="rgba(255,255,255,0.3)" />
-                                        <Text style={styles.emptyText}>Aún no hay vistas</Text>
+                                        <Text style={styles.emptyText}>No views yet</Text>
                                     </View>
                                 }
                             />

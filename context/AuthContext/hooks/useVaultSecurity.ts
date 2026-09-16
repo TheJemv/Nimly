@@ -17,24 +17,25 @@ import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
-// 'device_locked'   → la cuenta ya está activa en OTRO dispositivo.
-// 'needs_passcode'  → hay identidad usable aquí pero falta el PIN de 6 dígitos
-//                     en ESTE dispositivo (primer login / takeover con password).
-// 'locked_timeout'  → hay PIN, pero pasaron >12h desde el último desbloqueo.
+// 'device_locked'   → the account is already active on ANOTHER device.
+// 'needs_passcode'  → there's a usable identity here but the 6-digit PIN is
+//                     missing on THIS device (first login / takeover with password).
+// 'locked_timeout'  → there's a PIN, but >12h have passed since the last unlock.
 export type VaultState = 'loading' | 'device_locked' | 'needs_passcode' | 'locked_timeout' | VaultIdentityState;
 
 export type PasscodeResult = { ok: true } | { ok: false; message: string };
 
-/** Cada cuánto la app vuelve a pedir el passcode. */
+/** How often the app asks for the passcode again. */
 const AUTO_LOCK_MS = 12 * 60 * 60 * 1000;
 
 const DEVICE_ID_STORE = 'nimly_device_id';
 
 /**
- * Identificador estable de este dispositivo: un UUID generado UNA vez y guardado
- * en el Keychain. No usar nada derivado de Device.* (modelo, nombre, build del SO):
- * `osInternalBuildId` en particular es la build de iOS, no del hardware — cambia
- * solo con cada actualización del sistema y eso bloqueaba dispositivos legítimos.
+ * Stable identifier for this device: a UUID generated ONCE and stored in the
+ * Keychain. Don't use anything derived from Device.* (model, name, OS build):
+ * `osInternalBuildId` in particular is the iOS build, not the hardware's — it
+ * changes only with each system update, and that was locking out legitimate
+ * devices.
  */
 const getDeviceId = async (): Promise<string> => {
     let id = await SecureStore.getItemAsync(DEVICE_ID_STORE);
@@ -48,14 +49,14 @@ const getDeviceId = async (): Promise<string> => {
 export function useVaultSecurity() {
     const [vaultState, setVaultState] = useState<VaultState>('loading');
 
-    // Evita que checkSession y onAuthStateChange corran el setup a la vez.
+    // Prevents checkSession and onAuthStateChange from running setup at the same time.
     const setupInFlight = useRef<Promise<VaultState> | null>(null);
-    // Canal de realtime que vigila que nadie más reclame la cuenta.
+    // Realtime channel that watches for anyone else claiming the account.
     const securityChannelRef = useRef<any>(null);
-    // userId cuyo "device lock" tenemos tomado (para soltarlo al cerrar sesión).
+    // userId whose "device lock" we hold (to release it on sign-out).
     const ownedUserIdRef = useRef<string | null>(null);
-    // Evita que un runSetup disparado por el SIGNED_IN del re-login pise el
-    // "force takeover" en curso.
+    // Prevents a runSetup triggered by the re-login's SIGNED_IN from stepping on
+    // an in-progress "force takeover".
     const takeoverInFlightRef = useRef(false);
 
     const handleRemoteTakeover = async () => {
@@ -82,7 +83,7 @@ export function useVaultSecurity() {
             .subscribe();
     };
 
-    /** Marca este dispositivo como el activo de la cuenta y vigila cambios. */
+    /** Marks this device as the account's active one and watches for changes. */
     const claimDevice = async (userId: string) => {
         const myDeviceId = await getDeviceId();
         try {
@@ -98,7 +99,7 @@ export function useVaultSecurity() {
         }
     };
 
-    /** Suelta el lock del servidor SOLO si aún es nuestro (no pisamos a otro equipo). */
+    /** Releases the server lock ONLY if it's still ours (avoids stepping on another device). */
     const releaseDevice = async () => {
         const userId = ownedUserIdRef.current;
         ownedUserIdRef.current = null;
@@ -125,10 +126,10 @@ export function useVaultSecurity() {
     }, []);
 
     /**
-     * Bóveda usable aquí → 'ready', salvo que:
-     *  - falte el PIN local en este dispositivo → 'needs_passcode'
-     *  - hayan pasado >12h desde el último desbloqueo → 'locked_timeout'
-     * Todo local: no necesita red.
+     * Vault usable here → 'ready', unless:
+     *  - the local PIN is missing on this device → 'needs_passcode'
+     *  - >12h have passed since the last unlock → 'locked_timeout'
+     * All local: no network needed.
      */
     const finishReady = async (): Promise<VaultState> => {
         let next: VaultState = 'ready';
@@ -139,7 +140,7 @@ export function useVaultSecurity() {
                 const last = await vaultPasscode.lastUnlockAt();
                 if (!last || Date.now() - last > AUTO_LOCK_MS) next = 'locked_timeout';
             }
-        } catch { /* ante la duda, dejamos pasar */ }
+        } catch { /* when in doubt, let it through */ }
         setVaultState(next);
         return next;
     };
@@ -153,25 +154,25 @@ export function useVaultSecurity() {
             const storedOwnerId = await SecureStore.getItemAsync(OWNER_ID_STORE);
             let localPrivateKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORE);
 
-            // Cambio de cuenta: las llaves del usuario anterior no sirven aquí.
+            // Account switch: the previous user's keys don't work here.
             if (storedOwnerId && storedOwnerId !== currentUserId) {
                 await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
                 await identityRotation.clear();
                 localPrivateKey = null;
             }
 
-            // Ya tenemos la llave privada de ESTE usuario en ESTE dispositivo: eso
-            // ya es la prueba de legitimidad. Reclamamos directo, sin comparar contra
-            // el fingerprint guardado en el servidor — ese fingerprint puede haber
-            // quedado desactualizado (p. ej. cambió algo del sistema) y no debe poder
-            // bloquear a un dispositivo que ya tiene las llaves correctas.
+            // We already have THIS user's private key on THIS device: that's
+            // already proof of legitimacy. We claim it directly, without comparing
+            // against the fingerprint stored on the server — that fingerprint may
+            // have gone stale (e.g. something in the system changed) and it
+            // shouldn't be able to block a device that already has the right keys.
             if (localPrivateKey && storedOwnerId === currentUserId) {
                 await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
                 await claimDevice(currentUserId);
                 return finishReady();
             }
 
-            // Sin llave local: sí importa qué dispositivo tiene la cuenta según el servidor.
+            // No local key: it does matter which device the server says has the account.
             const myDeviceId = await getDeviceId();
             const { data: profile } = await supabase
                 .from('profiles')
@@ -182,21 +183,21 @@ export function useVaultSecurity() {
             const lockedTo = profile?.current_device_id ?? null;
             const heldByAnotherDevice = !!lockedTo && lockedTo !== myDeviceId;
 
-            // BLOQUEO DURO: otro dispositivo tiene la cuenta.
+            // HARD LOCK: another device has the account.
             if (heldByAnotherDevice) {
                 setVaultState('device_locked');
                 return 'device_locked';
             }
 
-            // Libre, pero ¿el servidor ya tenía una identidad?
+            // Free, but did the server already have an identity?
             if (profile?.public_key) {
-                // Migración legítima (el otro dispositivo cerró sesión / se perdió):
-                // requiere confirmación explícita porque se pierde el historial.
+                // Legitimate migration (the other device signed out / was lost):
+                // requires explicit confirmation because history is lost.
                 setVaultState('needs_new_identity');
                 return 'needs_new_identity';
             }
 
-            // Primera identidad de la cuenta.
+            // First identity for the account.
             await vaultIdentity.generateIdentity();
             await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
             await claimDevice(currentUserId);
@@ -218,8 +219,8 @@ export function useVaultSecurity() {
     }, [runSetup]);
 
     /**
-     * Migración: dispositivo sin llaves y cuenta libre. Crea identidad nueva
-     * (el historial cifrado anterior queda ilegible) y reclama el dispositivo.
+     * Migration: device without keys and a free account. Creates a new identity
+     * (the previous encrypted history becomes unreadable) and claims the device.
      */
     const confirmNewIdentity = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -231,7 +232,7 @@ export function useVaultSecurity() {
         await finishReady();
     }, []);
 
-    /** Crea el PIN de 6 dígitos (servidor + local) y desbloquea la app. */
+    /** Creates the 6-digit PIN (server + local) and unlocks the app. */
     const createPasscode = useCallback(async (code: string): Promise<PasscodeResult> => {
         if (!/^\d{6}$/.test(code)) return { ok: false, message: 'Enter 6 digits.' };
         try {
@@ -246,7 +247,7 @@ export function useVaultSecurity() {
         }
     }, []);
 
-    /** Desbloqueo periódico (12h): se valida contra el hash LOCAL, sin red. */
+    /** Periodic unlock (12h): validated against the LOCAL hash, no network. */
     const unlockWithPasscode = useCallback(async (code: string): Promise<PasscodeResult> => {
         if (!/^\d{6}$/.test(code)) return { ok: false, message: 'Enter 6 digits.' };
         const ok = await vaultPasscode.verifyLocal(code);
@@ -256,9 +257,9 @@ export function useVaultSecurity() {
         return { ok: true };
     }, []);
 
-    // Núcleo compartido: libera el lock del servidor y toma el control aquí con
-    // una identidad NUEVA (el historial cifrado anterior queda ilegible).
-    // Si viene `localPasscode`, lo guarda para el auto-lock antes de resolver.
+    // Shared core: releases the server lock and takes control here with a NEW
+    // identity (the previous encrypted history becomes unreadable).
+    // If `localPasscode` is given, it's saved for the auto-lock before resolving.
     const doTakeover = async (userId: string, localPasscode?: string): Promise<PasscodeResult> => {
         takeoverInFlightRef.current = true;
         try {
@@ -281,7 +282,7 @@ export function useVaultSecurity() {
         }
     };
 
-    /** Takeover con el PIN de 6 dígitos (camino principal). */
+    /** Takeover with the 6-digit PIN (main path). */
     const takeoverWithPasscode = useCallback(async (code: string): Promise<PasscodeResult> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { ok: false, message: 'Could not verify your account.' };
@@ -297,7 +298,7 @@ export function useVaultSecurity() {
         return doTakeover(user.id, code);
     }, []);
 
-    /** Fallback: takeover con la contraseña de la cuenta ("olvidé mi passcode"). */
+    /** Fallback: takeover with the account password ("I forgot my passcode"). */
     const forceTakeover = useCallback(async (password: string): Promise<PasscodeResult> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.email) return { ok: false, message: 'Could not verify your account.' };
@@ -321,8 +322,8 @@ export function useVaultSecurity() {
         setVaultState('loading');
     };
 
-    // Auto-lock: al volver a primer plano, si la bóveda estaba lista y pasaron
-    // >12h desde el último desbloqueo, exige el PIN otra vez.
+    // Auto-lock: when returning to the foreground, if the vault was ready and
+    // >12h have passed since the last unlock, require the PIN again.
     useAppForeground(() => {
         if (vaultState !== 'ready') return;
         (async () => {

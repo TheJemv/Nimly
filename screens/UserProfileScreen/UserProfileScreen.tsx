@@ -29,7 +29,7 @@ export default function UserProfileScreen() {
     const success = getThemeColor('success');
     const warning = getThemeColor('warning');
 
-    // Parsear de inmediato el objeto user que vino por los parámetros de la ruta
+    // Immediately parse the user object that came through the route params
     const routeUser = useMemo(() => {
         if (!userParam) return null;
         try {
@@ -44,7 +44,7 @@ export default function UserProfileScreen() {
         loading, refreshing, onRefresh, refetch,
     } = useUserProfileData(id);
 
-    // Priorizamos la base de datos pero usamos los datos del route de forma instantánea
+    // We prioritize the database but use the route data instantly in the meantime
     const displayUsername = profile?.username || routeUser?.username;
     const displayAvatarUrl = profile?.avatar_url || routeUser?.avatar_url;
     const displayAvatarConfig = profile?.avatar_config || routeUser?.avatar_config;
@@ -132,7 +132,7 @@ export default function UserProfileScreen() {
                                 <ZoomableAvatar avatar_url={displayAvatarUrl} avatar_config={displayAvatarConfig} size={94} />
                             </View>
 
-                            {/* Solo muestra los stats cuando ya terminó de cargar */}
+                            {/* Only show the stats once loading has finished */}
                             {isAccepted && !loading && (
                                 <View style={styles.statsRow}>
                                     <View style={styles.statItem}>
@@ -164,7 +164,7 @@ export default function UserProfileScreen() {
                         </View>
                     </View>
 
-                    {/* 🛡️ BLOQUEO DE CARGA: Si está cargando, mostramos un loader limpio en lugar de "Connect to Vault" */}
+                    {/* 🛡️ LOADING GUARD: If it's loading, show a clean loader instead of "Connect to Vault" */}
                     {loading ? (
                         <View style={{ paddingVertical: 60, alignItems: 'center' }}>
                             <ActivityIndicator color={accent} size="large" />

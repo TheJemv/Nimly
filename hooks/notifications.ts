@@ -4,10 +4,10 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Sin handler, expo-notifications NO muestra la notificación cuando la app está
-// en primer plano: al usuario le llegaba el mensaje "en silencio" y parecía que
-// las notificaciones no funcionaban. Con esto se ve el banner igual que en
-// segundo plano.
+// Without a handler, expo-notifications does NOT show the notification when the
+// app is in the foreground: the user would receive the message "silently" and
+// it looked like notifications weren't working. This makes the banner show
+// just like it does in the background.
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowBanner: true,
@@ -22,11 +22,11 @@ const projectId =
     Constants.easConfig?.projectId;
 
 /**
- * Pide permiso de notificaciones, registra el Expo push token y lo guarda en el
- * perfil del usuario. Debe llamarse solo cuando hay sesión iniciada.
+ * Requests notification permission, registers the Expo push token, and saves
+ * it in the user's profile. Must only be called when there's an active session.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
-    // Canal por defecto en Android (obligatorio para que se muestren).
+    // Default channel on Android (required for notifications to show).
     if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
             name: 'default',

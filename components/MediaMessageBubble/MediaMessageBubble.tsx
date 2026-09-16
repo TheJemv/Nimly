@@ -20,11 +20,11 @@ interface Props {
     isViewOnce: boolean;
     isMine: boolean;
     onLocked?: () => void;
-    /** Long-press en la burbuja → responder a este mensaje. */
+    /** Long-press on the bubble → reply to this message. */
     onRequestReply?: () => void;
 }
 
-/** El sufijo antes de `.vault` (ver useChatMedia) indica el tipo. */
+/** The suffix before `.vault` (see useChatMedia) indicates the type. */
 const isVideoPath = (p: string) => /\.mp4(\.vault)?$/i.test(p);
 
 export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOnce, isMine, onLocked, onRequestReply }: Props) {
@@ -37,7 +37,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     const [isLocked, setIsLocked] = useState(vaultRAMCache[filePath] === 'LOCKED_CAPSULE');
     const [wasConsumed, setWasConsumed] = useState(false);
 
-    // Preview en línea del video (primer frame, sin sonido, en pausa).
+    // Inline video preview (first frame, muted, paused).
     const previewPlayer = useVideoPlayer(isVideo && mediaUri ? mediaUri : null, (p) => {
         p.muted = true;
         p.loop = false;
@@ -58,9 +58,10 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         return () => { isMounted = false; };
     }, [filePath, isViewOnce]);
 
-    // Path determinista del .mp4 plaintext en disco. El plaintext-at-rest para
-    // video ya es comportamiento actual e inevitable (expo-video no descifra al
-    // vuelo); lo que evitamos ahora es RE-descargar + RE-descifrar si ya existe.
+    // Deterministic path for the plaintext .mp4 on disk. Plaintext-at-rest for
+    // video is already current, unavoidable behavior (expo-video can't decrypt
+    // on the fly); what we're avoiding now is RE-downloading + RE-decrypting if
+    // it already exists.
     const localVideoTarget = (): string => {
         const safe = filePath.replace(/[^a-z0-9]/gi, '_');
         return `${FileSystem.cacheDirectory}nimly_${safe}.mp4`;
@@ -91,8 +92,8 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         try {
             if (isMounted) setIsLoading(true);
 
-            // Video: si el .mp4 plaintext determinista ya existe en disco, reúsalo
-            // — nada de red ni de descifrado.
+            // Video: if the deterministic plaintext .mp4 already exists on disk,
+            // reuse it — no network or decryption needed.
             if (isVideo) {
                 try {
                     const target = localVideoTarget();
@@ -106,13 +107,14 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                         return;
                     }
                 } catch {
-                    /* sigue al camino normal */
+                    /* fall through to the normal path */
                 }
             }
 
-            // Caché del CIFRADO en disco: 1ª vez descarga + guarda, siguientes lo
-            // lee de `file://` sin red. NUNCA se cachea el plaintext aquí.
-            // View-once: `persist: false` -> no se escribe a disco.
+            // Disk cache of the ENCRYPTED data: first time downloads + saves,
+            // subsequent times it reads it from `file://` with no network. The
+            // plaintext is NEVER cached here.
+            // View-once: `persist: false` -> nothing gets written to disk.
             const encryptedText = await getCachedEncryptedText('chat-media', filePath, 60, {
                 persist: !isViewOnce,
             });

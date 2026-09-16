@@ -62,7 +62,7 @@ export default function SearchScreen() {
         [results, isBlocked, blockedIds],
     );
 
-    // 1. Obtener el ID del usuario actual al montar el componente
+    // 1. Get the current user's ID when the component mounts
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             setCurrentUserId(data.user?.id || null);
@@ -89,7 +89,7 @@ export default function SearchScreen() {
                 .select('id, username, avatar_config')
                 .ilike('username', `%${searchQuery}%`);
 
-            // 2. FILTRAR: No incluirme a mí mismo en los resultados
+            // 2. FILTER: Don't include myself in the results
             if (currentUserId) {
                 query = query.neq('id', currentUserId);
             }
@@ -119,8 +119,8 @@ export default function SearchScreen() {
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             autoCapitalize="none"
-                            autoCorrect={false}       // Desactiva el autocorrector de palabras en iOS/Android
-                            spellCheck={false}        // Quita la línea roja que marca "errores" ortográficos
+                            autoCorrect={false}       // Disables word autocorrect on iOS/Android
+                            spellCheck={false}        // Removes the red underline that flags spelling "errors"
                             selectionColor={accent}
                         />
                     </View>

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-// Definimos el tipo basado en tu ENUM de SQL para tener autocompletado
+// Define the type based on your SQL ENUM to get autocomplete
 export type ReportReason =
     | 'spam'
     | 'harassment'
@@ -18,12 +18,13 @@ interface ReportParams {
 
 export const reportsApi = {
     /**
-     * Envía un reporte a la bóveda de moderación.
-     * Solo puede llevar UNO de: targetUserId, targetPostId, o targetStoryId.
+     * Sends a report to the moderation vault.
+     * Can only carry ONE of: targetUserId, targetPostId, or targetStoryId.
      */
     /**
-     * Inserta un reporte. Lanza `Error("AlreadyReported")` si ya existía uno igual,
-     * o el error original en cualquier otro fallo. La UI decide qué mostrar.
+     * Inserts a report. Throws `Error("AlreadyReported")` if an identical one
+     * already existed, or the original error on any other failure. The UI
+     * decides what to display.
      */
     async submitReport({ targetUserId, targetPostId, targetStoryId, reason, details }: ReportParams) {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -43,7 +44,7 @@ export const reportsApi = {
             });
 
         if (error) {
-            // 23505: violación de unicidad → ya lo había reportado.
+            // 23505: uniqueness violation → had already reported this.
             if (error.code === '23505') throw new Error("AlreadyReported");
             throw error;
         }

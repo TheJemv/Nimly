@@ -43,8 +43,8 @@ export default function LoginScreen() {
         });
 
         if (error) {
-            // Diferencia credenciales incorrectas de un fallo real de backend/red,
-            // pero sin volcar detalles internos (ni URLs) al usuario.
+            // Distinguishes wrong credentials from an actual backend/network failure,
+            // without dumping internal details (or URLs) to the user.
             const status = (error as any)?.status;
             const msg = status === 400
                 ? 'Invalid username or password'

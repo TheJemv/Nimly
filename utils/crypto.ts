@@ -7,19 +7,19 @@ import { decodeBase64, encodeBase64 } from 'tweetnacl-util';
 
 import crypto, { Buffer } from 'react-native-quick-crypto';
 
-// --- MOTOR DE IDENTIDAD ASIMÉTRICA (TRUE E2EE) ---
+// --- ASYMMETRIC IDENTITY ENGINE (TRUE E2EE) ---
 //
-// La llave privada vive ÚNICAMENTE en el Keychain del dispositivo. No hay
-// respaldo: si se pierde (reinstalación / dispositivo nuevo), se crea una
-// identidad nueva y el historial cifrado anterior queda ilegible. La app pide
-// confirmación explícita antes de hacerlo (nunca en silencio).
+// The private key lives ONLY in the device's Keychain. There is no
+// backup: if it's lost (reinstall / new device), a new identity is
+// created and the previous encrypted history becomes unreadable. The app asks
+// for explicit confirmation before doing this (never silently).
 
 export const PRIVATE_KEY_STORE = 'nymly_private_key';
 export const OWNER_ID_STORE = 'nymly_user_id';
 
 export type VaultIdentityState = 'ready' | 'needs_new_identity' | 'needs_setup';
 
-/** Fingerprint corto y legible de una public key (SHA-256 → 16 hex, en grupos). */
+/** Short, human-readable fingerprint of a public key (SHA-256 → 16 hex chars, grouped). */
 export const keyFingerprint = (publicKeyBase64: string | null | undefined): string => {
     if (!publicKeyBase64) return '—';
     try {
@@ -42,8 +42,8 @@ const getOwnProfilePublicKey = async (): Promise<{ userId: string; publicKey: st
 };
 
 /**
- * Sube `public_key` (+ `public_key_updated_at` si la columna existe).
- * Si esa columna aún no está en la BD, reintenta solo con `public_key`.
+ * Uploads `public_key` (+ `public_key_updated_at` if the column exists).
+ * If that column isn't in the DB yet, retries with just `public_key`.
  */
 const publishPublicKey = async (userId: string, publicKey: string): Promise<void> => {
     const withTs = await supabase
@@ -59,8 +59,8 @@ const publishPublicKey = async (userId: string, publicKey: string): Promise<void
 
 export const vaultIdentity = {
     /**
-     * Crea una identidad E2EE NUEVA (par de llaves Curve25519). Guarda la privada
-     * en el Keychain local y publica solo la pública.
+     * Creates a NEW E2EE identity (Curve25519 key pair). Stores the private key
+     * in the local Keychain and publishes only the public key.
      */
     async generateIdentity(): Promise<string> {
         try {
@@ -83,11 +83,11 @@ export const vaultIdentity = {
     },
 
     /**
-     *  - 'ready'             → hay llave privada local válida para el usuario actual.
-     *  - 'needs_new_identity'→ el servidor ya tiene una identidad tuya pero este
-     *                          dispositivo no (reinstalación / dispositivo nuevo).
-     *                          Requiere confirmación explícita para regenerar.
-     *  - 'needs_setup'       → nunca hubo identidad. Se genera directamente.
+     *  - 'ready'              → there's a valid local private key for the current user.
+     *  - 'needs_new_identity' → the server already has an identity of yours but this
+     *                           device doesn't (reinstall / new device).
+     *                           Requires explicit confirmation to regenerate.
+     *  - 'needs_setup'        → there was never an identity. It's generated directly.
      */
     async getIdentityState(): Promise<VaultIdentityState> {
         const { data: { user } } = await supabase.auth.getUser();
@@ -102,8 +102,8 @@ export const vaultIdentity = {
     },
 
     /**
-     * Elección EXPLÍCITA del usuario en un dispositivo sin llaves: descarta el
-     * historial cifrado anterior y crea una identidad nueva.
+     * EXPLICIT user choice on a device with no keys: discards the previous
+     * encrypted history and creates a new identity.
      */
     async createFreshIdentity(): Promise<void> {
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
@@ -112,11 +112,11 @@ export const vaultIdentity = {
     },
 };
 
-// --- SEGUIMIENTO LOCAL DE LLAVES DE CONTACTOS (a prueba de manipulación del server) ---
+// --- LOCAL TRACKING OF CONTACT KEYS (tamper-proof against server manipulation) ---
 //
-// Cada dispositivo recuerda la última public key vista de cada contacto para
-// poder avisar si cambia (equivalente al "safety number changed" de Signal).
-// Son llaves PÚBLICAS → AsyncStorage es suficiente.
+// Each device remembers the last public key seen for each contact so it can
+// warn if it changes (equivalent to Signal's "safety number changed").
+// These are PUBLIC keys → AsyncStorage is sufficient.
 
 const KNOWN_KEYS_STORE = 'nimly_known_pubkeys';
 
@@ -132,8 +132,8 @@ const readKnownKeys = async (): Promise<Record<string, KnownKeyRecord>> => {
 };
 
 export const contactKeys = {
-    /** Registra la public key actual de un contacto. Devuelve si cambió respecto
-     *  a la última conocida en ESTE dispositivo. */
+    /** Records a contact's current public key. Returns whether it changed relative
+     *  to the last one known on THIS device. */
     async record(userId: string, publicKey: string | null): Promise<{
         changed: boolean;
         previousKey: string | null;
@@ -152,10 +152,10 @@ export const contactKeys = {
         all[userId] = { key: publicKey, firstSeenAt: nowIso };
         try {
             await AsyncStorage.setItem(KNOWN_KEYS_STORE, JSON.stringify(all));
-        } catch { /* no crítico */ }
+        } catch { /* not critical */ }
 
         return {
-            changed: Boolean(prev), // solo "cambió" si ya conocíamos una anterior
+            changed: Boolean(prev), // only "changed" if we already knew a previous one
             previousKey: prev?.key ?? null,
             firstSeenAt: nowIso,
         };
@@ -167,43 +167,43 @@ export const contactKeys = {
     },
 };
 
-// --- MOMENTO EN QUE MI IDENTIDAD SE ROTÓ EN ESTE DISPOSITIVO ---
+// --- TIMESTAMP OF WHEN MY IDENTITY WAS ROTATED ON THIS DEVICE ---
 //
-// Tras un cambio de identidad (dispositivo nuevo / "force takeover"), la llave
-// privada anterior desaparece: nada cifrado ANTES de este instante se puede
-// descifrar aquí. El chat usa esta marca para ni siquiera pedir esos mensajes.
+// After an identity change (new device / "force takeover"), the previous
+// private key disappears: nothing encrypted BEFORE this instant can be
+// decrypted here. Chat uses this marker to avoid even requesting those messages.
 
 const IDENTITY_ROTATED_STORE = 'nimly_identity_rotated_at';
 
 export const identityRotation = {
     async markRotated(): Promise<void> {
-        try { await AsyncStorage.setItem(IDENTITY_ROTATED_STORE, new Date().toISOString()); } catch { /* no crítico */ }
+        try { await AsyncStorage.setItem(IDENTITY_ROTATED_STORE, new Date().toISOString()); } catch { /* not critical */ }
     },
     async rotatedAt(): Promise<string | null> {
         try { return await AsyncStorage.getItem(IDENTITY_ROTATED_STORE); } catch { return null; }
     },
     async clear(): Promise<void> {
-        try { await AsyncStorage.removeItem(IDENTITY_ROTATED_STORE); } catch { /* no crítico */ }
+        try { await AsyncStorage.removeItem(IDENTITY_ROTATED_STORE); } catch { /* not critical */ }
     },
 };
 
-// --- CREADOR DE LLAVE COMPARTIDA (DIFFIE-HELLMAN) ---
-// Mezcla mi llave privada con la pública de mi amigo para crear el secreto ECDH
-// (Curve25519) que solo ambos pueden calcular.
+// --- SHARED KEY CREATOR (DIFFIE-HELLMAN) ---
+// Mixes my private key with my friend's public key to create the ECDH secret
+// (Curve25519) that only both of us can compute.
 //
-// El secreto por contacto es SIEMPRE el mismo, así que lo cacheamos: recalcular
-// `nacl.box.before` (~1-2 ms JS) + leer SecureStore en disco por cada mensaje
-// hacía que descifrar una página entera trabara el scroll.
+// The per-contact secret is ALWAYS the same, so we cache it: recomputing
+// `nacl.box.before` (~1-2 ms JS) + reading SecureStore from disk for every
+// message made decrypting a whole page cause the scroll to stutter.
 const sharedSecretCache = new Map<string, Uint8Array>();
 
-/** Vacía la caché de secretos ECDH (al cerrar sesión / rotar identidad). */
+/** Clears the ECDH secret cache (on logout / identity rotation). */
 export const purgeSharedSecrets = () => sharedSecretCache.clear();
 
 const getSharedSecret = async (friendPublicKeyBase64: string): Promise<Uint8Array> => {
     if (!friendPublicKeyBase64) {
         throw new Error("No public key provided");
     }
-    // Una llave E2EE es base64 de 32 bytes (~44 chars). Un UUID legacy trae guiones.
+    // An E2EE key is base64 of 32 bytes (~44 chars). A legacy UUID has dashes.
     if (friendPublicKeyBase64.includes('-')) {
         throw new Error("Legacy UUID detected. Not a valid E2EE key.");
     }
@@ -227,12 +227,12 @@ const getSharedSecret = async (friendPublicKeyBase64: string): Promise<Uint8Arra
     }
 };
 
-// --- MOTOR DE CRIPTOGRAFÍA ---
+// --- CRYPTOGRAPHY ENGINE ---
 //
-// Formato v2 (actual): AES-256-GCM con integridad + HKDF-SHA256(secreto, salt).
-//   packet = "v2:<salt>:<iv>:<tag>:<ciphertext>"  (todo hex)
-// Formato legacy (solo lectura): AES-256-CBC sin autenticación, llave = SHA256(base64(secreto)).
-//   packet = "<salt>:<iv>:<ciphertext>"  (el salt nunca se usaba)
+// Format v2 (current): AES-256-GCM with integrity + HKDF-SHA256(secret, salt).
+//   packet = "v2:<salt>:<iv>:<tag>:<ciphertext>"  (all hex)
+// Legacy format (read-only): AES-256-CBC without authentication, key = SHA256(base64(secret)).
+//   packet = "<salt>:<iv>:<ciphertext>"  (the salt was never actually used)
 
 const HKDF_INFO = Buffer.from('nimly/vault/message/v2', 'utf8');
 
@@ -241,7 +241,7 @@ const deriveMessageKey = (sharedSecret: Uint8Array, salt: Buffer): Buffer =>
 
 const encryptV2 = (plainText: string, sharedSecret: Uint8Array): string => {
     const salt = crypto.randomBytes(16);
-    const iv = crypto.randomBytes(12); // GCM: nonce de 96 bits
+    const iv = crypto.randomBytes(12); // GCM: 96-bit nonce
     const key = deriveMessageKey(sharedSecret, salt);
 
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -258,7 +258,7 @@ const decryptV2 = (packet: string, sharedSecret: Uint8Array): string => {
 
     const key = deriveMessageKey(sharedSecret, Buffer.from(saltHex, 'hex'));
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex')); // falla si el mensaje fue manipulado
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex')); // fails if the message was tampered with
 
     let pt = decipher.update(ct, 'hex', 'utf8');
     pt += decipher.final('utf8');
@@ -309,19 +309,19 @@ export const vaultCrypto = {
             if (packet.startsWith('v2:')) return decryptV2(packet, secret);
             if (packet.split(':').length === 3) return decryptLegacyCbc(packet, secret);
 
-            return packet; // texto plano por error de un cliente antiguo
+            return packet; // plaintext due to an old client bug
         } catch {
             return "🔒 One-time photo";
         }
     }
 };
 
-// --- CONTROL DE MEMORIA RAM (CACHÉ) ---
+// --- RAM MEMORY CONTROL (CACHE) ---
 //
-// Caché en memoria de mensajes/medios ya descifrados. Se accede como un objeto
-// normal (`vaultRAMCache[key]`), pero un Proxy limita el nº de entradas para que
-// no crezca sin control (los data URIs de imágenes pesan). Al superar el tope se
-// descarta la entrada más antigua (FIFO por orden de inserción).
+// In-memory cache of already-decrypted messages/media. Accessed like a
+// normal object (`vaultRAMCache[key]`), but a Proxy caps the number of entries
+// so it doesn't grow unbounded (image data URIs are heavy). Once the cap is
+// exceeded, the oldest entry is evicted (FIFO by insertion order).
 const MAX_CACHE_ENTRIES = 120;
 const rawVaultCache: { [key: string]: string } = {};
 

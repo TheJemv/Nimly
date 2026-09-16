@@ -51,10 +51,9 @@ export default function HomeScreen() {
    const commentsRef = useRef<BottomSheetModal>(null);
    const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
 
-   // Solo el post-video "más visible" en pantalla reproduce a la vez (estilo
-   // Instagram/TikTok) -- el resto queda en pausa. El mute es compartido por
-   // todo el feed: desmutear uno los deja desmuteados a todos según van
-   // entrando en pantalla.
+   // Only the "most visible" video post on screen plays at a time (Instagram/
+   // TikTok style) -- the rest stay paused. Mute is shared across the whole
+   // feed: unmuting one leaves all of them unmuted as they come into view.
    const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
    const [feedMuted, setFeedMuted] = useState(true);
    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
@@ -68,7 +67,7 @@ export default function HomeScreen() {
    const loadPosts = useCallback(async (showLoading = true) => {
       if (showLoading) setLoadingPosts(true);
       const userId = session?.user?.id;
-      if (!userId) { setLoadingPosts(false); return; } // sin sesión, no cargamos nada
+      if (!userId) { setLoadingPosts(false); return; } // no session, nothing to load
       try {
          const postsData = await getFriendsPosts(userId);
          setPosts(postsData || []);
@@ -84,9 +83,9 @@ export default function HomeScreen() {
       loadPosts();
    }, [session, loadPosts]);
 
-   // Le avisa al layout raíz que ya puede destapar la app: sin esto, el
-   // splash se quitaba en cuanto auth resolvía y el usuario alcanzaba a ver
-   // los spinners de posts/stories cargando por separado.
+   // Lets the root layout know it can reveal the app: without this, the
+   // splash would disappear as soon as auth resolved, and the user would
+   // briefly see the posts/stories spinners loading separately.
    useEffect(() => {
       if (!loadingPosts && !loadingStories) markHomeReady();
    }, [loadingPosts, loadingStories, markHomeReady]);
@@ -96,7 +95,7 @@ export default function HomeScreen() {
       await Promise.all([loadPosts(false), reloadStories(false)]);
    }, [reloadStories, loadPosts]);
 
-   // Oculta al instante el contenido de usuarios bloqueados (Guideline 1.2).
+   // Instantly hides content from blocked users (Guideline 1.2).
    const visiblePosts = useMemo(
       () => posts.filter((p) => !isBlocked(p.user_id)),
       [posts, isBlocked, blockedIds],
@@ -106,9 +105,9 @@ export default function HomeScreen() {
       [storyGroups, isBlocked, blockedIds],
    );
 
-   // Prefetch: calienta el HLS de los primeros posts-video del feed (permiso +
-   // firma de segmentos + TLS a ambos hosts) para que el primero que veas
-   // arranque sin el cold-start de ~0.8s. Best-effort, 1 vez por post.
+   // Prefetch: warms up HLS for the first video posts in the feed (auth +
+   // segment signing + TLS to both hosts) so the first one you see starts
+   // without the ~0.8s cold-start. Best-effort, once per post.
    useEffect(() => {
       const token = session?.access_token;
       if (!token) return;
@@ -142,9 +141,9 @@ export default function HomeScreen() {
             }}
          />
 
-         {/* Un solo loader para todo el feed: antes salían dos spinners a la
-             vez (uno de stories, otro de posts). Mientras cualquiera de los
-             dos hace su PRIMERA carga, mostramos uno solo, centrado. */}
+         {/* A single loader for the whole feed: before, two spinners showed at
+             once (one for stories, one for posts). While either one is doing
+             its FIRST load, we show just one, centered. */}
          {loadingStories || loadingPosts ? (
             <View style={styles.loaderContainer}>
                <ActivityIndicator size="large" color={getThemeColor("tint")} />
@@ -163,8 +162,8 @@ export default function HomeScreen() {
                refreshControl={
                   <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor("tint")} />
                }
-               // Decide cuál post-video "gana" y reproduce -- ver los estados
-               // activeVideoPostId/feedMuted arriba.
+               // Decides which video post "wins" and plays -- see the
+               // activeVideoPostId/feedMuted state above.
                viewabilityConfig={viewabilityConfig}
                onViewableItemsChanged={onViewableItemsChanged}
                ListHeaderComponent={
@@ -198,10 +197,10 @@ export default function HomeScreen() {
          {/* )} */}
 
          {/*
-            Antes esto solo se montaba cuando activeCommentPostId existía, así que
-            en el primer tap el ref todavía era null (el componente ni existía) y
-            .present() no hacía nada -- había que tocar "comentarios" dos veces.
-            Montado siempre, el ref existe desde el primer render.
+            This used to be mounted only when activeCommentPostId existed, so on
+            the first tap the ref was still null (the component didn't exist yet)
+            and .present() did nothing -- you had to tap "comments" twice. Always
+            mounted, the ref exists from the very first render.
          */}
          <Host>
             <CommentsSheet
@@ -216,9 +215,10 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
    container: { flex: 1, backgroundColor: "#000000" },
-   // Antes este espacio lo daba el `gap: 12` del View que envolvía todo el
-   // feed en el ScrollView viejo -- el FlatList no envuelve items así, y el
-   // espacio entre posts ya lo da el propio marginBottom de PostComponent.
+   // This spacing used to come from the `gap: 12` on the View that wrapped
+   // the whole feed in the old ScrollView -- FlatList doesn't wrap items that
+   // way, and the spacing between posts is already handled by PostComponent's
+   // own marginBottom.
    storiesWrap: { marginBottom: 12 },
    loaderContainer: {
       flex: 1,

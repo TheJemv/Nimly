@@ -27,11 +27,11 @@ export function useChatMedia(chatId: string, currentUserId: string) {
                     );
                     fileUri = manipResult.uri;
                 } catch (manipError) {
-                    console.warn("No se pudo comprimir la imagen para E2EE, usando original:", manipError);
+                    console.warn("Could not compress the image for E2EE, using original:", manipError);
                 }
             } else if (type === 'video') {
-                // 720p / 3.5 Mbps antes de cifrar+subir (el video va en RAM como
-                // base64, por eso más conservador que el feed). Nunca falla.
+                // 720p / 3.5 Mbps before encrypting+uploading (the video goes into RAM as
+                // base64, hence more conservative than the feed). Never fails.
                 fileUri = await compressVideoForUpload(imageUri, VIDEO_QUALITY.chat);
             }
 
@@ -42,7 +42,7 @@ export function useChatMedia(chatId: string, currentUserId: string) {
             const encryptedText = await vaultCrypto.encryptMessage(base64, friendPublicKey);
             if (!encryptedText) throw new Error("Encryption failed");
 
-            // La extensión antes de `.vault` deja saber al render si es video.
+            // The extension before `.vault` lets the renderer know if it's a video.
             const ext = type === 'video' ? 'mp4' : 'jpg';
             const fileName = `${chatId}/${Date.now()}.${ext}.vault`;
             const { error: storageError } = await supabase.storage

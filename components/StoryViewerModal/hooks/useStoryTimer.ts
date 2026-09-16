@@ -13,9 +13,9 @@ interface UseStoryTimerProps {
   isViewsSheetOpen: boolean;
   onMarkAsSeen?: () => void;
   /**
-   * El player de video reventó. Devolver `true` = "lo manejé" (p. ej. caí de
-   * HLS a MP4 y el player se va a recrear) → NO saltar a la siguiente historia.
-   * `false`/undefined = saltar como antes.
+   * The video player blew up. Returning `true` = "I handled it" (e.g. I fell
+   * back from HLS to MP4 and the player is about to be recreated) → do NOT
+   * skip to the next story. `false`/undefined = skip as before.
    */
   onVideoError?: () => boolean;
 }
@@ -32,8 +32,8 @@ export function useStoryTimer({
   const [isMediaLoading, setIsMediaLoading] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
 
-  // `onNext` no está memoizado aguas arriba; con un ref evitamos re-suscribir los
-  // listeners del video en cada render.
+  // `onNext` isn't memoized upstream; using a ref avoids re-subscribing the
+  // video listeners on every render.
   const onNextRef = useRef(onNext);
   onNextRef.current = onNext;
   const goNext = useCallback(() => onNextRef.current(), []);
@@ -47,11 +47,11 @@ export function useStoryTimer({
   const pressInTimeRef = useRef(0);
   const activeAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // expo-video libera el objeto nativo al desmontar / cambiar de fuente. Cualquier
-  // llamada posterior lanza NotFoundException, así que TODO acceso va protegido.
+  // expo-video releases the native object on unmount / source change. Any
+  // later call throws NotFoundException, so EVERY access is guarded.
   const safeVideo = useCallback((fn: (p: any) => void) => {
     if (!videoPlayer) return;
-    try { fn(videoPlayer); } catch { /* player ya liberado */ }
+    try { fn(videoPlayer); } catch { /* player already released */ }
   }, [videoPlayer]);
 
   const readVideo = useCallback(<T,>(fn: (p: any) => T, fallback: T): T => {
@@ -68,7 +68,7 @@ export function useStoryTimer({
     if (activeAnimationRef.current) activeAnimationRef.current.stop();
   }, [progressAnim]);
 
-  // --- Barra de progreso para IMÁGENES (duración fija) ---
+  // --- Progress bar for IMAGES (fixed duration) ---
   const startImageProgress = useCallback((fromVal = 0, duration = DEFAULT_IMAGE_DURATION) => {
     progressAnim.setValue(fromVal);
     currentProgressVal.current = fromVal;
@@ -84,9 +84,9 @@ export function useStoryTimer({
     });
   }, [goNext, isViewsSheetOpen, progressAnim]);
 
-  // --- Barra de progreso para VIDEO: sigue el tiempo REAL de reproducción ---
-  // Si el video buffea, `currentTime` no avanza → la barra se congela sola, y no
-  // pasamos al siguiente hasta que el video termina de verdad.
+  // --- Progress bar for VIDEO: follows the REAL playback time ---
+  // If the video buffers, `currentTime` doesn't advance → the bar freezes on
+  // its own, and we don't move to the next one until the video truly ends.
   useEffect(() => {
     if (!isVideo || !videoPlayer || !isEnabled) return;
 
@@ -99,11 +99,11 @@ export function useStoryTimer({
         setIsMediaLoading(false);
         if (!isHoldingRef.current && !isViewsSheetOpen) safeVideo((p) => p.play());
       } else if (status === 'loading' || status === 'idle') {
-        // Cargando / buffering: spinner y la barra NO avanza.
+        // Loading / buffering: spinner and the bar does NOT advance.
         setIsMediaLoading(true);
       } else if (status === 'error') {
-        // Si el error lo maneja el caller (HLS -> fallback a MP4), no saltamos:
-        // el player se recrea con la nueva fuente.
+        // If the caller handles the error (HLS -> fallback to MP4), we don't skip:
+        // the player gets recreated with the new source.
         const handled = onVideoErrorRef.current?.() ?? false;
         if (!handled && !isHoldingRef.current) goNext();
       }
@@ -138,14 +138,14 @@ export function useStoryTimer({
       cancelled = true;
       subs.forEach((s: any) => s?.remove?.());
     };
-    // isEnabled / isViewsSheetOpen re-evalúan el efecto; isHoldingRef es ref.
+    // isEnabled / isViewsSheetOpen re-evaluate the effect; isHoldingRef is a ref.
   }, [isVideo, videoPlayer, isEnabled, isViewsSheetOpen, goNext, progressAnim, readVideo, safeVideo]);
 
   const handleMediaReady = useCallback(() => {
     onMarkAsSeen?.();
     if (isViewsSheetOpen || !isEnabled) return;
 
-    // Para video, el efecto de estado maneja spinner + play + barra.
+    // For video, the status effect handles spinner + play + bar.
     if (isVideo) return;
 
     setIsMediaLoading(false);

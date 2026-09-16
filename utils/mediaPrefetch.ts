@@ -13,8 +13,8 @@ export async function prefetchChatMedia(items: MediaItem[]) {
   await Promise.all(
     pending.map(async ({ filePath, friendPublicKey }) => {
       try {
-        // Mismo caché de ciphertext que el bubble: descarga una vez, queda en
-        // disco y sobrevive al reinicio. El plaintext solo va a RAM.
+        // Same ciphertext cache as the bubble: downloads once, stays on
+        // disk and survives restarts. The plaintext only goes to RAM.
         const encryptedText = await getCachedEncryptedText('chat-media', filePath, 60);
         if (!encryptedText) return;
 
@@ -26,7 +26,7 @@ export async function prefetchChatMedia(items: MediaItem[]) {
           vaultRAMCache[filePath] = `data:image/jpeg;base64,${base64Data}`;
         }
       } catch {
-        // si falla, no se cachea; el bubble individual reintentará solo
+        // if it fails, it's not cached; the individual bubble will retry on its own
       }
     })
   );

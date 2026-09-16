@@ -3,8 +3,8 @@ import { debounce } from "@/utils/debounce";
 import { useEffect, useState } from "react";
 
 /**
- * Total de mensajes sin leer que NO envié yo (RLS ya acota a mis chats). Es el
- * número que pinta el badge de la pestaña de Mensajes.
+ * Total unread messages that I did NOT send (RLS already scopes this to my
+ * chats). This is the number shown on the Messages tab badge.
  */
 export function useTotalUnread(): number {
     const [count, setCount] = useState(0);
@@ -31,7 +31,7 @@ export function useTotalUnread(): number {
             }
         };
 
-        // Colapsa ráfagas de eventos realtime en un solo refetch.
+        // Collapses bursts of realtime events into a single refetch.
         const debouncedRefetch = debounce(fetchTotalUnread, 800);
 
         fetchTotalUnread();
@@ -55,7 +55,7 @@ export function useTotalUnread(): number {
     return count;
 }
 
-/** Formatea el contador estilo iOS: 1..9 tal cual, 10+ como "9+". */
+/** Formats the counter iOS-style: 1..9 as-is, 10+ as "9+". */
 export const formatUnreadBadge = (n: number): string | null => {
     if (n <= 0) return null;
     return n > 9 ? "9+" : `${n}`;

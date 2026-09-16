@@ -2,13 +2,13 @@ import { supabase } from "@/lib/supabase";
 import { IMAGE_QUALITY, optimizeImageForUpload } from "@/utils/compressImage";
 import { VIDEO_QUALITY, compressVideoForUpload } from "@/utils/compressVideo";
 import { decode } from 'base64-arraybuffer';
-// Importamos desde el path legacy para que funcione la lectura en base64
+// Import from the legacy path so base64 reading works
 import * as FileSystem from 'expo-file-system/legacy';
 
 export type PostType = "TEXT" | "IMAGE" | "VIDEO";
 
 /**
- * Sube archivos al bucket 'media' usando la API legacy para asegurar el peso real.
+ * Uploads files to the 'media' bucket using the legacy API to ensure the actual file size.
  */
 export const uploadPostMedia = async (uri: string, type: "image" | "video") => {
     try {
@@ -16,15 +16,15 @@ export const uploadPostMedia = async (uri: string, type: "image" | "video") => {
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
         const mimeType = type === 'video' ? 'video/mp4' : `image/${ext === 'png' ? 'png' : 'jpeg'}`;
 
-        // 1. Leemos el archivo usando la API legacy que soporta base64 directamente
+        // 1. Read the file using the legacy API, which supports base64 directly
         const base64 = await FileSystem.readAsStringAsync(uri, {
             encoding: 'base64',
         });
 
-        // 2. Convertimos a ArrayBuffer
+        // 2. Convert to ArrayBuffer
         const arrayBuffer = decode(base64);
 
-        // 3. Subida a Supabase
+        // 3. Upload to Supabase
         const { data, error } = await supabase.storage
             .from('media')
             .upload(fileName, arrayBuffer, {
@@ -37,13 +37,13 @@ export const uploadPostMedia = async (uri: string, type: "image" | "video") => {
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
         return publicUrl;
     } catch (error) {
-        console.error("Error en uploadPostMedia:", error);
+        console.error("Error in uploadPostMedia:", error);
         return null;
     }
 };
 
 /**
- * Crea un post nuevo permitiendo texto, media (imagen/video) o ambos combinados.
+ * Creates a new post allowing text, media (image/video), or both combined.
  */
 export const createPost = async (
     userId: string,
@@ -54,8 +54,8 @@ export const createPost = async (
     if (!media && !text) return
     if (media) {
         try {
-            // Video -> 1080p / 5.5 Mbps. Imagen -> JPEG q0.92 hasta 2400px.
-            // Nunca falla: si no puede, usa el original.
+            // Video -> 1080p / 5.5 Mbps. Image -> JPEG q0.92 up to 2400px.
+            // Never fails: falls back to the original if it can't.
             const sourceUri = media.type === 'video'
                 ? await compressVideoForUpload(media.uri, VIDEO_QUALITY.feed)
                 : await optimizeImageForUpload(media.uri, IMAGE_QUALITY.post);
@@ -66,7 +66,7 @@ export const createPost = async (
 
             const ext = sourceUri.split('.').pop() || 'jpg';
             const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-            const filePath = `${userId}/${fileName}`; // Carpeta por usuario para más orden
+            const filePath = `${userId}/${fileName}`; // Per-user folder to keep things organized
 
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('media')
@@ -79,8 +79,8 @@ export const createPost = async (
             mediaPath = uploadData.path;
 
         } catch (error) {
-            console.error("Error subiendo media:", error);
-            throw new Error("No se pudo subir la imagen/video");
+            console.error("Error uploading media:", error);
+            throw new Error("Couldn't upload the image/video");
         }
     }
 
@@ -103,7 +103,7 @@ export const createPost = async (
 };
 
 /**
- * Obtiene los posts de AMIGOS (Lógica Bidireccional)
+ * Fetches FRIENDS' posts (bidirectional logic)
  */
 export const getFriendsPosts = async (userId: string) => {
     try {
@@ -114,18 +114,18 @@ export const getFriendsPosts = async (userId: string) => {
         if (error) throw error;
         return data;
     } catch (error) {
-        console.error("Error en getFriendsPosts:", error);
+        console.error("Error in getFriendsPosts:", error);
         return [];
     }
 };
 
 export const deletePost = async (postId: string, mediaUrl?: string | null) => {
     try {
-        // 1. Eliminar de la tabla posts
+        // 1. Delete from the posts table
         const { error: postError } = await supabase.from('posts').delete().eq('id', postId);
         if (postError) throw postError;
 
-        // 2. Si tenía imagen/video, eliminar del Storage
+        // 2. If it had an image/video, delete it from Storage
         if (mediaUrl && mediaUrl.includes('storage/v1/object/public/media/')) {
             const fileName = mediaUrl.split('/').pop();
             if (fileName) {
@@ -134,7 +134,7 @@ export const deletePost = async (postId: string, mediaUrl?: string | null) => {
         }
         return { success: true };
     } catch (error) {
-        console.error("Error al eliminar post:", error);
+        console.error("Error deleting post:", error);
         throw error;
     }
 };
@@ -143,7 +143,7 @@ export const toggleLike = async (postId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Buscamos si existe
+    // Check whether it already exists
     const { data: existing } = await supabase
         .from('likes')
         .select('id')
@@ -152,14 +152,14 @@ export const toggleLike = async (postId: string) => {
         .maybeSingle();
 
     if (!existing) {
-        // Si no existe, lo agregamos (Dar Like)
+        // If it doesn't exist, add it (Like)
         const { error } = await supabase.from('likes').insert({
             post_id: postId,
             user_id: user.id
         });
         if (error) throw error;
     } else {
-        // Si ya existe, lo eliminamos (Quitar Like) 👇
+        // If it already exists, remove it (Unlike) 👇
         const { error } = await supabase.from('likes').delete().eq('id', existing.id);
         if (error) throw error;
     }

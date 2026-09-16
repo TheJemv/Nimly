@@ -1,16 +1,16 @@
-// Señal minúscula para coordinar el splash con la primera carga del Home.
-// El splash nativo se oculta en cuanto auth+vault resuelven, pero eso no
-// significa que el feed ya esté listo — sin esto, el usuario ve el splash
-// desaparecer y luego los spinners de posts/stories cargando por separado.
-// HomeScreen llama a markHomeReady() cuando termina su primera carga, y
-// RootLayoutNav tapa esa espera con un overlay idéntico al splash mientras
-// tanto (ver app/_layout.tsx).
+// Tiny signal to coordinate the splash screen with Home's first load.
+// The native splash hides as soon as auth+vault resolve, but that doesn't
+// mean the feed is ready yet — without this, the user sees the splash
+// disappear and then the posts/stories spinners loading separately.
+// HomeScreen calls markHomeReady() when it finishes its first load, and
+// RootLayoutNav covers that wait with an overlay identical to the splash in
+// the meantime (see app/_layout.tsx).
 import { createContext, useCallback, useContext, useState } from 'react';
 
 interface AppReadyContextValue {
-    /** true una vez que el Home ya cargó su primer feed (posts + stories). */
+    /** true once Home has loaded its first feed (posts + stories). */
     homeReady: boolean;
-    /** Llamado por HomeScreen cuando termina esa primera carga. Idempotente. */
+    /** Called by HomeScreen when that first load finishes. Idempotent. */
     markHomeReady: () => void;
 }
 

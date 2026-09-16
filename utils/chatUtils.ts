@@ -1,27 +1,27 @@
 /**
- * Limpia el texto de un mensaje antes de ser enviado.
- * - Elimina espacios y saltos de línea al inicio y al final.
- * - Opcional: Reduce múltiples saltos de línea consecutivos a máximo dos (un espacio visual).
+ * Cleans up a message's text before it is sent.
+ * - Trims whitespace and line breaks from the start and end.
+ * - Optional: Reduces multiple consecutive line breaks to a maximum of two (one visual space).
  */
 export const cleanChatMessage = (text: string): string => {
   if (!text) return '';
 
-  // 1. Elimina espacios en blanco y saltos de línea al principio y al final
+  // 1. Trim leading/trailing whitespace and line breaks
   let cleanedText = text.trim();
 
-  // 2. Reemplaza 3 o más saltos de línea consecutivos por máximo 2
-  // Esto evita que envíen "Hola [100 saltos de línea] Adiós"
+  // 2. Replace 3 or more consecutive line breaks with a maximum of 2
+  // This prevents sending "Hi [100 line breaks] Bye"
   cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n');
 
   return cleanedText;
 };
 
 /**
- * Valida si el mensaje es válido para enviar (no está vacío ni son solo espacios/saltos de línea).
+ * Validates whether the message is valid to send (not empty and not just whitespace/line breaks).
  */
 export const isValidMessage = (text: string): boolean => {
   if (!text) return false;
-  
-  // Si después de quitar espacios queda vacío, no es válido
+
+  // If it's empty after trimming whitespace, it's not valid
   return text.trim().length > 0;
 };

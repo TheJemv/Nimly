@@ -17,12 +17,12 @@ import { stripVideoAudio } from '@/utils/compressVideo';
 import CameraModeSelector, { CameraCaptureMode } from '../CameraModeSelector/CameraModeSelector';
 import { styles } from './NimlyCamera.styles';
 
-// Los videos se cifran E2EE (base64 en memoria), así que se limitan en
-// duración y resolución para que el blob sea manejable.
+// Videos are encrypted E2EE (base64 in memory), so they're limited in
+// duration and resolution to keep the blob manageable.
 const MAX_VIDEO_SECONDS = 12;
 
-// Zoom del botón rápido (el prop `zoom` de expo-camera es 0..1 normalizado, no
-// un multiplicador óptico real, así que la etiqueta es aproximada).
+// Quick-zoom button level (expo-camera's `zoom` prop is normalized 0..1, not
+// a real optical multiplier, so the label is approximate).
 const QUICK_ZOOM = 0.5;
 
 interface CapturedMedia {
@@ -51,18 +51,18 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
     const [isRecording, setIsRecording] = useState(false);
     const [isBusy, setIsBusy] = useState(false);
     const [elapsed, setElapsed] = useState(0);
-    // Preview de video: quitar el audio antes de enviar.
+    // Video preview: strip the audio before sending.
     const [muteAudio, setMuteAudio] = useState(false);
     const [isStripping, setIsStripping] = useState(false);
 
     const [zoom, setZoom] = useState(0);
     const baseZoomRef = useRef(0);
     const cameraRef = useRef<CameraView>(null);
-    // Se pone en true si se cierra la cámara mientras graba: la promesa de
-    // recordAsync resuelve después y no queremos abrir la preview de ese clip.
+    // Set to true if the camera closes while recording: the recordAsync
+    // promise resolves later and we don't want to open the preview for that clip.
     const discardRecordingRef = useRef(false);
-    // Evita que un doble-tap rápido lance dos grabaciones (el estado isRecording
-    // llega un frame tarde).
+    // Prevents a quick double-tap from starting two recordings (the isRecording
+    // state arrives one frame late).
     const startingRecordingRef = useRef(false);
 
     const videoPlayer = useVideoPlayer(
@@ -74,7 +74,7 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         }
     );
 
-    // Cronómetro de grabación.
+    // Recording timer.
     useEffect(() => {
         if (!isRecording) {
             setElapsed(0);
@@ -84,23 +84,23 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         return () => clearInterval(id);
     }, [isRecording]);
 
-    // Autoplay de la vista previa de video (el callback de useVideoPlayer solo
-    // corre al montar, no cuando cambia la fuente).
+    // Autoplay the video preview (the useVideoPlayer callback only runs on
+    // mount, not when the source changes).
     useEffect(() => {
         if (capturedMedia?.type === 'video' && videoPlayer) {
             try {
                 videoPlayer.loop = true;
                 videoPlayer.play();
-            } catch { /* preview no crítica */ }
+            } catch { /* non-critical preview */ }
         }
     }, [capturedMedia, videoPlayer]);
 
-    // La preview refleja el toggle de "quitar audio".
+    // The preview reflects the "remove audio" toggle.
     useEffect(() => {
-        try { if (videoPlayer) videoPlayer.muted = muteAudio; } catch { /* preview no crítica */ }
+        try { if (videoPlayer) videoPlayer.muted = muteAudio; } catch { /* non-critical preview */ }
     }, [muteAudio, videoPlayer, capturedMedia]);
 
-    // Al cerrar / reabrir, volvemos a la cámara limpia.
+    // On close/reopen, go back to a clean camera.
     useEffect(() => {
         if (!visible) {
             setCapturedMedia(null);
@@ -110,8 +110,8 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         }
     }, [visible]);
 
-    // Red de seguridad: si el componente se desmonta con una grabación viva,
-    // pararla para que el módulo nativo no se quede grabando.
+    // Safety net: if the component unmounts with a live recording, stop it
+    // so the native module doesn't keep recording.
     useEffect(() => {
         return () => {
             try { cameraRef.current?.stopRecording(); } catch { /* no-op */ }
@@ -123,12 +123,12 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         if (!micPermission?.granted) await requestMicPermission();
     };
 
-    // Cerrar la cámara: si hay una grabación en curso hay que pararla primero
-    // (si no, el módulo nativo queda grabando y la promesa nunca resuelve).
+    // Closing the camera: if a recording is in progress, stop it first
+    // (otherwise the native module keeps recording and the promise never resolves).
     const handleClose = () => {
         if (isRecording) {
             discardRecordingRef.current = true;
-            try { cameraRef.current?.stopRecording(); } catch { /* ya parada */ }
+            try { cameraRef.current?.stopRecording(); } catch { /* already stopped */ }
         }
         onClose();
     };
@@ -153,8 +153,8 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
             try {
                 const photo = await cameraRef.current.takePictureAsync({ exif: false });
                 if (photo?.uri) {
-                    // Tope de ancho para no arrastrar el RAW de ~4000px de la
-                    // cámara, pero q0.92 para que se vea nítido (antes 0.8 lavaba).
+                    // Width cap so we don't drag along the camera's ~4000px RAW,
+                    // but q0.92 to keep it sharp (0.8 used to wash it out).
                     const tooWide = (photo.width ?? 0) > 2400;
                     const fixed = await ImageManipulator.manipulateAsync(
                         photo.uri,
@@ -177,8 +177,8 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
             return;
         }
 
-        // Anti-doble-tap: `isRecording` (estado) llega tarde, así que un segundo
-        // toque rápido lanzaba un recordAsync sobre otro ya en curso.
+        // Anti-double-tap: `isRecording` (state) arrives late, so a quick second
+        // tap used to fire a recordAsync on top of one already in progress.
         if (startingRecordingRef.current) return;
         startingRecordingRef.current = true;
 
@@ -193,10 +193,10 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         discardRecordingRef.current = false;
         setIsRecording(true);
         try {
-            // Fuente en alta; compressVideoForUpload la baja luego a specs de
-            // subida. La resolución/bitrate se fijan en los props de CameraView
-            // (videoQuality / videoBitrate) — el codec sí va aquí (requisito iOS
-            // para que videoBitrate surta efecto).
+            // High-res source; compressVideoForUpload downscales it later to
+            // upload specs. Resolution/bitrate are set via CameraView's props
+            // (videoQuality / videoBitrate) — the codec does go here (iOS
+            // requirement for videoBitrate to take effect).
             const video = await cameraRef.current.recordAsync({
                 maxDuration: MAX_VIDEO_SECONDS,
                 codec: 'avc1',
@@ -218,15 +218,15 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
-                // Video: 1 = sin pre-compresión lossy del picker (nuestro pipeline
-                // lo comprime bien). Foto: casi máx, luego se normaliza al subir.
+                // Video: 1 = no lossy pre-compression from the picker (our
+                // pipeline compresses it well). Photo: near-max, then normalized on upload.
                 quality: captureMode === 'photo' ? 0.95 : 1,
-                // Editor nativo: recorte de video en iOS + hace respetar el tope de
-                // duración (sin esto, videoMaxDuration se ignora al elegir de galería).
+                // Native editor: video trimming on iOS + enforces the duration
+                // cap (without this, videoMaxDuration is ignored when picking from the gallery).
                 allowsEditing: captureMode === 'video',
                 videoMaxDuration: MAX_VIDEO_SECONDS,
-                // Passthrough: compressVideoForUpload hace el único transcode (720p +
-                // tone-map HDR->SDR). Ver new-post.tsx.
+                // Passthrough: compressVideoForUpload does the only transcode
+                // (720p + HDR->SDR tone-map). See new-post.tsx.
             });
             if (!result.canceled && result.assets[0]?.uri) {
                 const asset = result.assets[0];
@@ -263,9 +263,9 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
     };
 
     if (!cameraPermission || !micPermission) return <View />;
-    // Solo bloqueamos por la cámara. El micrófono se pide de forma diferida al
-    // pulsar grabar, así que faltar el permiso de mic no debe tapar toda la
-    // cámara (podías seguir tomando fotos).
+    // We only block on the camera. The microphone permission is requested
+    // lazily when tapping record, so missing mic permission shouldn't block
+    // the whole camera (you could still take photos).
     if (!cameraPermission.granted) {
         return (
             <PermissionRequest
@@ -304,7 +304,7 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
                             </View>
                         </GestureDetector>
 
-                        {/* Barra superior */}
+                        {/* Top bar */}
                         <View style={[styles.topBar, { top: insets.top + 6 }]} pointerEvents="box-none">
                             <TouchableOpacity
                                 style={styles.iconBtn}
@@ -336,16 +336,16 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
                             </TouchableOpacity>
                         </View>
 
-                        {/* Zoom rápido — va en el flujo, justo encima de la barra
-                            de controles, para que nunca la tape (antes tenía un
-                            `bottom` fijo que se montaba sobre el selector de modo). */}
+                        {/* Quick zoom — sits in the flow, right above the controls
+                            bar, so it never overlaps it (it used to have a fixed
+                            `bottom` that sat on top of the mode selector). */}
                         {!isRecording && (
                             <TouchableOpacity style={styles.zoomBadge} onPress={toggleQuickZoom} activeOpacity={0.8}>
                                 <Text style={styles.zoomText}>{zoomLabel}</Text>
                             </TouchableOpacity>
                         )}
 
-                        {/* Controles inferiores */}
+                        {/* Bottom controls */}
                         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 24 }]}>
                             <CameraModeSelector
                                 activeMode={captureMode}

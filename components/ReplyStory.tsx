@@ -6,8 +6,9 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import React, { memo, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 
-// Caché en RAM del `file://` local ya resuelto (evita hasta el getInfoAsync del
-// disco al re-montar la burbuja). El caché real y persistente vive en mediaCache.
+// In-memory cache of the already-resolved local `file://` (avoids even the
+// disk getInfoAsync call when the bubble re-mounts). The real, persistent
+// cache lives in mediaCache.
 const storyUrlCache: { [path: string]: string } = {};
 
 const isVideoStory = (mediaType?: string | null, path?: string | null) =>
@@ -26,7 +27,7 @@ interface ReplyStoryProps {
 const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
     const { session } = useContext(AuthContext)
 
-    // Si ya la tenemos en caché, arrancamos sin loading
+    // If we already have it cached, we start without loading
     const cachedUrl = storyUrlCache[content.media_url];
 
     const [mediaUrl, setMediaUrl] = useState<string>(cachedUrl || "");
@@ -45,7 +46,7 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
                 setLoading(true);
                 setHasError(false);
 
-                // 1ª vez descarga + firma; siguientes = `file://` local, cero red.
+                // 1st time downloads + signs; subsequent times = local `file://`, zero network.
                 const uri = await getCachedMedia('stories', content.media_url, { signed: true, ttl: 3600 });
                 if (!uri) throw new Error("story media unavailable");
 
@@ -65,9 +66,9 @@ const ReplyStory = memo(({ content, isMyMessage }: ReplyStoryProps) => {
         return () => { isMounted = false; };
     }, [content.media_url, session?.user, cachedUrl]);
 
-    // Historia de video: un player en pausa muestra el primer frame como
-    // "portada" del preview. Sin esto el <Image> quedaba en blanco (no pinta mp4)
-    // y la respuesta a la historia se veía sin miniatura.
+    // Video story: a paused player shows the first frame as the preview's
+    // "cover". Without this the <Image> stayed blank (it doesn't render mp4)
+    // and the reply to the story showed with no thumbnail.
     const player = useVideoPlayer(isVideo && mediaUrl ? mediaUrl : null, (p) => {
         p.muted = true;
         p.pause();

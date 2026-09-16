@@ -6,7 +6,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { styles } from './ConnectionErrorView.styles';
 
 type ConnectionErrorViewProps = {
-    onRetrySuccess: () => void; // Callback para disparar la inicialización normal si ya hay red
+    onRetrySuccess: () => void; // Callback to trigger normal initialization if there's already a network connection
 };
 
 export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorViewProps) {
@@ -36,7 +36,7 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
     return (
         <View style={styles.container}>
             <View style={styles.content}>
-                {/* ICONO CON SF SYMBOLS - ESTILO QUIET LUXURY */}
+                {/* ICON WITH SF SYMBOLS - QUIET LUXURY STYLE */}
                 <View style={styles.iconCircle}>
                     <SymbolView name="wifi.exclamationmark" size={36} tintColor={getThemeColor('tint')} />
                 </View>
@@ -46,7 +46,7 @@ export default function ConnectionErrorView({ onRetrySuccess }: ConnectionErrorV
                     Nimly can't reach the server right now. Please check your connection and try again.
                 </Text>
 
-                {/* BOTÓN CON ANIMACIÓN DE CARGA INTEGRADA */}
+                {/* BUTTON WITH BUILT-IN LOADING ANIMATION */}
                 <TouchableOpacity
                     onPress={handleCheckConnection}
                     style={[styles.confirmBtn, isChecking && styles.disabledBtn]}

@@ -20,7 +20,7 @@ export const OptionsBottomSheet = forwardRef<BottomSheetModal, Props>(({ options
     const surface = getThemeColor('surface');
     const accent = getThemeColor('tint');
 
-    // Renderizado del fondo oscurecido
+    // Render the darkened backdrop
     const renderBackdrop = useCallback(
         (props: any) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
         []
@@ -29,7 +29,7 @@ export const OptionsBottomSheet = forwardRef<BottomSheetModal, Props>(({ options
     return (
         <BottomSheetModal
             ref={ref}
-            // Calculamos altura dinámica pero con un mínimo seguro
+            // We compute a dynamic height but with a safe minimum
             snapPoints={['50%']}
             backgroundStyle={{ backgroundColor: surface }}
             handleIndicatorStyle={{ backgroundColor: '#444' }}
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 15,
-        paddingVertical: 16 // Un poco más de espacio para tocar
+        paddingVertical: 16 // A bit more spacing to tap
     },
     menuText: { fontSize: 17, fontWeight: '500' }
 });

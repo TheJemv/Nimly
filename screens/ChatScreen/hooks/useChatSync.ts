@@ -21,9 +21,9 @@ const isPlainTextMsg = (m: any) =>
     (m.type === 'text' || !m.type) && !!m.content && m.content !== 'OPENED_CAPSULE';
 
 /**
- * Descifra en paralelo el texto de una tanda de mensajes y lo deja caliente en
- * la RAM cache ANTES de pintarlos. Así cada burbuja se renderiza ya con su
- * altura final: no hay "Decrypting…", ni saltos de scroll al paginar.
+ * Decrypts the text of a batch of messages in parallel and warms it into the
+ * RAM cache BEFORE rendering them. This way every bubble renders at its final
+ * height right away — no "Decrypting…" flash, no scroll jumps when paginating.
  */
 async function hydrateTextMessages(rows: any[], friendPublicKey: string | undefined) {
     if (!friendPublicKey || rows.length === 0) return;
@@ -35,7 +35,7 @@ async function hydrateTextMessages(rows: any[], friendPublicKey: string | undefi
             try {
                 const clear = await vaultCrypto.decryptMessage(m.content, friendPublicKey);
                 if (!clear.startsWith('🔒')) vaultRAMCache[m.content] = clear;
-            } catch { /* lo detecta el probe de undecryptable */ }
+            } catch { /* caught by the undecryptable probe */ }
         })
     );
 }
@@ -48,20 +48,20 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
     const [hasMore, setHasMore] = useState(true);
     const [friendProfile, setFriendProfile] = useState<any>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    // true si la public key del contacto cambió respecto a la última vista en este dispositivo
+    // true if the contact's public key changed compared to the last one seen on this device
     const [friendKeyChanged, setFriendKeyChanged] = useState(false);
-    // Instante desde el cual este dispositivo SÍ puede descifrar en este chat:
-    // el más reciente entre mi rotación de identidad y la rotación del contacto.
-    // Nada anterior se pide al servidor (no se puede leer de todos modos).
+    // The point in time from which this device CAN decrypt in this chat:
+    // whichever is more recent between my identity rotation and the contact's key rotation.
+    // Nothing older is requested from the server (it couldn't be read anyway).
     const [messageCutoff, setMessageCutoff] = useState<string | null>(null);
     const cutoffRef = useRef<string | null>(null);
-    // Se incrementa al volver de segundo plano para forzar la reconexión del
-    // canal de realtime (iOS mata el WebSocket mientras la app está fuera).
+    // Incremented when returning from the background to force the realtime
+    // channel to reconnect (iOS kills the WebSocket while the app is backgrounded).
     const [resyncNonce, setResyncNonce] = useState(0);
-    // Última public key conocida del contacto, para descifrar al paginar / en realtime.
+    // Last known public key of the contact, used to decrypt when paginating / in realtime.
     const pubKeyRef = useRef<string | undefined>(routeUserPublicKey);
 
-    // Marcar mensajes como leídos
+    // Mark messages as read
     const markMessagesAsRead = useCallback(async (cId: string) => {
         if (!targetFriendId) return;
         await chatApi.markAsRead(cId, targetFriendId);
@@ -86,7 +86,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 setHasMore(false);
             }
 
-            // Descifrar ANTES de pintar: sin flash de "Decrypting…" ni saltos.
+            // Decrypt BEFORE rendering: no "Decrypting…" flash, no jumps.
             await hydrateTextMessages(fetchedData, keyOverride ?? pubKeyRef.current);
 
             setMessages(prev => offset === 0 ? fetchedData : [...prev, ...fetchedData]);
@@ -97,8 +97,8 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         }
     }, []);
 
-    // Trae los mensajes recientes y fusiona los que falten, sin tocar la
-    // paginación ni las burbujas optimistas. Se usa al volver de segundo plano.
+    // Fetches the most recent messages and merges in any that are missing, without touching
+    // pagination or the optimistic bubbles. Used when returning from the background.
     const catchUpMessages = useCallback(async (cId: string) => {
         try {
             let query = supabase
@@ -118,7 +118,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
             setMessages((prev) => {
                 const known = new Set(prev.map((m) => m.id));
                 const missing = data.filter((m) => !known.has(m.id));
-                // Reconcilia también updates (is_read, OPENED_CAPSULE, …) de filas ya conocidas.
+                // Also reconciles updates (is_read, OPENED_CAPSULE, …) for rows we already know about.
                 const byId = new Map(data.map((m) => [m.id, m]));
                 const reconciled = prev.map((m) => (byId.has(m.id) && !m.__status ? { ...m, ...byId.get(m.id) } : m));
                 if (missing.length === 0) return reconciled;
@@ -135,7 +135,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         }
     }, [targetFriendId, markMessagesAsRead]);
 
-    // Al volver a primer plano: reabrir canal (nonce) + traer lo que se perdió.
+    // When returning to the foreground: reopen the channel (nonce) + fetch what was missed.
     useAppForeground(() => {
         setResyncNonce((n) => n + 1);
         if (chatId) catchUpMessages(chatId);
@@ -150,12 +150,12 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 if (!user) return;
                 if (isMounted) setCurrentUserId(user.id);
 
-                // El perfil (y su public key) no depende del chatId, así que van
-                // en paralelo. Necesitamos la key para descifrar antes de pintar.
+                // The profile (and its public key) doesn't depend on chatId, so they run
+                // in parallel. We need the key to decrypt before rendering.
                 const [cId, profRes] = await Promise.all([
                     chatApi.getOrCreateChat(targetFriendId),
-                    // maybeSingle: si el perfil aún no existe no queremos que lance y
-                    // deje el chat bloqueado; se usa `routeUser` como respaldo.
+                    // maybeSingle: if the profile doesn't exist yet we don't want it to throw and
+                    // leave the chat stuck; `routeUser` is used as a fallback.
                     supabase.from('profiles').select('*').eq('id', targetFriendId).maybeSingle(),
                 ]);
                 if (!cId) return;
@@ -164,10 +164,10 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 const pubKey = profRes.data?.public_key ?? routeUserPublicKey;
                 pubKeyRef.current = pubKey;
 
-                // Corte de historial: lo más reciente entre MI rotación de identidad
-                // y la rotación de llave del contacto. Para el contacto usamos el
-                // `public_key_updated_at` del servidor (cuándo publicó su llave
-                // actual), no cuándo lo detectamos aquí.
+                // History cutoff: whichever is more recent between MY identity rotation
+                // and the contact's key rotation. For the contact we use the server's
+                // `public_key_updated_at` (when they published their current key),
+                // not when we detected it here.
                 const myRotatedAt = await identityRotation.rotatedAt();
                 let friendRotatedAt: string | null = null;
 
@@ -195,7 +195,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         return () => { isMounted = false; };
     }, [targetFriendId, routeUserPublicKey, markMessagesAsRead, fetchMessages]);
 
-    // Mantener la key fresca si el perfil llega/cambia después del init.
+    // Keep the key fresh if the profile arrives/changes after init.
     useEffect(() => {
         pubKeyRef.current = friendProfile?.public_key ?? routeUserPublicKey;
     }, [friendProfile?.public_key, routeUserPublicKey]);
@@ -210,17 +210,17 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
                         const rawMsg = payload.new;
-                        // Eco de un mensaje propio que ya pintamos en gris: la
-                        // burbuja optimista usa el client_id como id temporal.
+                        // Echo of our own message that we already rendered in gray: the
+                        // optimistic bubble uses client_id as a temporary id.
                         const clientId: string | null = rawMsg.client_id ?? null;
 
                         const handleNewMessage = async () => {
                             let finalMsg = rawMsg;
 
-                            // El payload de realtime trae solo los ids (reply_to_id /
-                            // reply_to_story_id), no las relaciones. Sin volver a pedir
-                            // la fila con el join, la respuesta a una historia entra sin
-                            // su preview y había que salir/entrar del chat para verlo.
+                            // The realtime payload only carries the ids (reply_to_id /
+                            // reply_to_story_id), not the relations. Without re-fetching
+                            // the row with the join, a reply to a story would arrive without
+                            // its preview, requiring leaving/re-entering the chat to see it.
                             if (rawMsg.reply_to_id || rawMsg.reply_to_story_id) {
                                 const { data } = await supabase
                                     .from('messages')
@@ -231,7 +231,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                                 if (data) finalMsg = data;
                             }
 
-                            // Descifrar antes de pintar para que no aparezca vacío.
+                            // Decrypt before rendering so it doesn't show up empty.
                             await hydrateTextMessages([finalMsg], pubKeyRef.current);
 
                             setMessages((prev) => {
@@ -281,15 +281,15 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
     };
 
     /**
-     * Envío optimista de texto: pinta la burbuja al instante (en gris, estado
-     * "sending"), cifra + guarda en el backend y luego reconcilia la copia
-     * temporal con la fila real (por realtime o por la respuesta del insert,
-     * lo que llegue primero). Si algo falla la burbuja queda como "failed".
+     * Optimistic text send: renders the bubble instantly (in gray, "sending"
+     * state), encrypts + saves it to the backend, then reconciles the temporary
+     * copy with the real row (via realtime or the insert response, whichever
+     * arrives first). If something fails, the bubble stays marked as "failed".
      *
-     * La correlación temp <-> fila real es por `client_id` (uuid generado en el
-     * cliente, con índice único en la tabla). Reintentar reusa el mismo
-     * client_id, así que el índice único hace el envío idempotente: si un
-     * intento anterior sí llegó, el upsert no duplica y recuperamos esa fila.
+     * The temp <-> real row correlation is done via `client_id` (a uuid generated
+     * on the client, with a unique index on the table). Retrying reuses the same
+     * client_id, so the unique index makes the send idempotent: if a previous
+     * attempt did go through, the upsert won't duplicate it and we just fetch that row.
      */
     const sendText = useCallback(
         async (
@@ -323,7 +323,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 __plain: text,
             };
 
-            // Alta nueva -> se prepende; reintento -> vuelve a "sending" en su sitio.
+            // New message -> prepended; retry -> goes back to "sending" in place.
             setMessages((prev) =>
                 prev.some((m) => m.id === clientId)
                     ? prev.map((m) => (m.id === clientId ? { ...m, __status: "sending" as const } : m))
@@ -353,7 +353,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                     .select(REPLY_SELECT)
                     .maybeSingle();
 
-                // Sin fila devuelta => ya existía (un intento previo sí llegó): la traemos.
+                // No row returned => it already existed (a previous attempt got through): fetch it.
                 if (!error && !data) {
                     ({ data, error } = await supabase
                         .from("messages")
@@ -366,7 +366,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 if (!data) throw new Error("Insert returned no row");
 
                 const real = data;
-                // Realtime pudo haber hecho el swap ya; evitamos duplicados.
+                // Realtime may have already done the swap; avoid duplicates.
                 setMessages((prev) => {
                     const hasTemp = prev.some((m) => m.id === clientId);
                     if (prev.some((m) => m.id === real.id)) {

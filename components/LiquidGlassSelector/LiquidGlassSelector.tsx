@@ -22,7 +22,7 @@ export default function LiquidGlassSelector({ activeTab, onTabChange, tintColor 
     return (
         <View style={styles.outerContainer}>
             <BlurView intensity={20} tint="dark" style={styles.glassContainer}>
-                {/* Indicador Líquido (The Liquid Pill) */}
+                {/* Liquid Indicator (The Liquid Pill) */}
                 <Animated.View style={[styles.pill, pillStyle, { backgroundColor: tintColor }]} />
 
                 <TouchableOpacity
@@ -31,7 +31,7 @@ export default function LiquidGlassSelector({ activeTab, onTabChange, tintColor 
                     activeOpacity={1}
                 >
                     <SymbolView name="text.bubble.fill" size={18} tintColor={activeTab === 'text' ? "#FFF" : MUTED} />
-                    <Text style={[styles.tabText, { color: activeTab === 'text' ? "#FFF" : MUTED }]}>Texto</Text>
+                    <Text style={[styles.tabText, { color: activeTab === 'text' ? "#FFF" : MUTED }]}>Text</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

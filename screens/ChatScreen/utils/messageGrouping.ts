@@ -1,15 +1,15 @@
-// Agrupación y separadores de tiempo para el chat (estilo iMessage / Instagram).
+// Message grouping and time separators for chat (iMessage / Instagram style).
 //
-// La lista de mensajes llega ordenada del más nuevo (índice 0) al más viejo,
-// porque el FlatList se renderiza `inverted`.
+// The message list arrives ordered from newest (index 0) to oldest,
+// because the FlatList renders `inverted`.
 
-const GROUP_WINDOW_MS = 5 * 60 * 1000; // burbujas consecutivas del mismo autor se fusionan si están a <5 min
-const SEPARATOR_GAP_MS = 60 * 60 * 1000; // 1h+ de diferencia => se muestra un separador de hora/fecha
+const GROUP_WINDOW_MS = 5 * 60 * 1000; // consecutive bubbles from the same author merge if they're <5 min apart
+const SEPARATOR_GAP_MS = 60 * 60 * 1000; // 1h+ gap => a date/time separator is shown
 
 export type GroupPosition = "single" | "first" | "middle" | "last";
 
-const R = 20; // esquina exterior redondeada
-const r = 6; // esquina interior (pegada a otra burbuja del mismo grupo)
+const R = 20; // rounded outer corner
+const r = 6; // inner corner (touching another bubble in the same group)
 
 const toTime = (v: string | number | Date) =>
    v instanceof Date ? v.getTime() : new Date(v).getTime();
@@ -24,16 +24,16 @@ const isSameDay = (a: string | number | Date, b: string | number | Date) => {
    );
 };
 
-// Formateo manual: Hermes en iOS no siempre incluye `Intl`, así que
-// `toLocaleTimeString`/`toLocaleDateString` con opciones puede devolver un
-// formato inesperado. Con estas tablas el resultado es idéntico en todos lados.
+// Manual formatting: Hermes on iOS doesn't always include `Intl`, so
+// `toLocaleTimeString`/`toLocaleDateString` with options can return an
+// unexpected format. With these tables the result is identical everywhere.
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/** Hora en formato 12h: "9:41 PM" */
+/** Time in 12h format: "9:41 PM" */
 const clockTime = (d: Date) => {
    let h = d.getHours();
    const m = d.getMinutes();
@@ -43,14 +43,14 @@ const clockTime = (d: Date) => {
    return `${h}:${m < 10 ? "0" + m : m} ${ampm}`;
 };
 
-/** Hora corta de una burbuja: "9:41 PM" */
+/** Short time for a bubble: "9:41 PM" */
 export const formatBubbleTime = (dateString?: string) => {
    const d = dateString ? new Date(dateString) : null;
    if (!d || isNaN(d.getTime())) return "";
    return clockTime(d);
 };
 
-/** Etiqueta discreta del separador central del chat. */
+/** Discreet label for the chat's central separator. */
 export const formatSeparator = (dateString: string) => {
    const d = new Date(dateString);
    if (isNaN(d.getTime())) return "";
@@ -70,7 +70,7 @@ export const formatSeparator = (dateString: string) => {
    return `${datePart} · ${time}`;
 };
 
-/** Radios de esquina según la posición dentro del grupo y el lado del autor. */
+/** Corner radii based on position within the group and the author's side. */
 export const cornerRadius = (mine: boolean, pos: GroupPosition) => {
    if (pos === "single") {
       return {
@@ -81,8 +81,8 @@ export const cornerRadius = (mine: boolean, pos: GroupPosition) => {
       };
    }
 
-   // Lado del autor: derecha para mí, izquierda para el invitado.
-   // El lado contrario siempre va totalmente redondeado.
+   // Author's side: right for me, left for the other person.
+   // The opposite side is always fully rounded.
    if (mine) {
       const top = pos === "first" ? R : r;
       const bottom = pos === "last" ? R : r;
@@ -108,27 +108,27 @@ export interface DecoratedMessage {
    [key: string]: any;
    __groupPosition: GroupPosition;
    __separatorLabel: string | null;
-   /** margen inferior hacia el mensaje más nuevo (gap del grupo). */
+   /** bottom margin toward the newest message (group gap). */
    __spacing: number;
 }
 
 /**
- * Añade metadatos de agrupación a cada mensaje.
- * @param messages lista ordenada de más nuevo (0) a más viejo.
- * @param hasMore  si aún hay historial sin cargar (para no pintar un separador
- *                 "inicio de la conversación" que luego desaparece).
+ * Adds grouping metadata to each message.
+ * @param messages list ordered from newest (0) to oldest.
+ * @param hasMore  whether there's still unloaded history (so we don't render a
+ *                 "start of conversation" separator that later disappears).
  */
 export function decorateMessages(messages: any[], hasMore: boolean): DecoratedMessage[] {
    return messages.map((m, i) => {
-      const older = messages[i + 1]; // cronológicamente anterior
-      const newer = messages[i - 1]; // cronológicamente posterior
+      const older = messages[i + 1]; // chronologically earlier
+      const newer = messages[i - 1]; // chronologically later
 
       const t = toTime(m.created_at);
       const olderT = older ? toTime(older.created_at) : null;
       const newerT = newer ? toTime(newer.created_at) : null;
 
-      // ¿Separador entre `older` y `m`? La etiqueta muestra la hora de `m`
-      // (el mensaje que llega después del hueco).
+      // Separator between `older` and `m`? The label shows the time of `m`
+      // (the message that comes after the gap).
       let separatorLabel: string | null = null;
       if (!older) {
          if (!hasMore) separatorLabel = formatSeparator(m.created_at);
@@ -145,7 +145,7 @@ export function decorateMessages(messages: any[], hasMore: boolean): DecoratedMe
          older.sender_id !== m.sender_id ||
          t - (olderT as number) >= GROUP_WINDOW_MS;
 
-      // ¿El mensaje más nuevo arranca un grupo nuevo?
+      // Does the newest message start a new group?
       let newerStartsGroup = false;
       if (newer) {
          const newerHasSeparator =

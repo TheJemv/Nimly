@@ -42,7 +42,7 @@ export default function UserAvatar({ avatar_config, size = 40 }: UserAvatarProps
         );
     }
 
-    // Fallback local (sin dependencias externas): ícono neutro sobre el fondo del contenedor.
+    // Local fallback (no external dependencies): neutral icon over the container background.
     return (
         <View style={[styles.container, dimensionStyle]}>
             <Ionicons name="person" size={Math.round(size * 0.55)} color={getThemeColor("icon")} />
