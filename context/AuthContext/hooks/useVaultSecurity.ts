@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { clearChatMessageCache } from '@/utils/chatMessageCache';
 import {
     identityRotation,
     OWNER_ID_STORE,
@@ -9,6 +10,7 @@ import {
     VaultIdentityState,
 } from '@/utils/crypto';
 import { useAppForeground } from '@/hooks/useAppForeground';
+import { clearMediaCache } from '@/utils/mediaCache';
 import { vaultPasscode } from '@/utils/vaultPasscode';
 import * as Sentry from '@sentry/react-native';
 import { Session } from '@supabase/supabase-js';
@@ -319,6 +321,8 @@ export function useVaultSecurity() {
         await vaultPasscode.clearLocal();
         purgeVaultRAM();
         purgeSharedSecrets();
+        await clearChatMessageCache();
+        await clearMediaCache();
         setVaultState('loading');
     };
 
