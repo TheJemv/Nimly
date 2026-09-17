@@ -10,7 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const PAGE_SIZE = 30;
 
-const REPLY_SELECT = `
+// Exported so `useIncomingMessageCache` can fetch a reply's joined preview the
+// same way this file does, and cache an identically-shaped row.
+export const REPLY_SELECT = `
     *,
     reply_to:reply_to_id (id, content, sender_id, type),
     reply_to_story:reply_to_story_id (id, media_url, user_id, media_type)

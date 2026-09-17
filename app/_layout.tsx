@@ -16,6 +16,7 @@ import { AppReadyProvider, useAppReady } from '@/context/AppReadyContext';
 import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { useAppForeground } from '@/hooks/useAppForeground';
+import { useIncomingMessageCache } from '@/hooks/useIncomingMessageCache';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { StatusBar, StyleSheet, View } from 'react-native';
@@ -92,6 +93,7 @@ async function isServerReachable(): Promise<boolean> {
 function RootLayoutNav() {
     const { isLoading, session, vault } = useAuth();
     const { homeReady } = useAppReady();
+    useIncomingMessageCache(session?.user?.id ?? null);
     const [isOffline, setIsOffline] = useState(false);
     const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
     const [startupStalled, setStartupStalled] = useState(false);

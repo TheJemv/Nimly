@@ -124,6 +124,43 @@ export function scheduleCacheWrite(key: string, data: CachedChatData): void {
     );
 }
 
+/**
+ * Merges ONE incoming message into a chat's cache — for messages that arrive
+ * while that chat's own screen isn't open to write-through the full list
+ * itself (see `hooks/useIncomingMessageCache.ts`). Without this, a message
+ * that arrives while you're elsewhere in the app only shows up a few seconds
+ * after reopening that chat, once the network reconcile catches up, instead
+ * of already being there when it renders from cache.
+ *
+ * Merges against whatever's already pending for this key rather than a fresh
+ * disk read, so it can't race an in-flight debounced write and lose data to
+ * a stale read — if that chat IS open and its write-through just scheduled
+ * the full list (which already includes this message), this is a no-op
+ * dedupe, not a second, incomplete write.
+ */
+export function appendCachedMessage(key: string, message: any, currentUserId: string | null): void {
+    if (message?.__status) return; // never cache optimistic/in-flight rows
+
+    const pending = pendingWrites.get(key);
+    if (pending) {
+        scheduleCacheWrite(key, {
+            messages: [message, ...pending.messages.filter((m) => m.id !== message.id)],
+            hasMore: pending.hasMore,
+            currentUserId: currentUserId ?? pending.currentUserId,
+        });
+        return;
+    }
+
+    void (async () => {
+        const existing = await getCachedMessages(key);
+        scheduleCacheWrite(key, {
+            messages: [message, ...(existing?.messages ?? []).filter((m) => m.id !== message.id)],
+            hasMore: existing?.hasMore ?? true,
+            currentUserId: currentUserId ?? existing?.currentUserId ?? null,
+        });
+    })();
+}
+
 /** Clears one conversation's cache, or the whole cache when `key` is omitted (e.g. logout). */
 export async function clearChatMessageCache(key?: string): Promise<void> {
     if (key) {
