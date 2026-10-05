@@ -1,6 +1,6 @@
-import { createPost } from "@/api/posts";
 import NymlyCamera from "@/components/NymlyCamera";
 import { getThemeColor } from "@/constants/theme";
+import { usePostActivity } from "@/context/PostActivityContext";
 
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
@@ -9,7 +9,6 @@ import { useVideoPlayer, VideoView } from "expo-video";
 
 import { useState } from "react";
 import {
-   ActivityIndicator,
    Alert,
    Image,
    KeyboardAvoidingView,
@@ -38,17 +37,17 @@ export default function NewPostScreen() {
    const insets = useSafeAreaInsets();
 
    const { session } = useAuth();
+   const { uploadStatus, startUpload } = usePostActivity();
 
    const [text, setText] = useState("");
    const [media, setMedia] = useState<{ uri: string; type: 'image' | 'video' } | undefined>(undefined);
-   const [isPosting, setIsPosting] = useState(false);
    const [isCameraVisible, setCameraVisible] = useState(false);
 
    const tintColor = getThemeColor("tint");
    const MAX_CHARS = 128;
 
    const isOverLimit = text.length > MAX_CHARS;
-   const canPost = (text.trim().length > 0 || !!media) && !isPosting;
+   const canPost = text.trim().length > 0 || !!media;
 
    const previewPlayer = useVideoPlayer(media?.type === 'video' ? media.uri : null, (p) => {
       p.loop = true;
@@ -93,7 +92,9 @@ export default function NewPostScreen() {
    };
 
    // POST ACTION
-   const handlePost = async () => {
+   // The upload runs in PostUploadContext so we can go back to Home right away;
+   // Home shows the "uploading" banner (and the retry if it fails).
+   const handlePost = () => {
       if (!canPost || !session?.user?.id) return;
 
       if (text.length > MAX_CHARS) {
@@ -101,17 +102,13 @@ export default function NewPostScreen() {
          return;
       }
 
-      setIsPosting(true);
-      try {
-         const finalCleanText = text.trim();
-         // 4. 👇 Use session.user.id directly
-         await createPost(session.user.id, finalCleanText, media);
-         router.back();
-      } catch (error: any) {
-         Alert.alert("Error", error.message);
-      } finally {
-         setIsPosting(false);
+      if (uploadStatus === "running") {
+         Alert.alert("Still uploading", "Your previous post is still uploading. Try again in a moment.");
+         return;
       }
+
+      startUpload({ userId: session.user.id, text: text.trim(), media });
+      router.back();
    };
 
    return (
@@ -130,8 +127,7 @@ export default function NewPostScreen() {
             ),
             headerRight: () => (
                <TouchableOpacity onPress={handlePost} disabled={!canPost} style={styles.headerBtn}>
-                  {isPosting ? <ActivityIndicator size="small" color={tintColor} /> :
-                     <Text style={[styles.postBtnText, { color: canPost ? tintColor : ICON }]}>Post</Text>}
+                  <Text style={[styles.postBtnText, { color: canPost ? tintColor : ICON }]}>Post</Text>
                </TouchableOpacity>
             ),
          }} />

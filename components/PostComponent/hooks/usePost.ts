@@ -2,11 +2,12 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 
 import { blocksApi } from "@/api/blocks";
-import { deletePost, toggleLike } from "@/api/posts";
+import { toggleLike } from "@/api/posts";
 import { reportsApi } from "@/api/reports";
 
 import { AuthContext } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
+import { usePostActivity } from "@/context/PostActivityContext";
 import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { buildVideoSource } from "@/utils/videoSource";
@@ -28,10 +29,36 @@ const toStoragePath = (value: string): string => {
 // "the most visible" without duplicating the regex.
 export const isVideoPath = (path: string): boolean => /\.(mp4|mov|m4v|avi|webm)$/i.test(path);
 
+// Manual formatting: Hermes on iOS doesn't always ship full Intl data, so
+// toLocaleDateString/toLocaleTimeString with options can silently return an
+// unexpected format on device. Same approach as messageGrouping.ts.
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Instagram/Twitter-style relative label: "now", "5m", "3h", "2d", then "Sep 4". */
+const formatPostDate = (value: string): string => {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMin = Math.floor((now.getTime() - d.getTime()) / 60000);
+
+    if (diffMin < 1) return "now";
+    if (diffMin < 60) return `${diffMin}m`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `${diffDay}d`;
+
+    const sameYear = d.getFullYear() === now.getFullYear();
+    return sameYear
+        ? `${MONTHS[d.getMonth()]} ${d.getDate()}`
+        : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+};
+
 //  useLike / usePost
 export function usePost(post: any, onDelete?: () => void) {
     const { session } = useContext(AuthContext)
     const { blockLocally, unblockLocally } = useBlockedUsers();
+    const { startDelete } = usePostActivity();
 
     //  ==== Likes ====
     const [likesCount, setLikesCount] = useState<number>(post.likes_count || 0);
@@ -123,21 +150,16 @@ export function usePost(post: any, onDelete?: () => void) {
     );
 
     const postText = post.content;
-    const date = new Date(post.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const date = formatPostDate(post.created_at);
     const username = post.username || 'user';
 
 
     //  ==== Actions ====
     const handleDelete = () => {
-        const performDelete = async () => {
-            try {
-                // FIXED: we pass post.media_url so it deletes the correct file from storage
-                await deletePost(post.id, isMedia ? post.media_url : null);
-                if (onDelete) onDelete();
-            } catch {
-                Alert.alert("Error", "Could not delete the post");
-            }
-        };
+        // PostActivityContext hides the post right away, deletes it in the
+        // background and shows the "Deleting…" banner. We pass post.media_url so
+        // it deletes the correct file from storage.
+        const performDelete = () => startDelete({ id: post.id, mediaUrl: isMedia ? post.media_url : null });
 
         if (Platform.OS === 'ios') {
             ActionSheetIOS.showActionSheetWithOptions(

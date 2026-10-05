@@ -11,6 +11,7 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -27,6 +28,10 @@ import { FAST_START_BUFFER } from "@/utils/videoSource";
 
 import { styles } from "./Post.styles";
 import { usePost } from './hooks/usePost';
+
+const TEXT = getThemeColor("text");
+const TINT = getThemeColor("tint");
+const ACTION_HIT_SLOP = { top: 10, bottom: 10, left: 6, right: 6 };
 
 interface Props {
     post: any;
@@ -189,132 +194,140 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
         });
     const imageTapGesture = Gesture.Exclusive(doubleTap, singleTap);
 
+    // Video: videoSource alone is enough (HLS ready even if the signed URL for
+    // the MP4 hasn't resolved yet). Image: mediaUrl.
+    const mediaReady = Boolean(mediaUrl || videoSource);
+
     return (
-        <View style={styles.cardContainer}>
-            <View style={styles.mainCard}>
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.userInfo}
-                        onPress={() => {
-                            if (isOwner) {
-                                router.push("/(app)/(tabs)/(profile)");
-                            } else {
-                                router.push(`/(app)/user/${post.user_id}`);
-                            }
-                        }}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.avatarBorder}>
-                            <View style={styles.avatarInner}>
-                                <UserAvatar
-                                    avatar_config={post.avatar_config}
-                                    size={40}
-                                />
-                            </View>
-                        </View>
-                        <View>
-                            <Text style={styles.usernameText}>@{username}</Text>
-                            <Text style={styles.dateText}>{date}</Text>
-                        </View>
-                    </TouchableOpacity>
-
-                    {isOwner ? (
-                        <TouchableOpacity onPress={handleDelete} style={styles.moreAction}>
-                            <SymbolView name="trash.fill" size={18} tintColor={getThemeColor("icon")} />
-                        </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity onPress={async () => await handleReportPost(post.id)} style={styles.moreAction}>
-                            <SymbolView name="exclamationmark.triangle.fill" size={18} tintColor={getThemeColor("icon")} />
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {/* UNIFIED CONTENT: Text and Media can coexist */}
-                <View style={styles.contentContainer}>
-                    {postText ? (
-                        <View style={styles.textFrame}>
-                            <Text style={styles.bodyText}>{postText}</Text>
-                        </View>
-                    ) : null}
-
-                    {/* If there's media (image/video), we show it below the text.
-                        Video: videoSource alone is enough (HLS ready even if the
-                        signed URL for the MP4 hasn't resolved yet). Image: mediaUrl. */}
-                    {isMedia && (mediaUrl || videoSource) ? (
-                        <GestureDetector gesture={imageTapGesture}>
-                            <View style={styles.mediaFrame}>
-                                {isVideo ? (
-                                    <>
-                                        <VideoView
-                                            player={previewPlayer}
-                                            style={styles.image}
-                                            contentFit="cover"
-                                            nativeControls={false}
-                                        />
-                                        {poster && previewLoading && (
-                                            <Image
-                                                source={poster}
-                                                style={styles.posterOverlay}
-                                                contentFit="cover"
-                                            />
-                                        )}
-                                        {previewLoading && isActive && (
-                                            <View style={styles.playOverlay} pointerEvents="none">
-                                                <ActivityIndicator color="#fff" />
-                                            </View>
-                                        )}
-                                        <GestureDetector gesture={muteTap}>
-                                            <View style={styles.muteButton}>
-                                                <SymbolView
-                                                    name={muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
-                                                    size={13}
-                                                    tintColor="#fff"
-                                                />
-                                            </View>
-                                        </GestureDetector>
-                                    </>
-                                ) : (
-                                    <Image
-                                        source={{ uri: mediaUrl ?? undefined }}
-                                        style={styles.image}
-                                        contentFit="cover"
-                                        transition={400}
-                                    />
-                                )}
-                                <Animated.View style={[styles.heartBurst, heartAnimStyle]} pointerEvents="none">
-                                    <SymbolView name="heart.fill" size={90} tintColor="#fff" />
-                                </Animated.View>
-                            </View>
-                        </GestureDetector>
-                    ) : null}
-                </View>
-
-                <View style={styles.footer}>
-                    <TouchableOpacity
-                        style={[styles.interactionBtn, isLiked && styles.activeBtn]}
-                        onPress={handleLike}
-                    >
-                        <SymbolView
-                            name={isLiked ? "heart.fill" : "heart"}
-                            size={18}
-                            tintColor={isLiked ? getThemeColor("tint") : getThemeColor("textSecondary")}
+        <View>
+            <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.userInfo}
+                    onPress={() => {
+                        if (isOwner) {
+                            router.push("/(app)/(tabs)/(profile)");
+                        } else {
+                            router.push(`/(app)/user/${post.user_id}`);
+                        }
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.avatarWrap}>
+                        <UserAvatar
+                            avatar_config={post.avatar_config}
+                            size={46}
                         />
-                        <Text style={[styles.interactionText, isLiked && { color: getThemeColor("tint") }]}>
-                            {likesCount}
-                        </Text>
-                    </TouchableOpacity>
+                    </View>
+                    <View style={styles.nameColumn}>
+                        <Text style={styles.usernameText} numberOfLines={1}>@{username}</Text>
+                        <Text style={styles.dateText}>{date}</Text>
+                    </View>
+                </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.interactionBtn}
-                        onPress={onCommentPress}
-                    >
-                        <SymbolView name="bubble.right" size={18} tintColor={getThemeColor("textSecondary")} />
-                        <Text style={styles.interactionText}>{commentsCount}</Text>
-                    </TouchableOpacity>
-                </View>
+                {/* "•••": delete on your own post, report/block on someone else's. */}
+                <TouchableOpacity
+                    onPress={isOwner ? handleDelete : () => handleReportPost(post.id)}
+                    style={styles.moreButton}
+                    hitSlop={{ top: 10, bottom: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="More options"
+                >
+                    <SymbolView name="ellipsis" size={22} weight="bold" tintColor={TEXT} />
+                </TouchableOpacity>
             </View>
 
-            {isMedia && (mediaUrl || videoSource) ? (
+            {/* Text and media can coexist. The text is always plain (no background),
+                above the media when there is one. */}
+            {postText ? (
+                <View style={styles.caption}>
+                    <Text style={styles.captionText}>{postText}</Text>
+                </View>
+            ) : null}
+
+            {isMedia && mediaReady ? (
+                <GestureDetector gesture={imageTapGesture}>
+                    <View style={styles.mediaFrame}>
+                        {isVideo ? (
+                            <>
+                                <VideoView
+                                    player={previewPlayer}
+                                    style={styles.image}
+                                    contentFit="cover"
+                                    nativeControls={false}
+                                />
+                                {poster && previewLoading && (
+                                    <Image
+                                        source={poster}
+                                        style={styles.posterOverlay}
+                                        contentFit="cover"
+                                    />
+                                )}
+                                {previewLoading && isActive && (
+                                    <View style={styles.playOverlay} pointerEvents="none">
+                                        <ActivityIndicator color="#fff" />
+                                    </View>
+                                )}
+                                <GestureDetector gesture={muteTap}>
+                                    <View style={styles.muteButton}>
+                                        <BlurView intensity={30} tint="dark" style={styles.muteBlur} />
+                                        <SymbolView
+                                            name={muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
+                                            size={15}
+                                            tintColor="#fff"
+                                        />
+                                    </View>
+                                </GestureDetector>
+                            </>
+                        ) : (
+                            <Image
+                                source={{ uri: mediaUrl ?? undefined }}
+                                style={styles.image}
+                                contentFit="cover"
+                                transition={400}
+                            />
+                        )}
+                        <Animated.View style={[styles.heartBurst, heartAnimStyle]} pointerEvents="none">
+                            <SymbolView name="heart.fill" size={90} tintColor="#fff" />
+                        </Animated.View>
+                    </View>
+                </GestureDetector>
+            ) : isMedia ? (
+                // Same footprint while the media resolves, so the post doesn't
+                // grow (and shove the feed around) once it arrives.
+                <View style={styles.mediaFrame} />
+            ) : null}
+
+            <View style={styles.actions}>
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={handleLike}
+                    hitSlop={ACTION_HIT_SLOP}
+                    activeOpacity={0.6}
+                >
+                    <SymbolView
+                        name={isLiked ? "heart.fill" : "heart"}
+                        size={25}
+                        tintColor={isLiked ? TINT : TEXT}
+                    />
+                    <Text style={[styles.actionText, isLiked && { color: TINT }]}>
+                        {likesCount}
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={onCommentPress}
+                    hitSlop={ACTION_HIT_SLOP}
+                    activeOpacity={0.6}
+                >
+                    <SymbolView name="bubble.left" size={24} tintColor={TEXT} />
+                    <Text style={styles.actionText}>{commentsCount}</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.divider} />
+
+            {isMedia && mediaReady ? (
                 isVideo ? (
                     <FullscreenVideoViewer
                         visible={zoomVisible}

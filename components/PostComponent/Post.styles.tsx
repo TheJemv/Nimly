@@ -5,20 +5,48 @@ const SURFACE = getThemeColor("surface");
 const TEXT_SECONDARY = getThemeColor("textSecondary");
 const TEXT = getThemeColor("text");
 
+// Header, actions and captions sit 20pt from the screen edge; media and the
+// text panel sit 10pt. That step is what makes the media read as inset.
+const CONTENT_INSET = 20;
+const MEDIA_INSET = 10;
+const MEDIA_RADIUS = 28;
+
 export const styles = StyleSheet.create({
-    cardContainer: { marginBottom: 20, paddingHorizontal: 4 },
-    mainCard: { backgroundColor: '#050505', borderRadius: 28, borderWidth: 1, borderColor: SURFACE, overflow: 'hidden' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-    userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    avatarBorder: { width: 44, height: 44, borderRadius: 22, padding: 1.5, backgroundColor: SURFACE },
-    avatarInner: { flex: 1, borderRadius: 21, backgroundColor: '#000', overflow: 'hidden', display: "flex", justifyContent: "center", alignItems: "center" },
-    avatarPlaceholder: { flex: 1, backgroundColor: SURFACE },
-    usernameText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', letterSpacing: -0.4 },
-    dateText: { color: TEXT_SECONDARY, fontSize: 12, marginTop: 1 },
-    moreAction: { padding: 4 },
-    textFrame: { paddingHorizontal: 12, paddingBottom: 12 },
-    bodyText: { color: TEXT, fontSize: 17, lineHeight: 25, letterSpacing: -0.2 },
-    mediaFrame: { width: '100%', aspectRatio: 1, backgroundColor: '#000' },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: CONTENT_INSET,
+        paddingTop: 18,
+        paddingBottom: 14,
+    },
+    userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+    avatarWrap: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: SURFACE,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    nameColumn: { flexShrink: 1, gap: 1 },
+    usernameText: { color: TEXT, fontSize: 17, fontWeight: '600', letterSpacing: -0.3 },
+    dateText: { color: TEXT_SECONDARY, fontSize: 15 },
+    moreButton: { paddingLeft: 12, paddingVertical: 8 },
+
+    caption: { paddingHorizontal: CONTENT_INSET, paddingBottom: 14 },
+    captionText: { color: TEXT, fontSize: 16, lineHeight: 23, letterSpacing: -0.1 },
+
+    mediaFrame: {
+        marginHorizontal: MEDIA_INSET,
+        aspectRatio: 8 / 9,
+        borderRadius: MEDIA_RADIUS,
+        backgroundColor: SURFACE,
+        overflow: 'hidden',
+    },
     image: { width: '100%', height: '100%' },
     posterOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     playOverlay: {
@@ -29,15 +57,18 @@ export const styles = StyleSheet.create({
     },
     muteButton: {
         position: 'absolute',
-        bottom: 10,
-        right: 10,
-        width: 26,
-        height: 26,
-        borderRadius: 13,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        right: 14,
+        bottom: 14,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
         alignItems: 'center',
         justifyContent: 'center',
     },
+    muteBlur: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     heartBurst: {
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
@@ -48,11 +79,22 @@ export const styles = StyleSheet.create({
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 0 },
     },
-    footer: { flexDirection: 'row', padding: 12, gap: 8, borderTopWidth: 0.5, borderTopColor: SURFACE },
-    interactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-    activeBtn: { backgroundColor: 'rgba(255,255,255,0.03)' },
-    interactionText: { color: TEXT_SECONDARY, fontSize: 14, fontWeight: '600' },
-    contentContainer: {
-        gap: 8, // Espacio entre el texto y la imagen si ambos existen
+
+    actions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 22,
+        paddingHorizontal: CONTENT_INSET,
+        paddingTop: 18,
+        paddingBottom: 22,
+    },
+    actionButton: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    actionText: { color: TEXT, fontSize: 16, fontWeight: '500' },
+    // 1pt (not hairlineWidth: at 0.33pt it vanishes on-device) — the same
+    // discreet separator, inset to line up with the header and actions.
+    divider: {
+        height: 1,
+        marginHorizontal: CONTENT_INSET,
+        backgroundColor: 'rgba(255,255,255,0.15)',
     },
 });

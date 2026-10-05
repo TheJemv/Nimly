@@ -19,7 +19,9 @@ export const styles = StyleSheet.create({
     lockedTitle: { fontSize: 18, fontWeight: 'bold', marginVertical: 16, color: '#fff' },
     connectBtn: { width: '100%', paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
     btnText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 1 },
-    feed: { paddingHorizontal: 16, gap: 16, paddingBottom: 60 },
+    // Horizontal margin and vertical spacing both come from PostComponent
+    // itself (none here, so posts match Home 1:1).
+    feed: { paddingBottom: 60 },
     blockedArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
     blockedTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginTop: 16, textAlign: 'center' },
     blockedSubtitle: { fontSize: 14, color: textSecondary, marginTop: 8, textAlign: 'center', lineHeight: 20 },

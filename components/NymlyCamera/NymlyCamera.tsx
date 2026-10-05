@@ -216,14 +216,18 @@ export default function NymlyCamera({ visible, onClose, onSend, mode = 'chat' }:
     const pickFromGallery = async () => {
         if (isRecording) return;
         try {
+            // New post ('simple'): photos AND videos from the library, whichever
+            // capture mode is active. Chat/story keep the picker tied to the mode.
+            const pickAnyMedia = mode === 'simple';
+            const pickVideo = pickAnyMedia || captureMode === 'video';
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
+                mediaTypes: pickAnyMedia ? ['images', 'videos'] : captureMode === 'photo' ? ['images'] : ['videos'],
                 // Video: 1 = no lossy pre-compression from the picker (our
                 // pipeline compresses it well). Photo: near-max, then normalized on upload.
-                quality: captureMode === 'photo' ? 0.95 : 1,
+                quality: pickVideo ? 1 : 0.95,
                 // Native editor: video trimming on iOS + enforces the duration
                 // cap (without this, videoMaxDuration is ignored when picking from the gallery).
-                allowsEditing: captureMode === 'video',
+                allowsEditing: pickVideo,
                 videoMaxDuration: MAX_VIDEO_SECONDS,
                 // Passthrough: compressVideoForUpload does the only transcode
                 // (720p + HDR->SDR tone-map). See new-post.tsx.
