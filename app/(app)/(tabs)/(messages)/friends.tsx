@@ -1,3 +1,4 @@
+import { chatApi } from "@/api/chat";
 import { friendsApi } from "@/api/friends";
 import { ThemedText } from "@/components/themed-text";
 import UserAvatar from "@/components/UserAvatar";
@@ -18,6 +19,8 @@ export default function NewChatModal() {
     const router = useRouter();
     // const [friends, setFriends] = useState<any[]>([]);
     const [filteredFriends, setFilteredFriends] = useState<any[]>([]);
+    // true when you have friends but already chat with all of them.
+    const [allHaveChat, setAllHaveChat] = useState(false);
     const [loading, setLoading] = useState(true);
     // const [_search, setSearch] = useState("");
 
@@ -27,9 +30,16 @@ export default function NewChatModal() {
 
     const fetchFriendsForChat = async () => {
         try {
-            const allFriends = await friendsApi.getFriendsList(0, 50);
-            // setFriends(allFriends);
-            setFilteredFriends(allFriends);
+            const [allFriends, chatPartnerIds] = await Promise.all([
+                friendsApi.getFriendsList(0, 50),
+                chatApi.getChatPartnerIds(),
+            ]);
+            // Only friends you don't have a chat with yet: existing chats are
+            // already in the Messages list.
+            const withoutChat = allFriends.filter((f: any) => f && !chatPartnerIds.has(f.id));
+            // setFriends(withoutChat);
+            setFilteredFriends(withoutChat);
+            setAllHaveChat(allFriends.length > 0 && withoutChat.length === 0);
         } catch (error) {
             console.error(error);
         } finally {
@@ -59,41 +69,63 @@ export default function NewChatModal() {
         }, 100);
     };
 
+    const header = (
+        <Stack.Screen
+            options={{
+                headerTitle: "New chat",
+                headerTitleStyle: { color: getThemeColor("text"), fontWeight: "600" },
+                // headerSearchBarOptions: {
+                //     placeholder: "Search friends...",
+                //     textColor: "#fff",
+                //     hintTextColor: "#666",
+                //     onChangeText: (event) => handleSearch(event.nativeEvent.text),
+                //     onCancelButtonPress: () => setFilteredFriends(friends),
+                // },
+                headerLeft: () => (
+                    <TouchableOpacity onPress={() => router.back()}>
+                        <SymbolView name={"xmark"} tintColor={getThemeColor("tint")} />
+                    </TouchableOpacity>
+                ),
+            }}
+        />
+    );
+
     if (loading) {
         return (
-            <View style={styles.center}>
-                <ActivityIndicator color={getThemeColor("tint")} />
-            </View>
+            <>
+                {header}
+                <View style={styles.center}>
+                    <ActivityIndicator color={getThemeColor("tint")} />
+                </View>
+            </>
         );
     }
 
     return (
         <>
-            <Stack.Screen
-                options={{
-                    // headerSearchBarOptions: {
-                    //     placeholder: "Search friends...",
-                    //     textColor: "#fff",
-                    //     hintTextColor: "#666",
-                    //     onChangeText: (event) => handleSearch(event.nativeEvent.text),
-                    //     onCancelButtonPress: () => setFilteredFriends(friends),
-                    // },
-                    headerLeft: () => (
-                        <TouchableOpacity onPress={() => router.back()}>
-                            <SymbolView name={"xmark"} tintColor={getThemeColor("tint")} />
-                        </TouchableOpacity>
-                    ),
-                }}
-            />
+            {header}
             <View style={styles.container}>
                 <FlatList
                     data={filteredFriends}
                     keyExtractor={(item) => item.id}
                     contentInsetAdjustmentBehavior="automatic"
-                    contentContainerStyle={{ paddingTop: Platform.OS === 'android' ? 100 : 0 }}
+                    // flexGrow: lets the empty state fill the sheet and sit in the middle.
+                    contentContainerStyle={{ flexGrow: 1, paddingTop: Platform.OS === 'android' ? 100 : 0 }}
                     ListEmptyComponent={
                         <View style={styles.empty}>
-                            <ThemedText style={styles.emptyText}>No friends found</ThemedText>
+                            <SymbolView
+                                name={allHaveChat ? "bubble.left.and.bubble.right.fill" : "person.2.fill"}
+                                size={44}
+                                tintColor={getThemeColor("textSecondary")}
+                            />
+                            <ThemedText style={styles.emptyTitle}>
+                                {allHaveChat ? "No new chats to start" : "No friends yet"}
+                            </ThemedText>
+                            <ThemedText style={styles.emptyText}>
+                                {allHaveChat
+                                    ? "You already have a chat with all your friends. You'll find them in Messages."
+                                    : "Add friends from Search to start a chat."}
+                            </ThemedText>
                         </View>
                     }
                     renderItem={({ item }) => (
@@ -142,7 +174,8 @@ const styles = StyleSheet.create({
     info: { marginLeft: 12, flex: 1 },
     username: { fontSize: 16, fontWeight: "600", color: "#fff" },
     status: { fontSize: 13, color: "#666" },
-    empty: { padding: 40, alignItems: "center" },
-    emptyText: { color: "#666" },
+    empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, paddingBottom: 80, gap: 10 },
+    emptyTitle: { fontSize: 17, fontWeight: "600", color: "#fff", marginTop: 6 },
+    emptyText: { fontSize: 14, color: "#666", textAlign: "center", lineHeight: 20 },
     footerLoader: { paddingVertical: 20, alignItems: "center" }
 });

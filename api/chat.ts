@@ -39,6 +39,30 @@ export const chatApi = {
         return newChat.id;
     },
 
+    /** Ids of every user I already have a chat with (same chats the Messages list shows). */
+    async getChatPartnerIds(): Promise<Set<string>> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return new Set();
+
+        const { data: myChats, error: e1 } = await supabase
+            .from('chat_participants')
+            .select('chat_id')
+            .eq('user_id', user.id);
+        if (e1) throw e1;
+
+        const myIds = myChats?.map(c => c.chat_id) || [];
+        if (myIds.length === 0) return new Set();
+
+        const { data: partners, error: e2 } = await supabase
+            .from('chat_participants')
+            .select('user_id')
+            .in('chat_id', myIds)
+            .neq('user_id', user.id);
+        if (e2) throw e2;
+
+        return new Set((partners || []).map(p => p.user_id));
+    },
+
     async sendMessage(chatId: string, content: string) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("No auth");
