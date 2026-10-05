@@ -127,7 +127,13 @@ export const vaultIdentity = {
 
 const KNOWN_KEYS_STORE = 'nimly_known_pubkeys';
 
-type KnownKeyRecord = { key: string; firstSeenAt: string };
+type KnownKeyRecord = {
+    key: string;
+    firstSeenAt: string;
+    /** When THIS device saw `key` replace an older one (the contact changed keys).
+     *  Absent if it's the first key ever seen for them here. */
+    changedAt?: string;
+};
 
 const readKnownKeys = async (): Promise<Record<string, KnownKeyRecord>> => {
     try {
@@ -139,32 +145,38 @@ const readKnownKeys = async (): Promise<Record<string, KnownKeyRecord>> => {
 };
 
 export const contactKeys = {
-    /** Records a contact's current public key. Returns whether it changed relative
-     *  to the last one known on THIS device. */
+    /** Records a contact's current public key. `changed`: it differs from the last
+     *  one known on THIS device (true only on the call that detects it).
+     *  `changedAt`: when that change was detected — remembered, so later calls
+     *  still know the current key replaced an older one. */
     async record(userId: string, publicKey: string | null): Promise<{
         changed: boolean;
         previousKey: string | null;
         firstSeenAt: string;
+        changedAt: string | null;
     }> {
         const nowIso = new Date().toISOString();
-        if (!userId || !publicKey) return { changed: false, previousKey: null, firstSeenAt: nowIso };
+        if (!userId || !publicKey) return { changed: false, previousKey: null, firstSeenAt: nowIso, changedAt: null };
 
         const all = await readKnownKeys();
         const prev = all[userId] ?? null;
 
         if (prev && prev.key === publicKey) {
-            return { changed: false, previousKey: prev.key, firstSeenAt: prev.firstSeenAt };
+            return { changed: false, previousKey: prev.key, firstSeenAt: prev.firstSeenAt, changedAt: prev.changedAt ?? null };
         }
 
-        all[userId] = { key: publicKey, firstSeenAt: nowIso };
+        // Only "changed" if we already knew a previous one.
+        const changedAt = prev ? nowIso : null;
+        all[userId] = changedAt ? { key: publicKey, firstSeenAt: nowIso, changedAt } : { key: publicKey, firstSeenAt: nowIso };
         try {
             await AsyncStorage.setItem(KNOWN_KEYS_STORE, JSON.stringify(all));
         } catch { /* not critical */ }
 
         return {
-            changed: Boolean(prev), // only "changed" if we already knew a previous one
+            changed: Boolean(prev),
             previousKey: prev?.key ?? null,
             firstSeenAt: nowIso,
+            changedAt,
         };
     },
 

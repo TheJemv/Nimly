@@ -22,11 +22,47 @@ export type SendResult = { ok: true } | { ok: false; reason: "invalid" | "no-key
 
 type MessageCursor = { created_at: string; id: string } | null;
 
+// How far back a sync pages to close the hole left by a long absence before
+// giving up and starting over from the newest messages.
+const MAX_SYNC_PAGES = 5;
+
+const toCursor = (m: any): NonNullable<MessageCursor> => ({ created_at: m.created_at, id: m.id });
+const timeOf = (m: any): number => new Date(m.created_at).getTime();
+
+/** Row filter for the history cutoff: optimistic bubbles, or rows at/after it. */
+const atOrAfter = (cutoff: string) => {
+    const t = new Date(cutoff).getTime();
+    return (m: any) => Boolean(m.__status) || timeOf(m) >= t;
+};
+
+/** One page of messages, newest first, strictly older than `cursor`. */
+async function fetchPage(cId: string, cursor: MessageCursor, cutoff: string | null): Promise<any[]> {
+    let query = supabase
+        .from('messages')
+        .select(REPLY_SELECT)
+        .eq('chat_id', cId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+    if (cutoff) query = query.gte('created_at', cutoff);
+    // Keyset pagination: strictly older than the last row we have. Unlike an
+    // offset, this can't skip/duplicate a row if something was deleted in
+    // between pages. `id` only breaks ties on an identical `created_at`.
+    if (cursor) {
+        query = query.or(
+            `created_at.lt."${cursor.created_at}",and(created_at.eq."${cursor.created_at}",id.lt."${cursor.id}")`
+        );
+    }
+
+    const { data, error } = await query.limit(PAGE_SIZE);
+    if (error) throw error;
+    return data || [];
+}
+
 /**
- * Merges a "latest N" fetch (reconcile-on-open, catch-up-on-foreground) into
- * whatever's already showing: patches fields on rows we already have, adds
- * ones we don't. Never removes a row just because it's absent from `fresh` —
- * `fresh` is a fixed-size window, not the full list, so absence doesn't mean
+ * Merges a sync of the latest messages (on open, on foreground, on realtime
+ * rejoin) into whatever's already showing: patches fields on rows we already
+ * have, adds ones we don't. Never removes a row just because it's absent from
+ * `fresh` — `fresh` is a window, not the full list, so absence doesn't mean
  * "deleted" (that's handled separately by the realtime DELETE event).
  */
 function reconcileMessages(prev: any[], fresh: any[]) {
@@ -92,6 +128,20 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
     // tells the cache-seed flow (which can resolve later on an unusually slow
     // disk / fast network) to back off instead of clobbering fresher data.
     const networkOwnsStateRef = useRef(false);
+    // Newest message known to be contiguous with the loaded history: everything
+    // from it down to the oldest loaded row has been fetched. A sync pages back
+    // until it reaches it, so a long absence can't leave a hole mid-thread.
+    const syncedThroughRef = useRef<MessageCursor>(null);
+    // Realtime has been live without interruption since the last sync: only
+    // then is an incoming INSERT contiguous (and can move `syncedThroughRef`).
+    const liveSinceSyncRef = useRef(false);
+    const channelLiveRef = useRef(false);
+    // Sync serialization: one at a time; a request made meanwhile runs after.
+    const syncInFlightRef = useRef(false);
+    const nextSyncRef = useRef<string | null>(null);
+    // Latest rendered list, for decisions taken outside a setMessages updater.
+    const messagesRef = useRef<any[]>(messages);
+    messagesRef.current = messages;
 
     // Mark messages as read
     const markMessagesAsRead = useCallback(async (cId: string) => {
@@ -99,82 +149,126 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         await chatApi.markAsRead(cId, targetFriendId);
     }, [targetFriendId]);
 
-    const fetchMessages = useCallback(async (cId: string, cursor: MessageCursor, keyOverride?: string) => {
+    /** Pagination: the page right below `cursor` (the oldest loaded row). */
+    const fetchOlderMessages = useCallback(async (cId: string, cursor: NonNullable<MessageCursor>) => {
         try {
-            let query = supabase
-                .from('messages')
-                .select(REPLY_SELECT)
-                .eq('chat_id', cId)
-                .order('created_at', { ascending: false })
-                .order('id', { ascending: false });
-            if (cutoffRef.current) query = query.gte('created_at', cutoffRef.current);
-            // Keyset pagination: strictly older than the last row we have. Unlike an
-            // offset, this can't skip/duplicate a row if something was deleted in
-            // between pages. `id` only breaks ties on an identical `created_at`.
-            if (cursor) {
-                query = query.or(
-                    `created_at.lt."${cursor.created_at}",and(created_at.eq."${cursor.created_at}",id.lt."${cursor.id}")`
-                );
-            }
-
-            const { data, error } = await query.limit(PAGE_SIZE);
-
-            if (error) throw error;
-
-            const fetchedData = data || [];
-
-            if (fetchedData.length < PAGE_SIZE) {
-                setHasMore(false);
-                // The server-authoritative "latest page" fits in one page: any
-                // leftover cached reserve beyond it must be stale (deleted).
-                if (!cursor) cacheReserveRef.current = [];
-            }
+            const fetchedData = await fetchPage(cId, cursor, cutoffRef.current);
+            if (fetchedData.length < PAGE_SIZE) setHasMore(false);
 
             // Decrypt BEFORE rendering: no "Decrypting…" flash, no jumps.
-            await hydrateTextMessages(fetchedData, keyOverride ?? pubKeyRef.current);
+            await hydrateTextMessages(fetchedData, pubKeyRef.current);
 
-            setMessages(prev => (cursor ? [...prev, ...fetchedData] : reconcileMessages(prev, fetchedData)));
-
-            return fetchedData;
+            setMessages(prev => [...prev, ...fetchedData]);
         } catch (e) {
             console.error('❌ [FETCH] Error:', e);
         }
     }, []);
 
-    // Fetches the most recent messages and merges in any that are missing, without touching
-    // pagination or the optimistic bubbles. Used when returning from the background.
-    const catchUpMessages = useCallback(async (cId: string) => {
-        try {
-            let query = supabase
-                .from('messages')
-                .select(REPLY_SELECT)
-                .eq('chat_id', cId)
-                .order('created_at', { ascending: false });
-            if (cutoffRef.current) query = query.gte('created_at', cutoffRef.current);
+    /**
+     * Brings in the newest messages and merges them into what's showing. Pages
+     * back from the newest until it reaches `syncedThroughRef`, so whatever
+     * arrived while we weren't listening (a cache from days ago, a while in
+     * the background) is fetched in full — not just the latest page with a
+     * hole of never-fetched messages below it. If the hole is bigger than
+     * MAX_SYNC_PAGES it starts over from the newest messages instead, and the
+     * older history reloads through normal pagination.
+     */
+    const syncLatest = useCallback(async (cId: string) => {
+        const anchor = syncedThroughRef.current;
+        let collected: any[] = [];
+        let cursor: MessageCursor = null;
+        let reachedEnd = false;
+        let reachedAnchor = false;
 
-            const { data } = await query.limit(PAGE_SIZE);
-
-            if (!data || data.length === 0) return;
-
-            await hydrateTextMessages(data, pubKeyRef.current);
-
-            let addedFromFriend = false;
-            setMessages((prev) => {
-                const known = new Set(prev.map((m) => m.id));
-                addedFromFriend = data.some((m) => !known.has(m.id) && m.sender_id === targetFriendId);
-                return reconcileMessages(prev, data);
-            });
-
-            if (addedFromFriend) markMessagesAsRead(cId);
-        } catch (e) {
-            console.error('❌ [CATCHUP] Error:', e);
+        for (let i = 0; i < MAX_SYNC_PAGES; i++) {
+            const page = await fetchPage(cId, cursor, cutoffRef.current);
+            collected = collected.concat(page);
+            if (page.length < PAGE_SIZE) { reachedEnd = true; break; }
+            if (!anchor) break;
+            const oldest = page[page.length - 1];
+            if (timeOf(oldest) <= timeOf(anchor)) { reachedAnchor = true; break; }
+            cursor = toCursor(oldest);
         }
+
+        // Decrypt BEFORE rendering: no "Decrypting…" flash, no jumps.
+        await hydrateTextMessages(collected, pubKeyRef.current);
+
+        const shown = messagesRef.current;
+        const known = new Set(shown.map((m) => m.id));
+        const addedFromFriend = collected.some((m) => !known.has(m.id) && m.sender_id === targetFriendId);
+        // Without an anchor we can't tell whether what's showing (e.g. an older
+        // cache) connects to the newest page, so that also starts over.
+        const contiguous = reachedEnd || reachedAnchor || !shown.some((m) => !m.__status);
+
+        if (collected.length > 0) syncedThroughRef.current = toCursor(collected[0]);
+
+        const fetchedIds = new Set(collected.map((m) => m.id));
+        if (contiguous) {
+            setMessages((prev) => reconcileMessages(prev, collected));
+            // Cached reserve rows inside the range just fetched are either in
+            // `collected` already or were deleted: revealing them later would
+            // duplicate or resurrect them.
+            if (collected.length > 0) {
+                const oldestFetched = timeOf(collected[collected.length - 1]);
+                cacheReserveRef.current = cacheReserveRef.current.filter(
+                    (m) => timeOf(m) < oldestFetched || (timeOf(m) === oldestFetched && !fetchedIds.has(m.id))
+                );
+            }
+        } else {
+            const newestFetched = collected.length > 0 ? timeOf(collected[0]) : 0;
+            // Keep the optimistic bubbles and anything realtime delivered after this fetch.
+            setMessages((prev) => [
+                ...prev.filter((m) => !fetchedIds.has(m.id) && (m.__status || timeOf(m) > newestFetched)),
+                ...collected,
+            ]);
+            cacheReserveRef.current = [];
+            cacheHasMoreRef.current = true;
+            setHasMore(true);
+        }
+
+        if (reachedEnd) {
+            setHasMore(false);
+            // The whole history fits in what we just fetched: any leftover
+            // cached reserve beyond it must be stale (deleted).
+            cacheReserveRef.current = [];
+        }
+
+        if (addedFromFriend) markMessagesAsRead(cId);
     }, [targetFriendId, markMessagesAsRead]);
+
+    /** Runs syncLatest one at a time; a request made meanwhile runs right after. */
+    const requestSync = useCallback(async (cId: string) => {
+        // Not before init has the history cutoff and owns the message state.
+        if (!networkOwnsStateRef.current) return;
+        nextSyncRef.current = cId;
+        if (syncInFlightRef.current) return;
+
+        syncInFlightRef.current = true;
+        let ok = false;
+        try {
+            while (nextSyncRef.current) {
+                const id = nextSyncRef.current;
+                nextSyncRef.current = null;
+                try {
+                    await syncLatest(id);
+                    ok = true;
+                } catch (e) {
+                    ok = false;
+                    console.error('❌ [SYNC] Error:', e);
+                }
+            }
+        } finally {
+            syncInFlightRef.current = false;
+        }
+        liveSinceSyncRef.current = ok && channelLiveRef.current;
+    }, [syncLatest]);
 
     // When returning to the foreground: reopen the channel (nonce) + fetch what was missed.
     useAppForeground(() => {
+        // The socket may have died silently while in the background.
+        liveSinceSyncRef.current = false;
         setResyncNonce((n) => n + 1);
-        if (chatId) catchUpMessages(chatId);
+        if (chatId) requestSync(chatId);
     });
 
     useEffect(() => {
@@ -183,6 +277,8 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         cacheReserveRef.current = [];
         cacheHasMoreRef.current = true;
         networkOwnsStateRef.current = false;
+        syncedThroughRef.current = null;
+        liveSinceSyncRef.current = false;
 
         // Renders instantly from disk, fully independent of the auth/chat-id
         // network round trips in `init` below — keyed by `targetFriendId`
@@ -217,7 +313,11 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 await hydrateTextMessages(firstPage, pubKeyRef.current);
                 if (!isMounted || networkOwnsStateRef.current) return;
 
-                setMessages(firstPage);
+                // init may already know the history cutoff: nothing older can be decrypted.
+                const keep = cutoffRef.current ? atOrAfter(cutoffRef.current) : () => true;
+                cacheReserveRef.current = cacheReserveRef.current.filter(keep);
+                syncedThroughRef.current = cached.syncedThrough;
+                setMessages(firstPage.filter(keep));
                 setHasMore(cacheReserveRef.current.length > 0 || cached.hasMore);
                 setLoading(false);
             })();
@@ -245,28 +345,44 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                 pubKeyRef.current = pubKey;
 
                 // History cutoff: whichever is more recent between MY identity rotation
-                // and the contact's key rotation. For the contact we use the server's
-                // `public_key_updated_at` (when they published their current key),
-                // not when we detected it here.
+                // and when the contact published their current key (the server's
+                // `public_key_updated_at`). Nothing older can be decrypted here, so it's
+                // never requested — on EVERY open, not just the one that detects a change.
                 const myRotatedAt = await identityRotation.rotatedAt();
-                let friendRotatedAt: string | null = null;
+                const friendKeyAt: string | null = profRes.data?.public_key_updated_at ?? null;
+                let friendKeyChangedAt: string | null = null;
 
                 if (isMounted && profRes.data) {
                     setFriendProfile(profRes.data);
                     const rec = await contactKeys.record(targetFriendId, profRes.data.public_key ?? null);
                     if (isMounted) setFriendKeyChanged(rec.changed);
-                    if (rec.changed) friendRotatedAt = profRes.data.public_key_updated_at ?? rec.firstSeenAt;
+                    friendKeyChangedAt = rec.changedAt;
                 }
 
-                const cutoff = [myRotatedAt, friendRotatedAt].filter(Boolean).sort().pop() as string | undefined;
-                cutoffRef.current = cutoff ?? null;
-                if (isMounted) setMessageCutoff(cutoff ?? null);
+                const cutoffTime = Math.max(
+                    myRotatedAt ? new Date(myRotatedAt).getTime() : 0,
+                    friendKeyAt ? new Date(friendKeyAt).getTime() : 0,
+                );
+                const cutoff = cutoffTime > 0 ? new Date(cutoffTime).toISOString() : null;
+                cutoffRef.current = cutoff;
+                // The "messages before X aren't available" notice only when keys
+                // actually changed (mine, or theirs as seen from this device): a
+                // contact's first key also has a date, and nothing was lost then.
+                if (isMounted) setMessageCutoff(myRotatedAt || friendKeyChangedAt ? cutoff : null);
+
+                // Rows the disk cache kept from before the cutoff can't be decrypted
+                // either: drop them instead of showing-and-hiding them every time.
+                if (cutoff) {
+                    const keep = atOrAfter(cutoff);
+                    cacheReserveRef.current = cacheReserveRef.current.filter(keep);
+                    if (isMounted) setMessages((prev) => prev.filter(keep));
+                }
 
                 await markMessagesAsRead(cId);
                 // From here on, network owns message state — the cache-seed flow
                 // above must not overwrite whatever this reconcile is about to set.
                 networkOwnsStateRef.current = true;
-                await fetchMessages(cId, null, pubKey);
+                await requestSync(cId);
             } catch (e) {
                 console.error("❌ [INIT] Chat Init Error:", e);
                 Sentry.captureException(e, { tags: { area: 'chat-init' } });
@@ -276,7 +392,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         };
         init();
         return () => { isMounted = false; };
-    }, [targetFriendId, routeUserPublicKey, markMessagesAsRead, fetchMessages]);
+    }, [targetFriendId, routeUserPublicKey, markMessagesAsRead, requestSync]);
 
     // Keep the key fresh if the profile arrives/changes after init.
     useEffect(() => {
@@ -285,6 +401,9 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
 
     useEffect(() => {
         if (!chatId) return;
+        // Status callbacks from a channel already being torn down must not
+        // touch the live flags of its replacement.
+        let active = true;
         const uniqueChannelId = `chat:${chatId}-${Date.now()}`;
         const channel = supabase.channel(uniqueChannelId)
             .on(
@@ -328,6 +447,13 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                                 return [finalMsg, ...prev];
                             });
 
+                            // Live without gaps since the last sync → nothing can be
+                            // missing below this row, so syncs can start from here.
+                            const anchor = syncedThroughRef.current;
+                            if (liveSinceSyncRef.current && (!anchor || timeOf(finalMsg) > timeOf(anchor))) {
+                                syncedThroughRef.current = toCursor(finalMsg);
+                            }
+
                             if (targetFriendId && finalMsg.sender_id === targetFriendId) {
                                 markMessagesAsRead(chatId);
                             }
@@ -346,12 +472,25 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
                     }
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                if (!active) return;
+                channelLiveRef.current = status === 'SUBSCRIBED';
+                if (status === 'SUBSCRIBED') {
+                    // (Re)joined — first time, after a network blip, or after the
+                    // foreground resync: fetch whatever arrived while not listening.
+                    requestSync(chatId);
+                } else {
+                    liveSinceSyncRef.current = false;
+                }
+            });
 
         return () => {
+            active = false;
+            channelLiveRef.current = false;
+            liveSinceSyncRef.current = false;
             supabase.removeChannel(channel);
         };
-    }, [chatId, targetFriendId, markMessagesAsRead, resyncNonce]);
+    }, [chatId, targetFriendId, markMessagesAsRead, resyncNonce, requestSync]);
 
     // Write-through to disk: any change to the loaded list (pagination, realtime,
     // optimistic send, reconciliation) gets mirrored to cache, debounced. Also
@@ -363,6 +502,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
             messages: [...messages, ...cacheReserveRef.current],
             hasMore: cacheReserveRef.current.length > 0 || hasMore,
             currentUserId,
+            syncedThrough: syncedThroughRef.current,
         });
     }, [targetFriendId, messages, hasMore, currentUserId]);
 
@@ -385,7 +525,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
 
             const oldest = messages[messages.length - 1];
             if (!oldest) return;
-            await fetchMessages(chatId, { created_at: oldest.created_at, id: oldest.id });
+            await fetchOlderMessages(chatId, toCursor(oldest));
         } finally {
             setLoadingMore(false);
         }

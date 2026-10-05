@@ -307,7 +307,29 @@ export async function getCachedEncryptedText(
     }
 }
 
-/** Clears the entire on-disk media cache (e.g. on logout). */
+// Decrypted chat videos: expo-video can't decrypt on the fly, so a video has
+// to sit on disk as a plain .mp4 while it's watchable. Kept so reopening it
+// needs no re-download / re-decrypt — and wiped by `clearMediaCache` on logout.
+const DECRYPTED_VIDEO_PREFIX = 'nimly_';
+
+/** Deterministic local path of a decrypted chat video. */
+export function decryptedVideoPath(filePath: string): string {
+    const safe = filePath.replace(/[^a-z0-9]/gi, '_');
+    return `${FileSystem.cacheDirectory}${DECRYPTED_VIDEO_PREFIX}${safe}.mp4`;
+}
+
+async function clearDecryptedVideos(): Promise<void> {
+    const dir = FileSystem.cacheDirectory;
+    if (!dir) return;
+    const names = await FileSystem.readDirectoryAsync(dir);
+    await Promise.all(
+        names
+            .filter((name) => name.startsWith(DECRYPTED_VIDEO_PREFIX) && name.endsWith('.mp4'))
+            .map((name) => FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => {})),
+    );
+}
+
+/** Clears the entire on-disk media cache, decrypted chat videos included (e.g. on logout). */
 export async function clearMediaCache(): Promise<void> {
     try {
         await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });
@@ -317,5 +339,10 @@ export async function clearMediaCache(): Promise<void> {
         dirReady = null;
         inFlightBinary.clear();
         inFlightText.clear();
+    }
+    try {
+        await clearDecryptedVideos();
+    } catch {
+        /* best-effort */
     }
 }

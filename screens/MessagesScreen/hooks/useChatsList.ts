@@ -30,29 +30,45 @@ export function useChatsList() {
             if (!user || cancelledRef.current) return;
             setMyId(user.id);
 
-            const { data, error } = await supabase
-                .from('chat_participants')
-                .select(`
-                    chat_id,
-                    chats (
-                        id,
-                        created_at,
-                        messages (content, created_at, sender_id, type, is_read, reply_to_story_id)
-                    ),
-                    profiles:user_id (id, username, avatar_config, avatar_url, public_key)
-                `)
-                .neq('user_id', user.id);
+            const [chatsRes, unreadRes] = await Promise.all([
+                supabase
+                    .from('chat_participants')
+                    .select(`
+                        chat_id,
+                        chats (
+                            id,
+                            created_at,
+                            messages (content, created_at, sender_id, type, is_read, reply_to_story_id)
+                        ),
+                        profiles:user_id (id, username, avatar_config, avatar_url, public_key)
+                    `)
+                    .neq('user_id', user.id)
+                    // Only each chat's LAST message — all the row shows. Embedding
+                    // them all re-downloaded every chat's entire history on every
+                    // new message (this refetches on each realtime event).
+                    .order('created_at', { referencedTable: 'chats.messages', ascending: false })
+                    .limit(1, { referencedTable: 'chats.messages' }),
+                // Unread counts from just the unread rows (RLS scopes them to my chats).
+                supabase
+                    .from('messages')
+                    .select('chat_id')
+                    .eq('is_read', false)
+                    .neq('sender_id', user.id),
+            ]);
 
-            if (error) throw error;
+            if (chatsRes.error) throw chatsRes.error;
+            if (unreadRes.error) throw unreadRes.error;
             if (cancelledRef.current) return;
 
-            const normalized = (data || []).map((row: any) => {
-                // Sort messages by date on the client: we don't rely on the
-                // order PostgREST returns for the embedded resource.
-                const msgs: any[] = row.chats?.messages || [];
-                msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-                return row;
-            });
+            const unreadByChat = new Map<string, number>();
+            for (const row of unreadRes.data || []) {
+                unreadByChat.set(row.chat_id, (unreadByChat.get(row.chat_id) ?? 0) + 1);
+            }
+
+            const normalized = (chatsRes.data || []).map((row: any) => ({
+                ...row,
+                unreadCount: unreadByChat.get(row.chat_id) ?? 0,
+            }));
 
             normalized.sort((a: any, b: any) => lastMessageTime(b) - lastMessageTime(a));
             setChats(normalized);

@@ -2,7 +2,7 @@ import { getThemeColor } from '@/constants/theme';
 
 import { supabase } from '@/lib/supabase';
 import { vaultCrypto, vaultRAMCache } from '@/utils/crypto';
-import { getCachedEncryptedText } from '@/utils/mediaCache';
+import { decryptedVideoPath, getCachedEncryptedText } from '@/utils/mediaCache';
 import * as Sentry from '@sentry/react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SymbolView } from 'expo-symbols';
@@ -50,25 +50,20 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
     useEffect(() => {
         let isMounted = true;
         const autoLoad = async () => {
-            if (!isViewOnce && !mediaUri && !isLocked && filePath && !isLoading) {
+            if (!isViewOnce && !mediaUri && !isLocked && filePath && !isLoading && friendPublicKey) {
                 await downloadAndDecrypt(false, isMounted, { silent: true });
             }
         };
         autoLoad();
         return () => { isMounted = false; };
-    }, [filePath, isViewOnce]);
+        // friendPublicKey: the chat can render (from cache) before the contact's
+        // key arrives — load once it does.
+    }, [filePath, isViewOnce, friendPublicKey]);
 
-    // Deterministic path for the plaintext .mp4 on disk. Plaintext-at-rest for
-    // video is already current, unavoidable behavior (expo-video can't decrypt
-    // on the fly); what we're avoiding now is RE-downloading + RE-decrypting if
-    // it already exists.
-    const localVideoTarget = (): string => {
-        const safe = filePath.replace(/[^a-z0-9]/gi, '_');
-        return `${FileSystem.cacheDirectory}nimly_${safe}.mp4`;
-    };
-
+    // Plaintext-at-rest for video is unavoidable (expo-video can't decrypt on
+    // the fly); the deterministic path avoids RE-downloading + RE-decrypting.
     const decryptToLocalFile = async (base64Data: string): Promise<string> => {
-        const target = localVideoTarget();
+        const target = decryptedVideoPath(filePath);
         await FileSystem.writeAsStringAsync(target, base64Data, { encoding: 'base64' });
         return target;
     };
@@ -78,7 +73,9 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
         isMounted = true,
         { silent = false }: { silent?: boolean } = {}
     ) => {
-        if (wasConsumed || isLocked || isLoading) return;
+        // Without the contact's key every decrypt "fails", and that failure is
+        // cached as LOCKED_CAPSULE — the media would stay hidden for the session.
+        if (wasConsumed || isLocked || isLoading || !friendPublicKey) return;
 
         const cached = vaultRAMCache[filePath];
         if (cached && cached !== 'LOCKED_CAPSULE') {
@@ -96,7 +93,7 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             // reuse it — no network or decryption needed.
             if (isVideo) {
                 try {
-                    const target = localVideoTarget();
+                    const target = decryptedVideoPath(filePath);
                     const info = await FileSystem.getInfoAsync(target);
                     if (info.exists && !info.isDirectory && info.size > 0) {
                         vaultRAMCache[filePath] = target;
@@ -162,6 +159,8 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
             setMediaUri(null);
             delete vaultRAMCache[filePath];
             supabase.storage.from('chat-media').remove([filePath]).catch(() => { });
+            // A one-time video must not outlive its viewing as a plain .mp4.
+            if (isVideo) FileSystem.deleteAsync(decryptedVideoPath(filePath), { idempotent: true }).catch(() => { });
         } catch (e) {
             console.error("view-once consume failed:", e);
             Alert.alert("Still available", "We couldn't mark this as opened. It stays available until you open it again.");
@@ -216,7 +215,8 @@ export default function MediaMessageBubble({ filePath, friendPublicKey, isViewOn
                         )
                     ) : (
                         <View style={styles.placeholder}>
-                            {isLoading ? (
+                            {/* No key yet = it will auto-load as soon as it arrives. */}
+                            {isLoading || !friendPublicKey ? (
                                 <>
                                     <ActivityIndicator color={getThemeColor('tint')} size="small" />
                                     <Text style={{ color: '#aaa', marginTop: 6, fontSize: 11, fontWeight: '500' }}>Unlocking…</Text>
