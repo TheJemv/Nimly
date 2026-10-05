@@ -56,6 +56,20 @@ export const styles = StyleSheet.create({
         backgroundColor: "rgba(0,0,0,0.55)",
         zIndex: 20,
     },
+    // Same footprint as a real slot: 56 avatar + 2 padding + 2 ring on each side.
+    placeholderAvatar: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: Colors.dark.surface,
+    },
+    placeholderName: {
+        width: 40,
+        height: 8,
+        borderRadius: 4,
+        marginTop: 10,
+        backgroundColor: Colors.dark.surface,
+    },
     usernameText: {
         color: Colors.dark.textSecondary,
         fontSize: 12,

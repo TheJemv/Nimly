@@ -1,3 +1,4 @@
+import EmptyState from '@/components/EmptyState';
 import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from '@/constants/theme';
 import { useBlockedUsers } from '@/context/BlockedUsersContext';
@@ -71,6 +72,9 @@ export default function SearchScreen() {
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<any[]>([]);
+    // The text `results` belongs to: "No results" waits for the search of what's
+    // typed instead of flashing during the debounce.
+    const [searchedQuery, setSearchedQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const { isBlocked, blockedIds } = useBlockedUsers();
@@ -148,6 +152,7 @@ export default function SearchScreen() {
 
             if (error) throw error;
             setResults(data || []);
+            setSearchedQuery(searchQuery.trim());
         } catch (error) {
             console.error('Search error:', error);
         } finally {
@@ -201,10 +206,22 @@ export default function SearchScreen() {
                     }
                     contentContainerStyle={styles.listPadding}
                     ItemSeparatorComponent={() => <View style={styles.separator} />}
-                    ListEmptyComponent={() =>
-                        searchQuery.length > 0 && !loading && (
-                            <Text style={styles.emptyText}>No results found</Text>
-                        )
+                    ListEmptyComponent={
+                        showingHistory ? (
+                            <EmptyState
+                                icon="person.2"
+                                title="Find your friends"
+                                message="Search people by their username and add them to see their posts and stories."
+                                style={styles.empty}
+                            />
+                        ) : searchedQuery === searchQuery.trim() ? (
+                            <EmptyState
+                                icon="magnifyingglass"
+                                title="No results"
+                                message={`No one goes by "${searchQuery.trim()}". Check the spelling and try again.`}
+                                style={styles.empty}
+                            />
+                        ) : null
                     }
                 />
             )}
@@ -232,5 +249,5 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 15, fontWeight: '600', color: getThemeColor("textSecondary"), marginBottom: 4 },
     separator: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 55 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    emptyText: { textAlign: 'center', color: getThemeColor("textSecondary"), marginTop: 40, fontSize: 15 }
+    empty: { marginTop: 60 },
 });

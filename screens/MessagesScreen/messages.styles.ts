@@ -3,7 +3,6 @@ import { StyleSheet } from "react-native";
 
 const TEXT_SECONDARY = getThemeColor("textSecondary");
 const TEXT = getThemeColor("text");
-const ICON = getThemeColor("icon");
 
 export const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
@@ -15,6 +14,5 @@ export const styles = StyleSheet.create({
     lastMessageUnread: { color: TEXT, fontWeight: '600' },
 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    empty: { alignItems: 'center', marginTop: 100 },
-    emptyText: { color: ICON, fontSize: 15 },
+    empty: { marginTop: 100 },
 });
