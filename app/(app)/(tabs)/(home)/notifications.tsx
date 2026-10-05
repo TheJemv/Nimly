@@ -1,94 +1,129 @@
 import { friendsApi } from '@/api/friends';
 import EmptyState from '@/components/EmptyState';
-import UserAvatar from '@/components/UserAvatar';
+import NotificationItem, {
+    FRIEND_CONTENT,
+    isFriendRequest,
+    NotificationRow,
+    NotificationsSkeleton,
+    RequestAction,
+} from '@/components/NotificationItem';
 import { getThemeColor } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { useFreshPostIds } from '@/hooks/usePostListAnimation';
 import { supabase } from '@/lib/supabase';
-import { formatRelativeTime } from '@/utils/dateFormatter';
+import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
-import { SFSymbol, SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
     RefreshControl,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View
 } from 'react-native';
-
-const SURFACE = getThemeColor("surface");
-const TEXT_SECONDARY = getThemeColor("textSecondary");
-const TEXT = getThemeColor("text");
+import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 const PAGE_SIZE = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const ROW_LAYOUT = LinearTransition.duration(250);
+const ROW_ENTERING = FadeInDown.duration(300);
+const ROW_EXITING = FadeOut.duration(200);
+
+type ListItem =
+    | { kind: 'header'; key: string; title: string }
+    | { kind: 'row'; key: string; notification: NotificationRow };
+
+/** Today / This week / Earlier, by calendar day (not "last 24h"). */
+function sectionFor(createdAt: string, startOfToday: number): string {
+    const t = new Date(createdAt).getTime();
+    if (t >= startOfToday) return 'Today';
+    if (t >= startOfToday - 6 * DAY_MS) return 'This week';
+    return 'Earlier';
+}
+
 export default function NotificationsScreen() {
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [page, setPage] = useState(0);
+    const { session } = useAuth();
+    const userId = session?.user?.id;
+
+    const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+    // Ids that were unread when they reached this screen. They keep their red
+    // dot and the "New" section for the whole visit, even though they're
+    // marked read in the DB right away (that's what clears the bell badge).
+    const [newIds, setNewIds] = useState<ReadonlySet<string>>(() => new Set());
+    // Incoming PENDING requests, actor id -> friend_requests id. Decides which
+    // request rows still get Accept / Decline.
+    const [pendingByActor, setPendingByActor] = useState<ReadonlyMap<string, string>>(() => new Map());
+    const [busy, setBusy] = useState<Record<string, RequestAction>>({});
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [hasMore, setHasMore] = useState(true);
 
-    const channelRef = useRef<any>(null);
-    const tintColor = getThemeColor("tint");
-    const successColor = getThemeColor("success");
-    const warningColor = getThemeColor("warning");
     const mutedColor = getThemeColor("textSecondary");
 
-    // 1. FUNCTION TO MARK EVERYTHING AS READ IN THE DATABASE
-    const markAllAsSeen = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+    const rememberNew = useCallback((rows: NotificationRow[]) => {
+        const unread = rows.filter(n => !n.is_read).map(n => n.id);
+        if (unread.length) setNewIds(prev => new Set([...prev, ...unread]));
+    }, []);
 
-            const { error } = await supabase
-                .from('notifications')
-                .update({ is_read: true })
-                .eq('user_id', user.id)
-                .neq('type', 'message')
-                .eq('is_read', false);
+    const markAllAsSeen = useCallback(async () => {
+        if (!userId) return;
+        const { error } = await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('user_id', userId)
+            .neq('type', 'message')
+            .eq('is_read', false);
 
-            if (error) throw error;
-        } catch (e) {
-            console.error("Error marking all as read:", e);
+        if (error) console.error("Error marking all as read:", error);
+    }, [userId]);
+
+    const fetchPendingRequests = useCallback(async () => {
+        if (!userId) return;
+        const { data, error } = await supabase
+            .from('friend_requests')
+            .select('id, from_id')
+            .eq('to_id', userId)
+            .eq('status', 'PENDING');
+
+        if (error) {
+            console.error("Error loading pending requests:", error);
+            return;
         }
-    };
+        setPendingByActor(new Map((data ?? []).map(r => [r.from_id, r.id])));
+    }, [userId]);
 
-    // 2. DATA LOADING (wrapped in useCallback to keep referential stability)
-    const fetchNotifications = useCallback(async (pageNumber: number, isRefresh = false) => {
+    // Cursor-paginated by created_at (no `before` = first page / refresh).
+    // An offset would skip a row at the page boundary once Decline deletes one.
+    const fetchNotifications = useCallback(async (before?: string) => {
+        if (!userId) return;
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-
-            const from = pageNumber * PAGE_SIZE;
-            const to = from + PAGE_SIZE - 1;
-
-            const { data, error } = await supabase
+            let query = supabase
                 .from('notifications')
                 .select('*, actor:profiles!actor_id(username, avatar_config)')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .neq('type', 'message')
                 .order('created_at', { ascending: false })
-                .range(from, to);
+                .limit(PAGE_SIZE);
+            if (before) query = query.lt('created_at', before);
 
+            const { data, error } = await query;
             if (error) throw error;
 
-            const newNotifs = data || [];
+            const rows = (data ?? []) as NotificationRow[];
+            rememberNew(rows);
+            setHasMore(rows.length === PAGE_SIZE);
 
-            if (isRefresh) {
-                const readNotifs = newNotifs.map(n => ({ ...n, is_read: true }));
-                setNotifications(readNotifs);
-                setHasMore(newNotifs.length === PAGE_SIZE);
+            if (!before) {
+                setNotifications(rows);
                 markAllAsSeen();
             } else {
                 setNotifications(prev => {
                     const existingIds = new Set(prev.map(n => n.id));
-                    const filtered = newNotifs.filter(n => !existingIds.has(n.id));
-                    return [...prev, ...filtered];
+                    return [...prev, ...rows.filter(n => !existingIds.has(n.id))];
                 });
-                setHasMore(newNotifs.length === PAGE_SIZE);
             }
         } catch (error) {
             console.error("Fetch error:", error);
@@ -97,141 +132,172 @@ export default function NotificationsScreen() {
             setLoadingMore(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [userId, rememberNew, markAllAsSeen]);
 
-    // 3. REALTIME
+    // INITIAL LOAD + REALTIME
     useEffect(() => {
-        fetchNotifications(0, true);
+        if (!userId) return;
+        fetchNotifications();
+        fetchPendingRequests();
+
         let isMounted = true;
-        const initRealtime = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user || !isMounted) return;
-            if (channelRef.current) {
-                supabase.removeChannel(channelRef.current);
-            }
+        const channelName = `notifs_v4_${userId}-${Date.now()}`;
+        const channel = supabase.channel(channelName)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${userId}`
+                },
+                async (payload) => {
+                    const row = payload.new as NotificationRow;
+                    if (row.type === 'message') return;
 
-            const uniqueChannelName = `notifs_v4_${user.id}-${Date.now()}`;
-            const channel = supabase.channel(uniqueChannelName)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'notifications',
-                        filter: `user_id=eq.${user.id}`
-                    },
-                    async (payload) => {
-                        if (payload.new.type === 'message') return;
+                    const { data: actor } = await supabase
+                        .from('profiles')
+                        .select('username, avatar_config')
+                        .eq('id', row.actor_id)
+                        .single();
 
-                        const { data: actor } = await supabase
-                            .from('profiles')
-                            .select('username, avatar_config')
-                            .eq('id', payload.new.actor_id)
-                            .single();
-
-                        if (isMounted) {
-                            setNotifications(prev =>
-                                prev.some(n => n.id === payload.new.id)
-                                    ? prev
-                                    : [{ ...payload.new, actor }, ...prev]
-                            );
-                        }
-                    }
-                )
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED' && __DEV__) {
-                        console.log("Notifications channel connected:", uniqueChannelName);
-                    }
-                });
-
-            channelRef.current = channel;
-        };
-
-        initRealtime();
+                    if (!isMounted) return;
+                    setNotifications(prev =>
+                        prev.some(n => n.id === row.id) ? prev : [{ ...row, actor }, ...prev]
+                    );
+                    setNewIds(prev => new Set(prev).add(row.id));
+                    if (isFriendRequest(row)) fetchPendingRequests();
+                    // It's already on screen: don't leave it counting on the bell.
+                    markAllAsSeen();
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED' && __DEV__) {
+                    console.log("Notifications channel connected:", channelName);
+                }
+            });
 
         return () => {
             isMounted = false;
-            if (channelRef.current) {
-                supabase.removeChannel(channelRef.current);
-            }
+            supabase.removeChannel(channel);
         };
-    }, [fetchNotifications]);
+    }, [userId, fetchNotifications, fetchPendingRequests, markAllAsSeen]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        setPage(0);
-        fetchNotifications(0, true);
-    }, [fetchNotifications]);
+        fetchNotifications();
+        fetchPendingRequests();
+    }, [fetchNotifications, fetchPendingRequests]);
 
-    const renderItem = ({ item }: { item: any }) => {
-        const type = item.type?.toUpperCase();
-        const isFriendNotif = item.content === 'is now your friend.';
-        const time = formatRelativeTime(item.created_at);
+    const loadMore = useCallback(() => {
+        const last = notifications[notifications.length - 1];
+        if (loadingMore || !hasMore || !last) return;
+        setLoadingMore(true);
+        fetchNotifications(last.created_at);
+    }, [notifications, loadingMore, hasMore, fetchNotifications]);
 
-        const ui = (() => {
-            if (isFriendNotif) return { icon: "person.2.fill", color: successColor };
-            switch (type) {
-                case 'LIKE': return { icon: "heart.fill", color: tintColor };
-                case 'COMMENT': return { icon: "bubble.left.fill", color: tintColor };
-                case 'FRIEND_REQUEST': return { icon: "person.badge.plus.fill", color: warningColor };
-                default: return { icon: "bell.fill", color: mutedColor };
+    const settleRequest = useCallback((n: NotificationRow) => {
+        setPendingByActor(prev => {
+            const next = new Map(prev);
+            next.delete(n.actor_id);
+            return next;
+        });
+        setBusy(({ [n.id]: _done, ...rest }) => rest);
+    }, []);
+
+    // The pending map is the source of truth; getStatus covers a request that
+    // arrived after the map was loaded.
+    const resolveRequestId = useCallback(async (n: NotificationRow): Promise<string | null> => {
+        const known = pendingByActor.get(n.actor_id);
+        if (known) return known;
+        const status = await friendsApi.getStatus(n.actor_id);
+        return status?.status === 'PENDING' && status.isReceiver ? status.requestId ?? null : null;
+    }, [pendingByActor]);
+
+    const handleAccept = useCallback(async (n: NotificationRow) => {
+        setBusy(prev => ({ ...prev, [n.id]: 'accept' }));
+        try {
+            const requestId = await resolveRequestId(n);
+            if (!requestId) {
+                Alert.alert("Request unavailable", "This friend request is no longer pending.");
+                settleRequest(n);
+                return;
             }
-        })();
 
+            await friendsApi.acceptFriendship({
+                request_id: requestId,
+                id: n.id,
+                user_id: n.user_id,
+                actor_id: n.actor_id,
+            });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
+            setNotifications(prev =>
+                prev.map(x => x.id === n.id ? { ...x, content: FRIEND_CONTENT, is_read: true } : x)
+            );
+            settleRequest(n);
+        } catch {
+            setBusy(({ [n.id]: _failed, ...rest }) => rest);
+            Alert.alert("Error", "Could not accept the request.");
+        }
+    }, [resolveRequestId, settleRequest]);
+
+    const handleDecline = useCallback(async (n: NotificationRow) => {
+        setBusy(prev => ({ ...prev, [n.id]: 'decline' }));
+        try {
+            const requestId = await resolveRequestId(n);
+            if (requestId) await friendsApi.declineRequest({ requestId, notificationId: n.id });
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
+            setNotifications(prev => prev.filter(x => x.id !== n.id));
+            settleRequest(n);
+        } catch {
+            setBusy(({ [n.id]: _failed, ...rest }) => rest);
+            Alert.alert("Error", "Could not decline the request.");
+        }
+    }, [resolveRequestId, settleRequest]);
+
+    // "New" first (everything that arrived unread), then the rest by day.
+    const items = useMemo<ListItem[]>(() => {
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const out: ListItem[] = [];
+        let current = '';
+        const push = (title: string, n: NotificationRow) => {
+            if (title !== current) {
+                current = title;
+                out.push({ kind: 'header', key: `section-${title}`, title });
+            }
+            out.push({ kind: 'row', key: n.id, notification: n });
+        };
+        for (const n of notifications) if (newIds.has(n.id)) push('New', n);
+        for (const n of notifications) if (!newIds.has(n.id)) push(sectionFor(n.created_at, startOfToday), n);
+        return out;
+    }, [notifications, newIds]);
+
+    // Only rows that really arrived (realtime, refresh, next page) fade in.
+    const freshIds = useFreshPostIds(notifications);
+
+    const renderItem = useCallback(({ item, index }: { item: ListItem; index: number }) => {
+        if (item.kind === 'header') {
+            return (
+                <Animated.View exiting={ROW_EXITING}>
+                    <Text style={[styles.sectionTitle, index === 0 && styles.sectionTitleFirst]}>{item.title}</Text>
+                </Animated.View>
+            );
+        }
+        const n = item.notification;
         return (
-            <TouchableOpacity
-                style={styles.notificationItem}
-                activeOpacity={0.7}
-                onPress={() => {
-                    if (type === 'FRIEND_REQUEST' && !isFriendNotif) {
-                        Alert.alert("Friend Request", `Accept @${item.actor?.username}?`, [
-                            { text: "Later", style: "cancel" },
-                            {
-                                text: "Accept",
-                                onPress: async () => {
-                                    try {
-                                        // The notification doesn't carry the friend_requests id,
-                                        // so we look it up before accepting -- otherwise the
-                                        // row stays orphaned in PENDING forever (see
-                                        // useProfileActions, which does pass it correctly).
-                                        const status = await friendsApi.getStatus(item.actor_id);
-                                        if (status?.status === 'PENDING' && status.requestId) {
-                                            await friendsApi.acceptFriendship({
-                                                id: status.requestId,
-                                                from_id: item.actor_id,
-                                                to_id: item.user_id,
-                                            });
-                                        }
-                                        onRefresh();
-                                    } catch {
-                                        Alert.alert("Error", "Could not accept the request.");
-                                    }
-                                },
-                            },
-                        ]);
-                    }
-                }}
-            >
-                <View style={styles.avatarWrapper}>
-                    <View style={styles.avatarCircle}>
-                        <UserAvatar avatar_config={item.actor?.avatar_config} />
-                    </View>
-                    <View style={[styles.typeBadge, { backgroundColor: ui.color }]}>
-                        <SymbolView name={ui.icon as SFSymbol} size={10} tintColor="#FFF" />
-                    </View>
-                </View>
-
-                <View style={styles.textContainer}>
-                    <Text style={styles.title} numberOfLines={2}>
-                        <Text style={styles.boldText}>@{item.actor?.username}</Text> {item.content}
-                    </Text>
-                    <Text style={styles.time}>{time}</Text>
-                </View>
-
-                {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: tintColor }]} />}
-            </TouchableOpacity>
+            <Animated.View entering={freshIds.has(n.id) ? ROW_ENTERING : undefined} exiting={ROW_EXITING}>
+                <NotificationItem
+                    notification={n}
+                    isNew={newIds.has(n.id)}
+                    showRequestActions={isFriendRequest(n) && pendingByActor.has(n.actor_id)}
+                    busy={busy[n.id]}
+                    onAccept={handleAccept}
+                    onDecline={handleDecline}
+                />
+            </Animated.View>
         );
-    };
+    }, [freshIds, newIds, pendingByActor, busy, handleAccept, handleDecline]);
 
     return (
         <View style={styles.container}>
@@ -245,30 +311,25 @@ export default function NotificationsScreen() {
                 contentStyle: { backgroundColor: getThemeColor("background") },
             }} />
 
-            <FlatList
-                data={notifications}
-                keyExtractor={(item) => item.id}
+            <Animated.FlatList
+                data={items}
+                keyExtractor={(item) => item.key}
                 renderItem={renderItem}
+                itemLayoutAnimation={ROW_LAYOUT}
+                skipEnteringExitingAnimations
                 contentInsetAdjustmentBehavior="automatic"
-                onEndReached={() => {
-                    if (!loadingMore && hasMore) {
-                        setLoadingMore(true);
-                        const nextPage = page + 1;
-                        setPage(nextPage);
-                        fetchNotifications(nextPage);
-                    }
-                }}
+                onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
                 ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 20 }} color={mutedColor} /> : null}
-                ListEmptyComponent={!loading ? (
+                ListEmptyComponent={loading ? <NotificationsSkeleton /> : (
                     <EmptyState
                         icon="bell"
                         title="No notifications yet"
                         message="Likes, comments and friend requests will show up here."
                         style={styles.empty}
                     />
-                ) : null}
+                )}
                 contentContainerStyle={{ paddingBottom: 60 }}
             />
         </View>
@@ -277,15 +338,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    notificationItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SURFACE },
-    avatarWrapper: { width: 48, height: 48, marginRight: 14 },
-    avatarCircle: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: SURFACE },
-    avatarPlaceholder: { flex: 1, backgroundColor: SURFACE },
-    typeBadge: { position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#000', alignItems: 'center', justifyContent: 'center' },
-    textContainer: { flex: 1 },
-    title: { color: TEXT, fontSize: 14, lineHeight: 18 },
-    boldText: { color: '#FFF', fontWeight: '700' },
-    time: { color: TEXT_SECONDARY, fontSize: 12, marginTop: 4 },
-    unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 10 },
+    sectionTitle: { color: '#FFF', fontSize: 17, fontWeight: '700', paddingHorizontal: 20, paddingTop: 22, paddingBottom: 6 },
+    sectionTitleFirst: { paddingTop: 8 },
     empty: { marginTop: 100 },
 });

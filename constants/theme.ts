@@ -35,6 +35,7 @@ const darkPalette = {
     error: tintColorDark,        // Same brand Crimson: unifies destructive/error into a single red
     success: '#4CAF7D',          // Desaturated jade green, curated to not clash with the Crimson/Gold
     warning: '#C9A227',          // Old gold
+    badge: '#FF453A',            // iOS systemRed (dark): same red as the native tab-bar badge on Messages
 
     // --- Additional neutrals ---
     border: '#2A2A2A',           // Subtle separators/borders over the Onyx black
