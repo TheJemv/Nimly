@@ -1,4 +1,3 @@
-// components/StoryViewerModal/useStoryLike.ts
 import { storiesApi } from "@/api/stories";
 import { Story, StoryGroup } from "@/types/types";
 import { useRef } from "react";
@@ -6,14 +5,17 @@ import { useRef } from "react";
 interface UseStoryLikeProps {
     currentStory: Story | undefined;
     currentGroup: StoryGroup | undefined;
-    setLocalStories: React.Dispatch<React.SetStateAction<Story[]>>;
     onStoryLiked?: (storyId: string, userId: string, newLikedState: boolean) => void;
 }
 
+/**
+ * The like lives in the feed state (`onStoryLiked` updates it right away);
+ * this does the ONE network call and corrects the feed with what the server
+ * confirms, or rolls it back if the call fails.
+ */
 export function useStoryLike({
     currentStory,
     currentGroup,
-    setLocalStories,
     onStoryLiked,
 }: UseStoryLikeProps) {
     const isLikingRef = useRef(false);
@@ -23,30 +25,18 @@ export function useStoryLike({
         if (isLikingRef.current) return;
         isLikingRef.current = true;
 
-        const currentLikedState = (currentStory as any).is_liked_by_me || false;
-        const nextState = !currentLikedState;
+        const storyId = currentStory.id;
+        const userId = currentGroup.user_id;
+        const wasLiked = currentStory.is_liked_by_me || false;
 
-        setLocalStories((prev) =>
-            prev.map((s) => (s.id === currentStory.id ? { ...s, is_liked_by_me: nextState } : s))
-        );
-
-        if (onStoryLiked) {
-            onStoryLiked(currentStory.id, currentGroup.user_id, nextState);
-        }
+        onStoryLiked?.(storyId, userId, !wasLiked);
 
         try {
-            const res = await storiesApi.toggleLike(currentStory.id, "❤️");
-            if (res && res.action) {
-                const confirmedLiked = res.action === "liked";
-                setLocalStories((prev) =>
-                    prev.map((s) => (s.id === currentStory.id ? { ...s, is_liked_by_me: confirmedLiked } : s))
-                );
-            }
+            const res = await storiesApi.toggleLike(storyId, "❤️");
+            if (res?.action) onStoryLiked?.(storyId, userId, res.action === "liked");
         } catch (err) {
-            console.warn("Error enviando reaccion:", err);
-            setLocalStories((prev) =>
-                prev.map((s) => (s.id === currentStory.id ? { ...s, is_liked_by_me: currentLikedState } : s))
-            );
+            console.warn("Error sending reaction:", err);
+            onStoryLiked?.(storyId, userId, wasLiked);
         } finally {
             isLikingRef.current = false;
         }

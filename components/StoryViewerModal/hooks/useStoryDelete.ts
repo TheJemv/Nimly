@@ -1,73 +1,62 @@
 import { storiesApi } from "@/api/stories";
 import { Story, StoryGroup } from "@/types/types";
-import { Dispatch, SetStateAction } from "react";
+import { useRef } from "react";
+import { Alert } from "react-native";
+
+import type { StoryPauseReason } from "./useStoryTimer";
 
 interface UseStoryDeleteProps {
     currentStory: Story | undefined;
     currentGroup: StoryGroup | undefined;
-    localStories: Story[];
-    setLocalStories: Dispatch<SetStateAction<Story[]>>;
-    currentStoryIdx: number;
-    setCurrentStoryIdx: Dispatch<SetStateAction<number>>;
-    currentUserIdx: number;
-    setCurrentUserIdx: Dispatch<SetStateAction<number>>;
-    totalGroups: number;
     onStoryDeleted?: (storyId: string, userId: string) => void;
-    resetTimer: () => void;
-    pauseTimer: () => void;
-    afterDelete: () => void;
-    onLastStoryOfLastGroup: () => void;
+    pause: (reason: StoryPauseReason) => void;
+    resume: (reason: StoryPauseReason) => void;
 }
 
+/**
+ * Asks first, then deletes. Where to go next isn't decided here: once the
+ * feed drops the story, the viewer shows whatever takes its place (or closes
+ * if it was the last one).
+ */
 export function useStoryDelete({
     currentStory,
     currentGroup,
-    localStories,
-    setLocalStories,
-    currentStoryIdx,
-    setCurrentStoryIdx,
-    currentUserIdx,
-    setCurrentUserIdx,
-    totalGroups,
     onStoryDeleted,
-    resetTimer,
-    pauseTimer,
-    afterDelete,
-    onLastStoryOfLastGroup,
+    pause,
+    resume,
 }: UseStoryDeleteProps) {
-    const handleDeleteStory = async () => {
-        if (!currentStory || !currentGroup) return;
-        pauseTimer();
+    const isDeletingRef = useRef(false);
 
-        const storyIdToDelete = currentStory.id;
-        const targetUserId = currentGroup.user_id;
+    const handleDeleteStory = () => {
+        if (!currentStory || !currentGroup || isDeletingRef.current) return;
 
-        try {
-            await storiesApi.deleteStory(storyIdToDelete);
-            onStoryDeleted?.(storyIdToDelete, targetUserId);
+        const storyId = currentStory.id;
+        const userId = currentGroup.user_id;
+        pause("delete");
 
-            const remainingStories = localStories.filter((s) => s.id !== storyIdToDelete);
-
-            if (remainingStories.length === 0) {
-                if (currentUserIdx < totalGroups - 1) {
-                    setCurrentUserIdx((prev) => prev + 1);
-                    setCurrentStoryIdx(0);
-                    afterDelete();
-                } else {
-                    onLastStoryOfLastGroup();
-                }
-            } else {
-                setLocalStories(remainingStories);
-                if (currentStoryIdx >= remainingStories.length) {
-                    setCurrentStoryIdx(remainingStories.length - 1);
-                }
-                resetTimer();
-                afterDelete();
+        const doDelete = async () => {
+            isDeletingRef.current = true;
+            try {
+                await storiesApi.deleteStory(storyId);
+                onStoryDeleted?.(storyId, userId);
+            } catch (err) {
+                console.warn("Error deleting story:", err);
+                Alert.alert("Error", "Could not delete the story.");
+            } finally {
+                isDeletingRef.current = false;
+                resume("delete");
             }
-        } catch (err) {
-            console.warn("Error al borrar historia:", err);
-            afterDelete();
-        }
+        };
+
+        Alert.alert(
+            "Delete story?",
+            "It will be removed for everyone who can see it.",
+            [
+                { text: "Cancel", style: "cancel", onPress: () => resume("delete") },
+                { text: "Delete", style: "destructive", onPress: () => { void doDelete(); } },
+            ],
+            { cancelable: true, onDismiss: () => resume("delete") },
+        );
     };
 
     return { handleDeleteStory };

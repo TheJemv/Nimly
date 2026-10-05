@@ -14,7 +14,7 @@ export function useReplyStory(currentGroup: any, currentStoryId: any, onSent?: (
     const [loadingReplyStory, setLoadingReplyStory] = useState<boolean>(false)
 
     const handleReplyStory = async () => {
-        if (!currentStoryId || loadingReplyStory) return
+        if (!currentStoryId || !currentGroup?.user_id || loadingReplyStory) return
 
         const cleanedMessage = cleanChatMessage(replyTextStory);
         if (!cleanedMessage) return

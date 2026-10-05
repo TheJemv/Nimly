@@ -11,6 +11,7 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
+    Dimensions,
     FlatList,
     Image,
     Keyboard,
@@ -40,8 +41,16 @@ import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { useHlsSegmentLog } from "@/utils/hlsDebug";
 import { useVideoPoster } from "@/hooks/useVideoPoster";
-import { buildVideoSource, FAST_START_BUFFER } from "@/utils/videoSource";
+import { buildVideoSource, FAST_START_BUFFER, prefetchHls } from "@/utils/videoSource";
 import { useReplyStory, useStoryDelete, useStoryLike, useStoryNavigation, useStoryTimer, useViewsSheet } from "./hooks";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+/** Swipe down further than this (px), or flick faster (px/ms), to close. */
+const CLOSE_DISTANCE = 120;
+const CLOSE_VELOCITY = 0.8;
+
+/** Already a playable URI: nothing to resolve through the disk cache. */
+const isDirectUri = (key: string) => /^(https?:|file:|data:)/.test(key);
 
 interface StoryViewerModalProps {
     visible: boolean;
@@ -107,14 +116,10 @@ export default function StoryViewerModal({
     }, [dockPad, insets.bottom]);
 
     const {
-        currentUserIdx,
-        setCurrentUserIdx,
-        currentStoryIdx,
-        setCurrentStoryIdx,
-        localStories,
-        setLocalStories,
         currentGroup,
         currentStory,
+        currentStoryIdx,
+        nextStory,
         isVideo,
         handleNextStory,
         handlePrevStory,
@@ -128,7 +133,6 @@ export default function StoryViewerModal({
     const { toggleLike } = useStoryLike({
         currentStory,
         currentGroup,
-        setLocalStories,
         onStoryLiked,
     });
 
@@ -140,8 +144,10 @@ export default function StoryViewerModal({
     // the player blows up with HLS -> storyHlsFailed and we fall back to the
     // MP4 without skipping the story.
     const { session } = useAuth();
-    const [storyHlsFailed, setStoryHlsFailed] = useState(false);
-    useEffect(() => { setStoryHlsFailed(false); }, [currentStory?.id]);
+    // Keyed by story id so the next story never starts out on the MP4 path
+    // just because the previous one's HLS failed.
+    const [hlsFailedStoryId, setHlsFailedStoryId] = useState<string | null>(null);
+    const storyHlsFailed = !!currentStory && hlsFailedStoryId === currentStory.id;
 
     // Story media resolved via disk cache (mediaCache) by the bare path:
     // 1st view downloads + signs, subsequent ones = local `file://`, zero
@@ -156,20 +162,30 @@ export default function StoryViewerModal({
         currentStory?.media_type !== 'video' ||
         currentStory?.playback_status !== 'ready' ||
         storyHlsFailed;
-    const [resolvedStoryUri, setResolvedStoryUri] = useState<string | null>(null);
+    // Keyed by media key: the previous story's URI must never be used, not
+    // even for the one render before the new one resolves (it flashed the old
+    // image and started the bar before the real one loaded).
+    const [cachedMedia, setCachedMedia] = useState<{ key: string; uri: string } | null>(null);
+    // Filled in once the timer exists (it's created further down).
+    const failMediaRef = useRef<() => void>(() => {});
     useEffect(() => {
+        if (!storyNeedsMp4) return;
+        if (!storyMediaKey) { failMediaRef.current(); return; }
+        if (isDirectUri(storyMediaKey)) return;
         let active = true;
-        if (!storyMediaKey || !storyNeedsMp4) { setResolvedStoryUri(null); return; }
-        if (/^(https?:|file:|data:)/.test(storyMediaKey)) {
-            setResolvedStoryUri(storyMediaKey);
-            return;
-        }
-        setResolvedStoryUri(null);
         getCachedMedia('stories', storyMediaKey, { signed: true, ttl: 3600 })
-            .then((uri) => { if (active) setResolvedStoryUri(uri ?? storyMediaKey); })
-            .catch(() => { if (active) setResolvedStoryUri(storyMediaKey); });
+            .then((uri) => {
+                if (!active) return;
+                if (uri) setCachedMedia({ key: storyMediaKey, uri });
+                else failMediaRef.current();
+            })
+            .catch(() => { if (active) failMediaRef.current(); });
         return () => { active = false; };
     }, [storyMediaKey, storyNeedsMp4]);
+    const resolvedStoryUri =
+        !storyMediaKey || !storyNeedsMp4 ? null
+            : isDirectUri(storyMediaKey) ? storyMediaKey
+                : cachedMedia?.key === storyMediaKey ? cachedMedia.uri : null;
 
     const storyVideoSource = useMemo(
         () => buildVideoSource({
@@ -185,7 +201,7 @@ export default function StoryViewerModal({
 
     const handleStoryVideoError = () => {
         if (currentStory?.playback_status === 'ready' && !storyHlsFailed) {
-            setStoryHlsFailed(true);
+            setHlsFailedStoryId(currentStory.id);
             return true; // handled: don't skip to the next story
         }
         return false;
@@ -209,45 +225,46 @@ export default function StoryViewerModal({
     const {
         progressAnim,
         isMediaLoading,
+        mediaFailed,
         isHolding,
-        resetTimer,
         handleMediaReady,
+        handleMediaFailed,
         handlePressIn,
         handlePressOut,
         wasTapAction,
-        pauseTimerForSheet,
-        resumeTimerFromSheet,
+        restartStory,
+        pause,
+        resume,
     } = useStoryTimer({
+        storyKey: currentStory?.id,
         isVideo,
         videoPlayer,
         onNext: handleNextStory,
         isEnabled: visible,
-        isViewsSheetOpen,
         onVideoError: handleStoryVideoError,
         onMarkAsSeen: () => {
-            if (currentStory && !currentStory.is_seen_by_me && !currentGroup.is_me) {
+            if (currentStory && currentGroup && !currentStory.is_seen_by_me && !currentGroup.is_me) {
                 onStorySeen?.(currentStory.id, currentGroup.user_id);
                 storiesApi.markAsSeen(currentStory.id);
             }
         },
     });
+    failMediaRef.current = handleMediaFailed;
 
     const { handleDeleteStory } = useStoryDelete({
         currentStory,
         currentGroup,
-        localStories,
-        setLocalStories,
-        currentStoryIdx,
-        setCurrentStoryIdx,
-        currentUserIdx,
-        setCurrentUserIdx,
-        totalGroups: storyGroups.length,
         onStoryDeleted,
-        resetTimer,
-        pauseTimer: pauseTimerForSheet,
-        afterDelete: resumeTimerFromSheet,
-        onLastStoryOfLastGroup: () => handleClose(),
+        pause,
+        resume,
     });
+
+    const {
+        replyTextStory,
+        loadingReplyStory,
+        setReplyTextStory,
+        handleReplyStory,
+    } = useReplyStory(currentGroup, currentStory?.id, () => setSentNonce((n) => n + 1));
 
     const sortedViewers = useMemo(() => {
         if (!currentStory?.viewers) return [];
@@ -258,77 +275,115 @@ export default function StoryViewerModal({
         });
     }, [currentStory]);
 
+    // New story: no sheet left open, and a half-written reply doesn't follow
+    // you to someone else's story.
     useEffect(() => {
-        if (!visible || !currentStory || !currentGroup) return;
-        resetTimer();
-        resetSheet();
-    }, [currentUserIdx, currentStoryIdx, visible]);
+        if (!currentStory) return;
+        if (isViewsSheetOpen) {
+            resetSheet();
+            resume("sheet");
+        }
+        setReplyTextStory("");
+    }, [currentStory?.id]);
 
-    const handleTapLeft = () => {
-        if (isViewsSheetOpen) return;
-        if (wasTapAction()) handlePrevStory();
-    };
+    // Warm up the next story while this one plays, so tapping forward doesn't
+    // start from a spinner. Waits until the current one is on screen so it
+    // never competes with it for bandwidth. Raw MP4s are skipped: they'd be
+    // downloaded whole.
+    useEffect(() => {
+        if (isMediaLoading || !nextStory) return;
+        if (nextStory.media_type === "video") {
+            prefetchHls(
+                { id: nextStory.id, ownerId: nextStory.user_id, playbackStatus: nextStory.playback_status },
+                session?.access_token,
+            );
+            return;
+        }
+        const key = nextStory.media_path || nextStory.media_url;
+        if (key && !isDirectUri(key)) {
+            getCachedMedia('stories', key, { signed: true, ttl: 3600 }).catch(() => {});
+        }
+    }, [isMediaLoading, nextStory?.id]);
 
-    const handleTapRight = () => {
+    // While writing a reply, a tap on the story closes the keyboard instead of
+    // jumping to another story (there was no other way to close it).
+    const replyFocusedRef = useRef(false);
+
+    const handleTap = (direction: "prev" | "next") => {
         if (isViewsSheetOpen) return;
-        if (wasTapAction()) handleNextStory();
+        if (replyFocusedRef.current) {
+            Keyboard.dismiss();
+            return;
+        }
+        if (!wasTapAction()) return;
+        if (direction === "next") handleNextStory();
+        else if (!handlePrevStory()) restartStory();
     };
 
     const handleClose = () => {
-        resetTimer();
-        // expo-video may have released the native player (end of stories /
-        // unmount): the call throws NotFoundException if not guarded.
-        try { if (isVideo && videoPlayer) videoPlayer.pause(); } catch { /* player released */ }
+        pause("closing");
         resetSheet();
         onClose();
     };
+
+    // Nothing left to show (last story deleted, its user blocked, expired...).
+    useEffect(() => {
+        if (visible && !currentStory) handleClose();
+    }, [visible, currentStory]);
 
     const [isReporting, setIsReporting] = useState<boolean>(false)
 
     const reportedStoryIdsRef = useRef<Set<string>>(new Set());
     const isReportingRef = useRef(false);
 
-    // --- SWIPE-TO-CLOSE ANIMATION ---
-    const panY = useAnimatedValue(0)
-    const isViewsSheetOpenRef = useRef(isViewsSheetOpen);
-    useEffect(() => {
-        isViewsSheetOpenRef.current = isViewsSheetOpen;
-    }, [isViewsSheetOpen]);
+    // --- SWIPE-TO-CLOSE ---
+    const panY = useAnimatedValue(0);
+    // The black backdrop fades as you drag, uncovering the feed underneath.
+    const backdropOpacity = panY.interpolate({
+        inputRange: [0, SCREEN_HEIGHT * 0.5],
+        outputRange: [1, 0],
+        extrapolate: "clamp",
+    });
 
     useEffect(() => {
-        if (visible) {
-            panY.setValue(0);
-        }
+        if (visible) panY.setValue(0);
     }, [visible]);
 
-    const panResponder = useRef(
-        PanResponder.create({
-            onMoveShouldSetPanResponder: (e, gestureState) => {
-                if (isViewsSheetOpenRef.current) return false;
-                return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 15;
-            },
-            onPanResponderMove: Animated.event(
-                [null, { dy: panY }],
-                { useNativeDriver: false }
-            ),
-            onPanResponderRelease: (e, gestureState) => {
-                if (gestureState.dy > 120) {
+    // The responder is created once: it reads the latest state through this ref.
+    const gestureRef = useRef({ isViewsSheetOpen, handleClose, pause, resume });
+    gestureRef.current = { isViewsSheetOpen, handleClose, pause, resume };
+
+    const panResponder = useMemo(() => {
+        const snapBack = () => {
+            Animated.spring(panY, { toValue: 0, bounciness: 0, useNativeDriver: false }).start();
+            gestureRef.current.resume("drag");
+        };
+
+        return PanResponder.create({
+            // Downward and mostly vertical only: horizontal moves and swipes up
+            // stay with the story (hold to pause).
+            onMoveShouldSetPanResponder: (_e, g) =>
+                !gestureRef.current.isViewsSheetOpen && g.dy > 10 && g.dy > Math.abs(g.dx) * 1.2,
+            // The story stops while you drag it (it used to keep running and
+            // could jump to the next one mid-gesture).
+            onPanResponderGrant: () => gestureRef.current.pause("drag"),
+            onPanResponderMove: (_e, g) => panY.setValue(Math.max(0, g.dy)),
+            onPanResponderTerminationRequest: () => false,
+            onPanResponderRelease: (_e, g) => {
+                if (g.dy > CLOSE_DISTANCE || (g.vy > CLOSE_VELOCITY && g.dy > 20)) {
                     Animated.timing(panY, {
-                        toValue: 1000,
-                        duration: 150,
-                        useNativeDriver: true,
-                    }).start(() => {
-                        handleClose();
-                    });
+                        toValue: SCREEN_HEIGHT,
+                        duration: 180,
+                        useNativeDriver: false,
+                    }).start(() => gestureRef.current.handleClose());
                 } else {
-                    Animated.spring(panY, {
-                        toValue: 0,
-                        useNativeDriver: true,
-                    }).start();
+                    snapBack();
                 }
             },
-        })
-    ).current;
+            // Interrupted (system gesture, call...): never leave the card halfway.
+            onPanResponderTerminate: snapBack,
+        });
+    }, [panY]);
 
     const doReportStory = async () => {
         if (!currentStory || !currentGroup) return;
@@ -373,7 +428,7 @@ export default function StoryViewerModal({
             "Tell us what's wrong so we can review this account.",
         );
         blockLocally(targetId);
-        onClose();
+        handleClose();
         try {
             await blocksApi.blockUser(targetId, reason ?? 'other');
         } catch (e: any) {
@@ -387,9 +442,9 @@ export default function StoryViewerModal({
     const handleReport = () => {
         if (!currentStory || !currentGroup || currentGroup.is_me) return;
 
-        pauseTimerForSheet();
+        pause("menu");
         const label = `@${currentGroup.username || 'user'}`;
-        const done = () => resumeTimerFromSheet();
+        const done = () => resume("menu");
 
         if (Platform.OS === 'ios') {
             ActionSheetIOS.showActionSheetWithOptions(
@@ -414,15 +469,10 @@ export default function StoryViewerModal({
         }
     };
 
+    // Every hook is above this line: returning early before one of them made
+    // React crash when the current story disappeared mid-view.
     if (!visible || !currentGroup || !currentStory) return null;
-    const currentLikedStatus = (currentStory as any).is_liked_by_me || false;
-
-    const {
-        replyTextStory,
-        loadingReplyStory,
-        setReplyTextStory,
-        handleReplyStory,
-    } = useReplyStory(currentGroup, currentStory.id, () => setSentNonce((n) => n + 1))
+    const currentLikedStatus = currentStory.is_liked_by_me || false;
 
     return (
         <Modal
@@ -434,14 +484,16 @@ export default function StoryViewerModal({
         >
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+            <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: backdropOpacity }]} />
 
             <Animated.View
                 style={[styles.container, { transform: [{ translateY: panY }] }]}
                 {...panResponder.panHandlers}
             >
-                {isMediaLoading && (
-                    <View style={styles.loaderContainer}>
+                {/* pointerEvents none: the spinner used to swallow every tap, so a
+                    story that never loaded couldn't be skipped. */}
+                {isMediaLoading && !mediaFailed && (
+                    <View style={styles.loaderContainer} pointerEvents="none">
                         <ActivityIndicator size="large" color={Colors.dark.tint} />
                     </View>
                 )}
@@ -472,20 +524,28 @@ export default function StoryViewerModal({
                                 />
                             )}
                         </>
-                    ) : (
+                    ) : resolvedStoryUri ? (
                         <Image
                             key={currentStory.id}
-                            source={{ uri: resolvedStoryUri ?? undefined, cache: "force-cache" }}
+                            source={{ uri: resolvedStoryUri, cache: "force-cache" }}
                             style={styles.storyMedia}
                             resizeMode="cover"
                             fadeDuration={0}
                             onLoad={handleMediaReady}
+                            onError={handleMediaFailed}
                         />
+                    ) : null}
+
+                    {mediaFailed && (
+                        <View style={styles.failedContainer} pointerEvents="none">
+                            <SymbolView name="exclamationmark.triangle" size={28} tintColor="rgba(255,255,255,0.7)" />
+                            <Text style={styles.failedText}>Couldn't load this story</Text>
+                        </View>
                     )}
 
                     <View style={styles.touchOverlay}>
-                        <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapLeft} />
-                        <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={handleTapRight} />
+                        <Pressable style={styles.touchLeft} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={() => handleTap("prev")} />
+                        <Pressable style={styles.touchRight} onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={() => handleTap("next")} />
                     </View>
                 </View>
 
@@ -495,7 +555,7 @@ export default function StoryViewerModal({
                 >
                     <View style={styles.topSection}>
                         <View style={styles.progressContainer}>
-                            {localStories.map((story, index) => {
+                            {currentGroup.stories.map((story, index) => {
                                 let barWidth: any = "0%";
                                 if (index < currentStoryIdx) {
                                     barWidth = "100%";
@@ -557,7 +617,7 @@ export default function StoryViewerModal({
                                 <TouchableOpacity
                                     style={styles.likeButton}
                                     activeOpacity={0.8}
-                                    onPress={() => openViewsSheet(pauseTimerForSheet)}
+                                    onPress={() => openViewsSheet(() => pause("sheet"))}
                                 >
                                     <SymbolView name={"eye"} size={22} tintColor={getThemeColor("tint")} />
                                 </TouchableOpacity>
@@ -583,8 +643,14 @@ export default function StoryViewerModal({
                                     placeholder="Reply to story..."
                                     placeholderTextColor="rgba(255, 255, 255, 0.6)"
 
-                                    onFocus={() => pauseTimerForSheet()}
-                                    onBlur={() => resumeTimerFromSheet()}
+                                    onFocus={() => {
+                                        replyFocusedRef.current = true;
+                                        pause("reply");
+                                    }}
+                                    onBlur={() => {
+                                        replyFocusedRef.current = false;
+                                        resume("reply");
+                                    }}
 
                                     onChangeText={e => setReplyTextStory(e)}
                                     value={replyTextStory}
@@ -624,7 +690,7 @@ export default function StoryViewerModal({
 
                 {isViewsSheetOpen && (
                     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-                        <Pressable style={styles.backdrop} onPress={() => closeViewsSheet(resumeTimerFromSheet)} />
+                        <Pressable style={styles.backdrop} onPress={() => closeViewsSheet(() => resume("sheet"))} />
 
                         <Animated.View style={[styles.sheetContainer, { transform: [{ translateY: sheetAnim }] }]}>
                             <View style={styles.sheetHandle} />
