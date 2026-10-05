@@ -113,21 +113,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         checkSession();
 
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event, currentSession) => {
             if (!isMounted) return;
-            try {
-                setSession(currentSession);
+            setSession(currentSession);
+            setIsLoading(false);
+
+            // Supabase runs this callback while it holds its auth lock (signOut
+            // awaits it). A supabase request made from in here waits for that
+            // same lock: it deadlocked every request for the rest of the app's
+            // life — the vault purge never finished and the next sign-up hung
+            // on the splash. The vault work runs once the callback has returned.
+            setTimeout(() => {
+                if (!isMounted) return;
                 if (currentSession) {
                     setupVaultIdentity(currentSession);
                 } else if (event === 'SIGNED_OUT') {
-                    await purgeVaultData();
+                    purgeVaultData().catch((e) => console.error("Vault purge failed:", e));
                 }
-            } catch (e) {
-                console.error("Auth state change handler failed:", e);
-                if (isMounted && !currentSession) setSession(null);
-            } finally {
-                if (isMounted) setIsLoading(false);
-            }
+            }, 0);
         });
 
         return () => {

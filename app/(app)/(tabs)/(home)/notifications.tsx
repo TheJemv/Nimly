@@ -1,4 +1,5 @@
 import { friendsApi } from '@/api/friends';
+import EmptyState from '@/components/EmptyState';
 import UserAvatar from '@/components/UserAvatar';
 import { getThemeColor } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -260,7 +261,14 @@ export default function NotificationsScreen() {
                 onEndReachedThreshold={0.4}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
                 ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 20 }} color={mutedColor} /> : null}
-                ListEmptyComponent={!loading ? <Text style={styles.emptyText}>No notifications yet.</Text> : null}
+                ListEmptyComponent={!loading ? (
+                    <EmptyState
+                        icon="bell"
+                        title="No notifications yet"
+                        message="Likes, comments and friend requests will show up here."
+                        style={styles.empty}
+                    />
+                ) : null}
                 contentContainerStyle={{ paddingBottom: 60 }}
             />
         </View>
@@ -279,5 +287,5 @@ const styles = StyleSheet.create({
     boldText: { color: '#FFF', fontWeight: '700' },
     time: { color: TEXT_SECONDARY, fontSize: 12, marginTop: 4 },
     unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 10 },
-    emptyText: { color: TEXT_SECONDARY, textAlign: 'center', marginTop: 100 }
+    empty: { marginTop: 100 },
 });

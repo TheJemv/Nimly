@@ -16,6 +16,7 @@ import { SymbolView } from "expo-symbols";
 import { getFriendsPosts } from "@/api/posts";
 
 import CommentsSheet from "@/components/CommentsSheet";
+import EmptyState from "@/components/EmptyState";
 import PostComponent from "@/components/PostComponent";
 import { isVideoPath } from "@/components/PostComponent/hooks/usePost";
 
@@ -201,6 +202,14 @@ export default function HomeScreen() {
                      />
                   </View>
                }
+               ListEmptyComponent={
+                  <EmptyState
+                     icon="photo.on.rectangle.angled"
+                     title="No posts yet"
+                     message="When your friends post something, you'll see it here. Find them in Discover."
+                     style={styles.empty}
+                  />
+               }
                renderItem={({ item: post }) => (
                   <Animated.View
                      entering={freshPostIds.has(post.id) ? POST_ENTERING : undefined}
@@ -250,6 +259,7 @@ const styles = StyleSheet.create({
    // way, and the spacing between posts is already handled by PostComponent's
    // own padding and divider.
    storiesWrap: { marginBottom: 12 },
+   empty: { marginTop: 90 },
    loaderContainer: {
       flex: 1,
       justifyContent: "center",

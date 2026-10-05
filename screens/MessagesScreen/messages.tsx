@@ -1,7 +1,8 @@
 import { getThemeColor } from '@/constants/theme';
 import { Stack, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
+import EmptyState from '@/components/EmptyState';
+import { ActivityIndicator, RefreshControl, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import ChatCard from "./components/ChatCard";
 import { useChatsList } from "./hooks";
@@ -44,7 +45,14 @@ export default function MessagesScreen() {
                     contentInsetAdjustmentBehavior="automatic"
                     contentContainerStyle={{ paddingBottom: 100 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={getThemeColor('tint')} />}
-                    ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>No conversations</Text></View>}
+                    ListEmptyComponent={
+                        <EmptyState
+                            icon="bubble.left.and.bubble.right"
+                            title="No conversations yet"
+                            message="Tap + to start an end-to-end encrypted chat with a friend."
+                            style={styles.empty}
+                        />
+                    }
                 />
             )}
         </View>

@@ -18,6 +18,10 @@ import { StoryGroup } from "@/types/types";
 
 import { styles } from "./StoriesDaily.styles";
 
+// No friend has a story: placeholder slots so the tray doesn't look broken.
+// Static and fading out on purpose — a pulsing skeleton would read as "loading".
+const PLACEHOLDER_OPACITY = [0.9, 0.65, 0.45, 0.28, 0.15];
+
 interface StoriesDailyProps {
     storyGroups: StoryGroup[];
     currentUserId: string | null;
@@ -171,6 +175,13 @@ export default function StoriesDaily({
                         </TouchableOpacity>
                     );
                 })}
+
+                {sortedStories.length === 1 && PLACEHOLDER_OPACITY.map((opacity, i) => (
+                    <View key={i} style={[styles.storyCard, { opacity }]} pointerEvents="none">
+                        <View style={styles.placeholderAvatar} />
+                        <View style={styles.placeholderName} />
+                    </View>
+                ))}
             </ScrollView>
 
             {viewer && (

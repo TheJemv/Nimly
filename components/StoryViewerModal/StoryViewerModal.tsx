@@ -565,10 +565,16 @@ export default function StoryViewerModal({
                                         outputRange: ["0%", "100%"],
                                     });
                                 }
+                                // Animated moves the active fill outside React, so React
+                                // still thinks it's at the width of its last render (~0%).
+                                // Going back turned it into a static "0%" React saw as no
+                                // change, and the bar stayed half full. A fresh fill per
+                                // state always starts from the right width.
+                                const barState = index < currentStoryIdx ? "done" : index === currentStoryIdx ? "active" : "todo";
 
                                 return (
                                     <View key={story.id} style={styles.progressBarBackground}>
-                                        <Animated.View style={[styles.progressBarFill, { width: barWidth }]} />
+                                        <Animated.View key={barState} style={[styles.progressBarFill, { width: barWidth }]} />
                                     </View>
                                 );
                             })}
