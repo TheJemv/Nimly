@@ -1,6 +1,6 @@
 import { getThemeColor } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import {
@@ -13,6 +13,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PasscodeInput from './PasscodeInput';
@@ -29,12 +30,25 @@ const border = getThemeColor('border');
  *  - `device_locked`     → the account is active on another device: sign out only, or
  *                          take over control with the PIN (or the password as a fallback).
  *  - `needs_new_identity`→ migration (device with no keys, free account).
+ *  - `setup_failed`      → couldn't check the device with the server: retry or sign out.
+ *  - `loading`           → nothing yet: the app stays hidden until the vault has
+ *                          decided (otherwise it shows before the 12h passcode lock).
  */
-const GATED: string[] = ['needs_passcode', 'locked_timeout', 'device_locked', 'needs_new_identity'];
+const GATED: string[] = ['needs_passcode', 'locked_timeout', 'device_locked', 'needs_new_identity', 'setup_failed'];
 
 export default function VaultKeyGate({ children }: { children: React.ReactNode }) {
     const { vault } = useAuth();
     const state = vault.state;
+
+    // Mirrors the native splash (same as the root layout's Home overlay), so
+    // startup reads as one continuous splash instead of flashing black.
+    if (state === 'loading') {
+        return (
+            <View style={styles.loading}>
+                <Image source={require('../../assets/expo/splash.png')} style={styles.loadingLogo} contentFit="contain" />
+            </View>
+        );
+    }
 
     if (!GATED.includes(state)) return <>{children}</>;
 
@@ -46,6 +60,7 @@ export default function VaultKeyGate({ children }: { children: React.ReactNode }
                     {state === 'locked_timeout' && <UnlockTimeout />}
                     {state === 'device_locked' && <DeviceLocked />}
                     {state === 'needs_new_identity' && <Migrate />}
+                    {state === 'setup_failed' && <SetupFailed />}
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -54,7 +69,7 @@ export default function VaultKeyGate({ children }: { children: React.ReactNode }
 
 // --- Periodic auto-lock (every 12h) ----------------------------------------
 function UnlockTimeout() {
-    const { vault } = useAuth();
+    const { vault, signOut } = useAuth();
     const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -92,7 +107,7 @@ function UnlockTimeout() {
             {error ? <Text style={[styles.body, styles.warn]}>{error}</Text> : null}
 
             {!busy && (
-                <TouchableOpacity style={styles.link} onPress={() => supabase.auth.signOut()}>
+                <TouchableOpacity style={styles.link} onPress={signOut}>
                     <Text style={styles.linkText}>Sign out</Text>
                 </TouchableOpacity>
             )}
@@ -102,7 +117,7 @@ function UnlockTimeout() {
 
 // --- Create passcode (first sign-in) --------------------------------
 function CreatePasscode() {
-    const { vault } = useAuth();
+    const { vault, signOut } = useAuth();
     const [step, setStep] = useState<'enter' | 'confirm'>('enter');
     const [first, setFirst] = useState('');
     const [code, setCode] = useState('');
@@ -162,7 +177,7 @@ function CreatePasscode() {
             )}
 
             {!busy && (
-                <TouchableOpacity style={styles.link} onPress={() => supabase.auth.signOut()}>
+                <TouchableOpacity style={styles.link} onPress={signOut}>
                     <Text style={styles.linkText}>Sign out</Text>
                 </TouchableOpacity>
             )}
@@ -172,16 +187,16 @@ function CreatePasscode() {
 
 // --- Account locked on another device -----------------------------------
 function DeviceLocked() {
-    const { vault } = useAuth();
+    const { vault, signOut } = useAuth();
     const [mode, setMode] = useState<'idle' | 'passcode' | 'password'>('idle');
     const [code, setCode] = useState('');
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const signOut = async () => {
+    const handleSignOut = async () => {
         setBusy(true);
-        try { await supabase.auth.signOut(); } finally { setBusy(false); }
+        try { await signOut(); } finally { setBusy(false); }
     };
 
     const confirmAnd = (run: () => Promise<{ ok: boolean; message?: string }>) => {
@@ -218,7 +233,7 @@ function DeviceLocked() {
                     <Text style={styles.body}>
                         To use Nimly here, sign out on your other device first, then sign back in.
                     </Text>
-                    <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accent }]} onPress={signOut} disabled={busy}>
+                    <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accent }]} onPress={handleSignOut} disabled={busy}>
                         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign out</Text>}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.link} onPress={() => setMode('passcode')} disabled={busy}>
@@ -278,9 +293,36 @@ function DeviceLocked() {
     );
 }
 
+// --- Couldn't check the device with the server (network…) ----------------
+function SetupFailed() {
+    const { vault, signOut } = useAuth();
+    const [busy, setBusy] = useState(false);
+
+    const retry = async () => {
+        setBusy(true);
+        try { await vault.retrySetup(); } finally { setBusy(false); }
+    };
+
+    return (
+        <>
+            <SymbolView name="wifi.exclamationmark" size={54} tintColor={accent} />
+            <Text style={styles.title}>Couldn&apos;t verify this device</Text>
+            <Text style={styles.body}>
+                Nimly needs to check your encryption keys with the server before you can continue. Check your connection and try again.
+            </Text>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accent }]} onPress={retry} disabled={busy}>
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Try again</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.link} onPress={signOut} disabled={busy}>
+                <Text style={styles.linkText}>Sign out</Text>
+            </TouchableOpacity>
+        </>
+    );
+}
+
 // --- Migration (device with no keys, free account) -----------------------
 function Migrate() {
-    const { vault } = useAuth();
+    const { vault, signOut } = useAuth();
     const [busy, setBusy] = useState(false);
 
     const migrate = () => {
@@ -316,7 +358,7 @@ function Migrate() {
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accent }]} onPress={migrate} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue with a new identity</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.link} onPress={() => supabase.auth.signOut()} disabled={busy}>
+            <TouchableOpacity style={styles.link} onPress={signOut} disabled={busy}>
                 <Text style={styles.linkText}>Sign out</Text>
             </TouchableOpacity>
         </>
@@ -325,6 +367,8 @@ function Migrate() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
+    loading: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+    loadingLogo: { width: 200, height: 200 },
     content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 16 },
     title: { color: '#fff', fontSize: 23, fontWeight: '800', textAlign: 'center' },
     body: { color: textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center' },

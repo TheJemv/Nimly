@@ -18,10 +18,10 @@ interface ChatCardProps {
 export default function ChatCard({ item, myId }: ChatCardProps) {
     const router = useRouter()
 
-    const messages = item.chats?.messages || [];
-    const lastMsg = messages[messages.length - 1];
+    // The list query embeds only each chat's last message; unread comes counted.
+    const lastMsg = item.chats?.messages?.[0];
     const isMine = lastMsg?.sender_id === myId;
-    const unreadCount = messages.filter((m: any) => m.sender_id !== myId && m.is_read === false).length;
+    const unreadCount: number = item.unreadCount ?? 0;
     const hasUnread = unreadCount > 0;
 
     const onPress = useCallback(() => {

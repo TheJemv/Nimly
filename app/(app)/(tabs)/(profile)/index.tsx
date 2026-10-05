@@ -95,9 +95,34 @@ export default function ProfileScreen() {
     const visiblePosts = useMemo(() => myPosts.filter((p) => !deletedIds.has(p.id)), [myPosts, deletedIds]);
     const freshPostIds = useFreshPostIds(visiblePosts);
 
+    // The username is already in the session (saved at sign-up), so the header
+    // doesn't have to wait for the profile row.
+    const username = profile?.username ?? session?.user?.user_metadata?.username;
+
+    // Rendered in EVERY branch: while the posts load, without it the header
+    // falls back to the route name and shows "index".
+    const header = (
+        <Stack.Screen
+            options={{
+                headerTitle: username ? `@${username}` : "Profile",
+                headerLargeTitle: false,
+                headerRight: () => (
+                    <TouchableOpacity onPress={openSettings}>
+                        <SymbolView name='line.3.horizontal' size={24} tintColor="#fff" />
+                    </TouchableOpacity>
+                ),
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: '#000' },
+                headerTintColor: '#fff',
+                headerTransparent: false,
+            }}
+        />
+    );
+
     if (loading && !refreshing) {
         return (
             <View style={styles.center}>
+                {header}
                 <ActivityIndicator color={accent} />
             </View>
         );
@@ -110,21 +135,7 @@ export default function ProfileScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <Stack.Screen
-                options={{
-                    headerTitle: profile?.username ? `@${profile.username}` : "Profile",
-                    headerLargeTitle: false,
-                    headerRight: () => (
-                        <TouchableOpacity onPress={openSettings}>
-                            <SymbolView name='line.3.horizontal' size={24} tintColor="#fff" />
-                        </TouchableOpacity>
-                    ),
-                    headerShadowVisible: false,
-                    headerStyle: { backgroundColor: '#000' },
-                    headerTintColor: '#fff',
-                    headerTransparent: false,
-                }}
-            />
+            {header}
 
             <ScrollView
                 style={styles.container}

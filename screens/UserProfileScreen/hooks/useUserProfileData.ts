@@ -55,7 +55,11 @@ export function useUserProfileData(id: string) {
     useEffect(() => {
         fetchUserData();
 
-        const channel = supabase.channel(`profile-${id}`)
+        // Unique name: the same profile can be stacked twice (tapping the author
+        // on one of their own posts), and supabase.channel() returns the existing
+        // channel for a repeated name — adding .on() to an already-subscribed
+        // channel throws and takes the app down.
+        const channel = supabase.channel(`profile-${id}-${Date.now()}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friends' }, () => fetchUserData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests' }, () => fetchUserData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users' }, () => fetchUserData())

@@ -102,11 +102,13 @@ export function useStoriesFeed() {
         let isIntentionalClose = false; // 👈 new flag
         const MAX_RETRY_DELAY = 15000;
 
-        const initRealtime = async () => {
+        const initRealtime = async (showLoading: boolean) => {
             const user = session?.user
             if (!user || !isMounted) return;
 
-            await reloadStories(true);
+            // Spinner only on the first load: a reconnect (e.g. the socket died in
+            // the background) refreshes silently — the spinner unmounts the whole feed.
+            await reloadStories(showLoading);
 
             if (channelRef.current) {
                 isIntentionalClose = true; // 👈 flag it BEFORE removing
@@ -145,7 +147,7 @@ export function useStoriesFeed() {
 
                         if (retryTimeout) clearTimeout(retryTimeout);
                         retryTimeout = setTimeout(() => {
-                            if (isMounted) initRealtime();
+                            if (isMounted) initRealtime(false);
                         }, delay);
                     }
                 });
@@ -153,7 +155,7 @@ export function useStoriesFeed() {
             channelRef.current = channel;
         };
 
-        initRealtime();
+        initRealtime(true);
 
         return () => {
             isMounted = false;

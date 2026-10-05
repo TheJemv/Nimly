@@ -119,18 +119,36 @@ export const getFriendsPosts = async (userId: string) => {
     }
 };
 
-export const deletePost = async (postId: string, mediaUrl?: string | null) => {
+/** Extracts the path inside the 'media' bucket from a value that may come as a
+ *  bare path ("userId/file.jpg") or a full URL (.../media/userId/file.jpg). */
+export const toStoragePath = (value: string): string => {
+    const marker = "/media/";
+    const i = value.lastIndexOf(marker);
+    return i >= 0 ? value.slice(i + marker.length) : value;
+};
+
+export const deletePost = async (postId: string) => {
     try {
-        // 1. Delete from the posts table
-        const { error: postError } = await supabase.from('posts').delete().eq('id', postId);
+        // 1. Delete from the posts table. `.select()` returns the rows actually
+        // deleted, so the file below is only removed if the post really went away.
+        const { data: deleted, error: postError } = await supabase
+            .from('posts')
+            .delete()
+            .eq('id', postId)
+            .select('media_url');
         if (postError) throw postError;
 
-        // 2. If it had an image/video, delete it from Storage
-        if (mediaUrl && mediaUrl.includes('storage/v1/object/public/media/')) {
-            const fileName = mediaUrl.split('/').pop();
-            if (fileName) {
-                await supabase.storage.from('media').remove([fileName]);
-            }
+        // 2. If it had an image/video, delete it from Storage. Best-effort: the
+        // post is already gone, a leftover file must not bring it back.
+        const paths = (deleted ?? [])
+            .map((p) => p.media_url)
+            .filter((url): url is string => Boolean(url))
+            .map(toStoragePath);
+        if (paths.length > 0) {
+            const { data: removed, error: storageError } = await supabase.storage.from('media').remove(paths);
+            if (storageError) console.error("Error deleting post media:", storageError);
+            // Nothing removed and no error = the bucket's policy doesn't let the owner delete.
+            else if (__DEV__ && removed?.length === 0) console.warn("Post media not deleted (check the 'media' bucket DELETE policy):", paths);
         }
         return { success: true };
     } catch (error) {

@@ -27,7 +27,9 @@ export default function DeleteAccountScreen() {
             const { error } = await supabase.rpc('delete_user_account');
             if (error) throw error;
 
-            await supabase.auth.signOut();
+            // The account (and its profile row) no longer exists: nothing left
+            // to release, just drop the local session.
+            await supabase.auth.signOut({ scope: 'local' });
             router.replace("/(auth)");
         } catch (e: any) {
             Alert.alert("Could not delete account", e.message);

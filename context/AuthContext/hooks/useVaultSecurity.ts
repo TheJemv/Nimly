@@ -9,6 +9,7 @@ import {
     vaultIdentity,
     VaultIdentityState,
 } from '@/utils/crypto';
+import { unregisterPushTokenAsync } from '@/hooks/notifications';
 import { useAppForeground } from '@/hooks/useAppForeground';
 import { clearMediaCache } from '@/utils/mediaCache';
 import { vaultPasscode } from '@/utils/vaultPasscode';
@@ -23,7 +24,10 @@ import { Alert } from 'react-native';
 // 'needs_passcode'  → there's a usable identity here but the 6-digit PIN is
 //                     missing on THIS device (first login / takeover with password).
 // 'locked_timeout'  → there's a PIN, but >12h have passed since the last unlock.
-export type VaultState = 'loading' | 'device_locked' | 'needs_passcode' | 'locked_timeout' | VaultIdentityState;
+// 'setup_failed'    → couldn't check this device against the server (network…).
+//                     Nothing is decided until it can: a failed read must never
+//                     turn into a new identity that replaces the real one.
+export type VaultState = 'loading' | 'device_locked' | 'needs_passcode' | 'locked_timeout' | 'setup_failed' | VaultIdentityState;
 
 export type PasscodeResult = { ok: true } | { ok: false; message: string };
 
@@ -31,6 +35,9 @@ export type PasscodeResult = { ok: true } | { ok: false; message: string };
 const AUTO_LOCK_MS = 12 * 60 * 60 * 1000;
 
 const DEVICE_ID_STORE = 'nimly_device_id';
+
+/** The pre-sign-out cleanup can't leave the button hanging on a dead connection. */
+const SIGN_OUT_CLEANUP_MS = 5000;
 
 /**
  * Stable identifier for this device: a UUID generated ONCE and stored in the
@@ -60,13 +67,16 @@ export function useVaultSecurity() {
     // Prevents a runSetup triggered by the re-login's SIGNED_IN from stepping on
     // an in-progress "force takeover".
     const takeoverInFlightRef = useRef(false);
+    // Background claim in flight: overlapping runSetup calls (checkSession +
+    // INITIAL_SESSION, TOKEN_REFRESHED…) must not race re-creating the watcher.
+    const claimInFlightRef = useRef<Promise<void> | null>(null);
 
     const handleRemoteTakeover = async () => {
         Alert.alert(
             'Signed out',
             'Your account is now active on another device. Nimly can only be used on one device at a time.'
         );
-        await supabase.auth.signOut();
+        await signOut();
     };
 
     const watchForTakeover = (userId: string, myDeviceId: string) => {
@@ -101,6 +111,14 @@ export function useVaultSecurity() {
         }
     };
 
+    /** claimDevice without blocking the caller (one at a time). */
+    const claimDeviceInBackground = (userId: string) => {
+        if (claimInFlightRef.current) return;
+        claimInFlightRef.current = claimDevice(userId)
+            .catch((e) => console.error('claimDevice failed:', e))
+            .finally(() => { claimInFlightRef.current = null; });
+    };
+
     /** Releases the server lock ONLY if it's still ours (avoids stepping on another device). */
     const releaseDevice = async () => {
         const userId = ownedUserIdRef.current;
@@ -119,6 +137,25 @@ export function useVaultSecurity() {
         } catch (e) {
             console.error('releaseDevice failed:', e);
         }
+    };
+
+    /**
+     * Signs out of THIS device only. Releases the device lock and this device's
+     * push token first, while the session still exists — after signOut() RLS
+     * rejects both updates. `scope: 'local'` matters: the default ('global')
+     * revokes every device's session, so the other device would be signed out
+     * within the hour and lose its E2EE keys on SIGNED_OUT.
+     */
+    const signOut = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        const cleanup = Promise.all([
+            // A background claim still in flight would re-take the lock afterwards.
+            (claimInFlightRef.current ?? Promise.resolve()).then(releaseDevice),
+            userId ? unregisterPushTokenAsync(userId) : Promise.resolve(),
+        ]).catch(() => { });
+        await Promise.race([cleanup, new Promise((r) => setTimeout(r, SIGN_OUT_CLEANUP_MS))]);
+        await supabase.auth.signOut({ scope: 'local' });
     };
 
     useEffect(() => {
@@ -170,19 +207,26 @@ export function useVaultSecurity() {
             // shouldn't be able to block a device that already has the right keys.
             if (localPrivateKey && storedOwnerId === currentUserId) {
                 await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
-                await claimDevice(currentUserId);
+                // The passcode lock decision is purely local: never hold it (and
+                // the gate) hostage to a network round trip.
+                claimDeviceInBackground(currentUserId);
                 return finishReady();
             }
 
             // No local key: it does matter which device the server says has the account.
             const myDeviceId = await getDeviceId();
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('current_device_id, public_key')
                 .eq('id', currentUserId)
                 .maybeSingle();
 
-            const lockedTo = profile?.current_device_id ?? null;
+            // Couldn't read it: we don't know whether another device holds the
+            // account or an identity already exists. Guessing "brand-new account"
+            // would overwrite the real identity and kick the other device.
+            if (profileError || !profile) throw profileError ?? new Error('Profile not found');
+
+            const lockedTo = profile.current_device_id ?? null;
             const heldByAnotherDevice = !!lockedTo && lockedTo !== myDeviceId;
 
             // HARD LOCK: another device has the account.
@@ -192,7 +236,7 @@ export function useVaultSecurity() {
             }
 
             // Free, but did the server already have an identity?
-            if (profile?.public_key) {
+            if (profile.public_key) {
                 // Legitimate migration (the other device signed out / was lost):
                 // requires explicit confirmation because history is lost.
                 setVaultState('needs_new_identity');
@@ -200,15 +244,16 @@ export function useVaultSecurity() {
             }
 
             // First identity for the account.
-            await vaultIdentity.generateIdentity();
-            await SecureStore.setItemAsync(OWNER_ID_STORE, currentUserId);
+            await vaultIdentity.generateIdentity(currentUserId);
             await claimDevice(currentUserId);
             return finishReady();
         } catch (error) {
             console.error('Vault Initialization Error:', error);
             Sentry.captureException(error, { tags: { area: 'vault-init' } });
-            setVaultState('needs_new_identity');
-            return 'needs_new_identity';
+            // Never 'needs_new_identity' here: on a transient error that screen
+            // would offer to replace the real identity.
+            setVaultState('setup_failed');
+            return 'setup_failed';
         }
     }, []);
 
@@ -220,17 +265,36 @@ export function useVaultSecurity() {
         return p;
     }, [runSetup]);
 
+    /** 'setup_failed' screen (and returning to the foreground): check the device again. */
+    const retrySetup = useCallback(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        await setupVaultIdentity(session);
+    }, [setupVaultIdentity]);
+
     /**
      * Migration: device without keys and a free account. Creates a new identity
      * (the previous encrypted history becomes unreadable) and claims the device.
      */
     const confirmNewIdentity = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        await vaultIdentity.createFreshIdentity();
-        if (user) {
-            await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
-            await claimDevice(user.id);
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error('No session');
+
+        // Re-check right before replacing anything: if another device claimed
+        // the account since this screen appeared, that's a takeover, not a migration.
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('current_device_id')
+            .eq('id', userId)
+            .maybeSingle();
+        if (error || !profile) throw error ?? new Error('Profile not found');
+        if (profile.current_device_id && profile.current_device_id !== await getDeviceId()) {
+            setVaultState('device_locked');
+            return;
         }
+
+        await vaultIdentity.createFreshIdentity(userId);
+        await claimDevice(userId);
         await finishReady();
     }, []);
 
@@ -266,8 +330,7 @@ export function useVaultSecurity() {
         takeoverInFlightRef.current = true;
         try {
             await supabase.from('profiles').update({ current_device_id: null }).eq('id', userId);
-            await vaultIdentity.createFreshIdentity();
-            await SecureStore.setItemAsync(OWNER_ID_STORE, userId);
+            await vaultIdentity.createFreshIdentity(userId);
             await claimDevice(userId);
             if (localPasscode) {
                 await vaultPasscode.saveLocal(localPasscode);
@@ -329,6 +392,11 @@ export function useVaultSecurity() {
     // Auto-lock: when returning to the foreground, if the vault was ready and
     // >12h have passed since the last unlock, require the PIN again.
     useAppForeground(() => {
+        // Coming back (maybe with a connection now): check the device again.
+        if (vaultState === 'setup_failed') {
+            retrySetup();
+            return;
+        }
         if (vaultState !== 'ready') return;
         (async () => {
             const last = await vaultPasscode.lastUnlockAt();
@@ -341,11 +409,13 @@ export function useVaultSecurity() {
     return {
         vaultState,
         setupVaultIdentity,
+        retrySetup,
         confirmNewIdentity,
         createPasscode,
         unlockWithPasscode,
         takeoverWithPasscode,
         forceTakeover,
         purgeVaultData,
+        signOut,
     };
 }

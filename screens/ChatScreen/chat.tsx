@@ -489,7 +489,6 @@ export default function ChatScreen() {
                         {/* Menu opens on a single tap; ContextMenu needed a
                             long-press that often got stuck racing the list. */}
                         <Menu label={<SwiftImage systemName="ellipsis" />}>
-                           <Button systemImage="bell.slash" label="Mute Notifications" onPress={() => { }} />
                            <Button systemImage="trash" label="Delete Chat" role="destructive" onPress={handleBurnHistory} />
                         </Menu>
                      </Host>

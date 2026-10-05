@@ -56,6 +56,10 @@ export type CachedChatData = {
     // cached messages never has to wait on ANY async call (not even a local
     // session read) to know which side of the chat is "mine".
     currentUserId: string | null;
+    // Newest message known to be contiguous with everything older in the cache
+    // (see useChatSync). Rows newer than it may have holes below them — the next
+    // sync pages back to it. `null` (or an older cache without it) = unknown.
+    syncedThrough: { created_at: string; id: string } | null;
 };
 
 /** Returns whatever's cached for this conversation, or `null` on a miss/read error. */
@@ -73,6 +77,7 @@ export async function getCachedMessages(key: string): Promise<CachedChatData | n
             messages: parsed.messages,
             hasMore: parsed.hasMore ?? true,
             currentUserId: parsed.currentUserId ?? null,
+            syncedThrough: parsed.syncedThrough ?? null,
         };
     } catch {
         return null;
@@ -94,7 +99,12 @@ async function writeNow(key: string, data: CachedChatData): Promise<void> {
 
         await FileSystem.writeAsStringAsync(
             tmp,
-            JSON.stringify({ messages: safe, hasMore: data.hasMore, currentUserId: data.currentUserId }),
+            JSON.stringify({
+                messages: safe,
+                hasMore: data.hasMore,
+                currentUserId: data.currentUserId,
+                syncedThrough: data.syncedThrough,
+            }),
             { encoding: 'utf8' }
         );
         await FileSystem.moveAsync({ from: tmp, to: local });
@@ -147,6 +157,8 @@ export function appendCachedMessage(key: string, message: any, currentUserId: st
             messages: [message, ...pending.messages.filter((m) => m.id !== message.id)],
             hasMore: pending.hasMore,
             currentUserId: currentUserId ?? pending.currentUserId,
+            // An appended row isn't known to be contiguous: the anchor stays put.
+            syncedThrough: pending.syncedThrough,
         });
         return;
     }
@@ -157,6 +169,7 @@ export function appendCachedMessage(key: string, message: any, currentUserId: st
             messages: [message, ...(existing?.messages ?? []).filter((m) => m.id !== message.id)],
             hasMore: existing?.hasMore ?? true,
             currentUserId: currentUserId ?? existing?.currentUserId ?? null,
+            syncedThrough: existing?.syncedThrough ?? null,
         });
     })();
 }

@@ -207,17 +207,35 @@ export const storiesApi = {
     }
   },
 
+  /**
+   * Deleted BY HAND → the file in storage goes too. Stories that simply expire
+   * after 24h are not deleted anywhere: their files stay, for future highlights.
+   */
   async deleteStory(storyId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase
+    // `.select()` returns the rows actually deleted, so the file below is only
+    // removed if the story really went away.
+    const { data: deleted, error } = await supabase
       .from('stories')
       .delete()
       .eq('id', storyId)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select('media_url');
 
     if (error) throw error;
+
+    // Best-effort: the story is already gone, a leftover file must not bring it back.
+    const paths = (deleted ?? [])
+      .map((s) => s.media_url)
+      .filter((path): path is string => Boolean(path));
+    if (paths.length > 0) {
+      const { data: removed, error: storageError } = await supabase.storage.from('stories').remove(paths);
+      if (storageError) console.error("Error deleting story media:", storageError);
+      // Nothing removed and no error = the bucket's policy doesn't let the owner delete.
+      else if (__DEV__ && removed?.length === 0) console.warn("Story media not deleted (check the 'stories' bucket DELETE policy):", paths);
+    }
     return true;
   },
 };
