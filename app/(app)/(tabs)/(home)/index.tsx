@@ -3,6 +3,7 @@ import {
    ActivityIndicator,
    RefreshControl,
    StyleSheet,
+   Text,
    TouchableOpacity,
    View
 } from "react-native";
@@ -30,12 +31,15 @@ import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { usePostActivity } from "@/context/PostActivityContext";
 import { POST_ENTERING, POST_EXITING, POST_LAYOUT, useFreshPostIds } from "@/hooks/usePostListAnimation";
 import { useStoriesFeed } from "@/hooks/useStoriesFeed";
+import { formatUnreadBadge } from "@/hooks/useTotalUnread";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 
 export default function HomeScreen() {
    const { session } = useAuth()
    const { markHomeReady } = useAppReady();
    const { blockedIds, isBlocked } = useBlockedUsers();
    const { deletedIds, postsVersion } = usePostActivity();
+   const notificationsBadge = formatUnreadBadge(useUnreadNotifications());
 
    const [posts, setPosts] = useState<any[]>([]);
    const [loadingPosts, setLoadingPosts] = useState(true);
@@ -151,8 +155,17 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                ),
                headerRight: () => (
-                  <TouchableOpacity onPress={() => router.push("/notifications")}>
+                  <TouchableOpacity
+                     onPress={() => router.push("/notifications")}
+                     style={styles.bellButton}
+                     accessibilityLabel={notificationsBadge ? `Notifications, ${notificationsBadge} unread` : "Notifications"}
+                  >
                      <SymbolView name="bell" size={24} tintColor="#fff" />
+                     {notificationsBadge && (
+                        <View style={styles.bellBadge}>
+                           <Text style={styles.bellBadgeText}>{notificationsBadge}</Text>
+                        </View>
+                     )}
                   </TouchableOpacity>
                ),
                headerTransparent: true,
@@ -260,6 +273,23 @@ const styles = StyleSheet.create({
    // own padding and divider.
    storiesWrap: { marginBottom: 12 },
    empty: { marginTop: 90 },
+   // iOS 26 clips the header's custom view to its frame, so the frame has
+   // room for the badge instead of letting it hang outside the bell.
+   bellButton: { width: 36, height: 30, alignItems: "center", justifyContent: "center" },
+   // Same look as the Messages tab badge: red pill, white count, "9+" cap.
+   bellBadge: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: 5,
+      backgroundColor: getThemeColor("badge"),
+      alignItems: "center",
+      justifyContent: "center",
+   },
+   bellBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
    loaderContainer: {
       flex: 1,
       justifyContent: "center",

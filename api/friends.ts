@@ -89,6 +89,43 @@ export const friendsApi = {
         return true;
     },
 
+    /**
+     * Declines an incoming request. The row is deleted (not just flagged) so
+     * the sender can ask again later; if RLS doesn't let the receiver delete,
+     * it's marked REJECTED instead. The request's notification goes with it.
+     */
+    async declineRequest({ requestId, notificationId }: { requestId: string; notificationId?: string }) {
+        assertUuid(requestId, 'requestId');
+
+        // Without a DELETE policy RLS doesn't error, it just deletes nothing:
+        // `select()` returns the deleted rows so we can tell.
+        const { data: deleted, error } = await supabase
+            .from('friend_requests')
+            .delete()
+            .eq('id', requestId)
+            .eq('status', 'PENDING')
+            .select('id');
+
+        if (error) throw error;
+
+        if (!deleted?.length) {
+            const { error: rejectError } = await supabase
+                .from('friend_requests')
+                .update({ status: 'REJECTED' })
+                .eq('id', requestId)
+                .eq('status', 'PENDING');
+
+            if (rejectError) throw rejectError;
+        }
+
+        // Best-effort: it may already be gone with the request.
+        if (notificationId) {
+            await supabase.from('notifications').delete().eq('id', notificationId);
+        }
+
+        return true;
+    },
+
     async getFriendsCount(targetUserId?: string) {
         const { data: { user } } = await supabase.auth.getUser();
         const idToQuery = targetUserId || user?.id;
