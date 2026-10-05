@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
    ActivityIndicator,
-   FlatList,
    RefreshControl,
    StyleSheet,
    TouchableOpacity,
    View
 } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Host } from "@expo/ui/swift-ui";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -19,18 +19,22 @@ import CommentsSheet from "@/components/CommentsSheet";
 import PostComponent from "@/components/PostComponent";
 import { isVideoPath } from "@/components/PostComponent/hooks/usePost";
 
+import PostActivityBanner from "@/components/PostActivityBanner";
 import StoriesDaily from "@/components/StoriesDaily";
 import { prefetchHls } from "@/utils/videoSource";
 import { getThemeColor } from "@/constants/theme";
 import { useAppReady } from "@/context/AppReadyContext";
 import { useAuth } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
+import { usePostActivity } from "@/context/PostActivityContext";
+import { POST_ENTERING, POST_EXITING, POST_LAYOUT, useFreshPostIds } from "@/hooks/usePostListAnimation";
 import { useStoriesFeed } from "@/hooks/useStoriesFeed";
 
 export default function HomeScreen() {
    const { session } = useAuth()
    const { markHomeReady } = useAppReady();
    const { blockedIds, isBlocked } = useBlockedUsers();
+   const { deletedIds, postsVersion } = usePostActivity();
 
    const [posts, setPosts] = useState<any[]>([]);
    const [loadingPosts, setLoadingPosts] = useState(true);
@@ -83,6 +87,15 @@ export default function HomeScreen() {
       loadPosts();
    }, [session, loadPosts]);
 
+   // A post finished uploading or deleting in the background
+   // (PostActivityContext): re-sync the feed without waiting for a manual refresh.
+   const handledVersionRef = useRef(0);
+   useEffect(() => {
+      if (postsVersion === handledVersionRef.current) return;
+      handledVersionRef.current = postsVersion;
+      loadPosts(false);
+   }, [postsVersion, loadPosts]);
+
    // Lets the root layout know it can reveal the app: without this, the
    // splash would disappear as soon as auth resolved, and the user would
    // briefly see the posts/stories spinners loading separately.
@@ -95,11 +108,13 @@ export default function HomeScreen() {
       await Promise.all([loadPosts(false), reloadStories(false)]);
    }, [reloadStories, loadPosts]);
 
-   // Instantly hides content from blocked users (Guideline 1.2).
+   // Instantly hides content from blocked users (Guideline 1.2) and posts
+   // that are being deleted (they animate out and come back if the delete fails).
    const visiblePosts = useMemo(
-      () => posts.filter((p) => !isBlocked(p.user_id)),
-      [posts, isBlocked, blockedIds],
+      () => posts.filter((p) => !isBlocked(p.user_id) && !deletedIds.has(p.id)),
+      [posts, isBlocked, blockedIds, deletedIds],
    );
+   const freshPostIds = useFreshPostIds(visiblePosts);
    const visibleStoryGroups = useMemo(
       () => storyGroups.filter((g) => g.is_me || !isBlocked(g.user_id)),
       [storyGroups, isBlocked, blockedIds],
@@ -149,12 +164,16 @@ export default function HomeScreen() {
                <ActivityIndicator size="large" color={getThemeColor("tint")} />
             </View>
          ) : (
-            <FlatList
+            <Animated.FlatList
                data={visiblePosts}
                keyExtractor={(post) => post.id}
                showsVerticalScrollIndicator={false}
                contentInsetAdjustmentBehavior="automatic"
                contentContainerStyle={{ paddingBottom: 120, paddingTop: 12 }}
+               // The rest of the feed glides when a post is created or deleted
+               // instead of jumping; the first fill of the list isn't animated.
+               itemLayoutAnimation={POST_LAYOUT}
+               skipEnteringExitingAnimations
                // Without this, a tap on a button inside the Story viewer modal (which
                // lives in this tree) is swallowed to dismiss the keyboard and needs
                // a second tap. See facebook/react-native#28871.
@@ -180,21 +199,29 @@ export default function HomeScreen() {
                   </View>
                }
                renderItem={({ item: post }) => (
-                  <PostComponent
-                     post={post}
-                     isActive={post.id === activeVideoPostId}
-                     muted={feedMuted}
-                     onToggleMute={() => setFeedMuted((m) => !m)}
-                     onDelete={() => loadPosts(false)}
-                     onCommentPress={() => {
-                        setActiveCommentPostId(post.id);
-                        commentsRef.current?.present();
-                     }}
-                  />
+                  <Animated.View
+                     entering={freshPostIds.has(post.id) ? POST_ENTERING : undefined}
+                     exiting={POST_EXITING}
+                  >
+                     <PostComponent
+                        post={post}
+                        isActive={post.id === activeVideoPostId}
+                        muted={feedMuted}
+                        onToggleMute={() => setFeedMuted((m) => !m)}
+                        onDelete={() => loadPosts(false)}
+                        onCommentPress={() => {
+                           setActiveCommentPostId(post.id);
+                           commentsRef.current?.present();
+                        }}
+                     />
+                  </Animated.View>
                )}
             />
          )}
          {/* )} */}
+
+         {/* "Uploading your post…" / "Deleting post…" while it happens in the background. */}
+         <PostActivityBanner />
 
          {/*
             This used to be mounted only when activeCommentPostId existed, so on
@@ -218,7 +245,7 @@ const styles = StyleSheet.create({
    // This spacing used to come from the `gap: 12` on the View that wrapped
    // the whole feed in the old ScrollView -- FlatList doesn't wrap items that
    // way, and the spacing between posts is already handled by PostComponent's
-   // own marginBottom.
+   // own padding and divider.
    storiesWrap: { marginBottom: 12 },
    loaderContainer: {
       flex: 1,

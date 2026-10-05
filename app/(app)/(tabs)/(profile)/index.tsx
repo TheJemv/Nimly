@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Host } from "@expo/ui/swift-ui";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -15,11 +16,14 @@ import PostComponent from "@/components/PostComponent";
 import { ThemedText } from "@/components/themed-text";
 import ZoomableAvatar from "@/components/ZoomableAvatar";
 import { useAuth } from "@/context/AuthContext";
+import { usePostActivity } from "@/context/PostActivityContext";
 import { useProfile } from "@/context/ProfileContext";
+import { POST_ENTERING, POST_EXITING, POST_LAYOUT, useFreshPostIds } from "@/hooks/usePostListAnimation";
 
 export default function ProfileScreen() {
     const { session } = useAuth()
     const { profile } = useProfile()
+    const { deletedIds, postsVersion } = usePostActivity()
     const myUserId = session?.user?.id
 
     const router = useRouter();
@@ -78,6 +82,18 @@ export default function ProfileScreen() {
         return () => { supabase.removeChannel(postsChannel); };
     }, [myUserId]);
 
+    // A post finished uploading or deleting in the background
+    // (PostActivityContext): re-sync the list.
+    const handledVersionRef = useRef(0);
+    useEffect(() => {
+        if (postsVersion === handledVersionRef.current) return;
+        handledVersionRef.current = postsVersion;
+        loadPostsAndFriends(false);
+    }, [postsVersion]);
+
+    // Posts being deleted disappear right away (animated); they come back if the delete fails.
+    const visiblePosts = useMemo(() => myPosts.filter((p) => !deletedIds.has(p.id)), [myPosts, deletedIds]);
+    const freshPostIds = useFreshPostIds(visiblePosts);
 
     if (loading && !refreshing) {
         return (
@@ -139,7 +155,7 @@ export default function ProfileScreen() {
                             <View style={styles.statItem}>
                                 <SymbolView name='doc.text.fill' size={24} tintColor="#fff" />
                                 <ThemedText style={styles.statText}>
-                                    {myPosts.length} {myPosts.length === 1 ? "Post" : "Posts"}
+                                    {visiblePosts.length} {visiblePosts.length === 1 ? "Post" : "Posts"}
                                 </ThemedText>
                             </View>
                         </View>
@@ -151,16 +167,21 @@ export default function ProfileScreen() {
                 </View>
 
                 <View style={styles.myFeed}>
-                    {myPosts.map((post) => (
-                        <PostComponent
-                            post={post}
+                    {visiblePosts.map((post) => (
+                        <Animated.View
                             key={post.id}
-                            onDelete={() => loadPostsAndFriends(false)}
-                            onCommentPress={() => handleOpenComments(post.id)}
-                        />
+                            layout={POST_LAYOUT}
+                            entering={freshPostIds.has(post.id) ? POST_ENTERING : undefined}
+                            exiting={POST_EXITING}
+                        >
+                            <PostComponent
+                                post={post}
+                                onCommentPress={() => handleOpenComments(post.id)}
+                            />
+                        </Animated.View>
                     ))}
 
-                    {myPosts.length === 0 && (
+                    {visiblePosts.length === 0 && (
                         <View style={styles.emptyContainer}>
                             <SymbolView name="photo.on.rectangle.angled" size={40} tintColor="rgba(255,255,255,0.1)" />
                             <ThemedText style={styles.emptyText}>You haven't posted anything yet.</ThemedText>

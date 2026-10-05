@@ -14,6 +14,7 @@ import { supabaseUrl } from '@/lib/supabase';
 
 import { AppReadyProvider, useAppReady } from '@/context/AppReadyContext';
 import { BlockedUsersProvider } from '@/context/BlockedUsersContext';
+import { PostActivityProvider } from '@/context/PostActivityContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { useAppForeground } from '@/hooks/useAppForeground';
 import { useIncomingMessageCache } from '@/hooks/useIncomingMessageCache';
@@ -219,7 +220,9 @@ function AppLayout() {
                     <AppReadyProvider>
                         <ProfileProvider>
                             <BlockedUsersProvider>
-                                <RootLayoutNav />
+                                <PostActivityProvider>
+                                    <RootLayoutNav />
+                                </PostActivityProvider>
                             </BlockedUsersProvider>
                         </ProfileProvider>
                     </AppReadyProvider>
