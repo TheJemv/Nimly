@@ -18,6 +18,7 @@ import { PostActivityProvider } from '@/context/PostActivityContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { useAppForeground } from '@/hooks/useAppForeground';
 import { useIncomingMessageCache } from '@/hooks/useIncomingMessageCache';
+import { useStartupUpdate } from '@/hooks/useStartupUpdate';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { StatusBar, StyleSheet, View } from 'react-native';
@@ -100,7 +101,12 @@ function RootLayoutNav() {
     const [startupStalled, setStartupStalled] = useState(false);
     const [homeOverlayStalled, setHomeOverlayStalled] = useState(false);
 
-    const ready = !isLoading && !isCheckingNetwork;
+    // OTA gate: the splash stays up while we ask EAS Update for a newer update
+    // and, if there is one, download it and restart into it. Runs in parallel
+    // with auth/network, and is time-boxed well under the startup watchdog.
+    const updateSettled = useStartupUpdate();
+
+    const ready = !isLoading && !isCheckingNetwork && updateSettled;
 
     // Only worth waiting for the feed to load before revealing the app if
     // we're going to land on Home (session + vault ready, not locked).
