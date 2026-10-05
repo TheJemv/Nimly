@@ -22,8 +22,8 @@ interface StoriesDailyProps {
     storyGroups: StoryGroup[];
     currentUserId: string | null;
     onStorySeen: (storyId: string, userId: string) => void;
-    onStoryLiked?: (storyId: string, userId: string, newLikedState: boolean) => void; // 👈
-    onStoryDeleted?: (storyId: string, userId: string) => void; // 👈
+    onStoryLiked?: (storyId: string, userId: string, newLikedState: boolean) => void;
+    onStoryDeleted?: (storyId: string, userId: string) => void;
     onSendStory: (uri: string, mediaType: "image" | "video") => Promise<void>;
     /** true mientras se sube una historia propia: muestra un spinner en el ring. */
     uploadingStory?: boolean;
@@ -41,14 +41,12 @@ export default function StoriesDaily({
 }: StoriesDailyProps) {
     const { profile: myProfileConfig } = useProfile();
 
-    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+    // Open viewer: who was tapped + the order to play, frozen at open time so
+    // stories turning "seen" don't reshuffle the sequence mid-viewing.
+    const [viewer, setViewer] = useState<{ initialUserId: string; order: string[] } | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
 
     const sortedStories = useMemo(() => {
-        if (selectedUserId !== null) {
-            return storyGroups;
-        }
-
         let myGroup = storyGroups.find((item) => item.is_me || item.user_id === currentUserId);
         if (myGroup) {
             myGroup = {
@@ -91,15 +89,29 @@ export default function StoriesDaily({
         });
 
         return [myGroup, ...friendsGroups];
-    }, [storyGroups, selectedUserId, currentUserId, myProfileConfig]); // myProfileConfig ahora viene del context
+    }, [storyGroups, currentUserId, myProfileConfig]);
 
+    // The viewer plays the tray's order. Your own story plays on its own;
+    // a friend's continues through the other friends (unseen first).
     const handleAvatarPress = (group: StoryGroup) => {
         if (group.is_me && group.stories.length === 0) {
             setIsCameraOpen(true);
-        } else {
-            setSelectedUserId(group.user_id);
+            return;
         }
+        const order = group.is_me
+            ? [group.user_id]
+            : sortedStories.filter((g) => !g.is_me && g.stories.length > 0).map((g) => g.user_id);
+        setViewer({ initialUserId: group.user_id, order });
     };
+
+    // Live data (seen / liked / deleted) in the frozen order.
+    const viewerGroups = useMemo(() => {
+        if (!viewer) return [];
+        const byId = new Map(sortedStories.map((g) => [g.user_id, g]));
+        return viewer.order
+            .map((id) => byId.get(id))
+            .filter((g): g is StoryGroup => !!g && g.stories.length > 0);
+    }, [viewer, sortedStories]);
 
     return (
         <View style={styles.container}>
@@ -161,15 +173,15 @@ export default function StoriesDaily({
                 })}
             </ScrollView>
 
-            {selectedUserId && (
+            {viewer && (
                 <StoryViewerModal
-                    visible={selectedUserId !== null}
-                    initialUserId={selectedUserId}
-                    storyGroups={sortedStories}
-                    onClose={() => setSelectedUserId(null)}
+                    visible
+                    initialUserId={viewer.initialUserId}
+                    storyGroups={viewerGroups}
+                    onClose={() => setViewer(null)}
                     onStorySeen={onStorySeen}
-                    onStoryLiked={onStoryLiked}     // 👈
-                    onStoryDeleted={onStoryDeleted} // 👈
+                    onStoryLiked={onStoryLiked}
+                    onStoryDeleted={onStoryDeleted}
                 />
             )}
 

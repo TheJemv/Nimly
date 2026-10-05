@@ -106,6 +106,13 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
     },
+    failedContainer: {
+        ...StyleSheet.absoluteFill,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 10,
+    },
+    failedText: { color: "rgba(255,255,255,0.7)", fontSize: 14 },
     touchOverlay: {
         ...StyleSheet.absoluteFill,
         flexDirection: "row",

@@ -17,6 +17,16 @@ export function useStoriesFeed() {
 
     const channelRef = useRef<any>(null);
 
+    // What this device already knows but a reload may not reflect yet: a
+    // reload that left before our view/like/delete landed would otherwise
+    // bring back the old state (unseen ring, wrong heart, deleted story).
+    const seenLocallyRef = useRef<Set<string>>(new Set());
+    const likeOverridesRef = useRef<Map<string, boolean>>(new Map());
+    const deletedLocallyRef = useRef<Set<string>>(new Set());
+    // Only the newest reload may write: realtime fires them back to back and
+    // an older response arriving last would roll the feed back.
+    const reloadSeqRef = useRef(0);
+
     const formatStoriesToGroups = (rawStories: Story[], userId: string | null): StoryGroup[] => {
         const groupsMap: { [key: string]: StoryGroup } = {};
 
@@ -25,6 +35,7 @@ export function useStoriesFeed() {
         sortedRaw.forEach((story) => {
             const profile = story.profiles;
             if (!profile) return;
+            if (deletedLocallyRef.current.has(story.id)) return;
 
             const uId = story.user_id;
             const isMe = uId === userId;
@@ -43,7 +54,12 @@ export function useStoriesFeed() {
             const likes = story.story_likes || [];
             const likedUserIds = new Set(likes.map((l: any) => l.user_id));
 
-            const isSeenByMe = isMe || views.some((v) => v.viewer_id === userId);
+            const isSeenByMe = isMe || seenLocallyRef.current.has(story.id) || views.some((v) => v.viewer_id === userId);
+
+            // A pending like wins until the server shows the same value.
+            const serverLiked = (story as any).is_liked_by_me || false;
+            const likeOverride = likeOverridesRef.current.get(story.id);
+            if (likeOverride === serverLiked) likeOverridesRef.current.delete(story.id);
 
             const viewersWithLikeInfo: ViewerProfile[] = views.map((v: any) => ({
                 user_id: v.viewer_id,
@@ -71,7 +87,7 @@ export function useStoriesFeed() {
                 views_count: views.length,
                 viewers: viewersWithLikeInfo,
                 likes,
-                is_liked_by_me: (story as any).is_liked_by_me || false,
+                is_liked_by_me: likeOverride ?? serverLiked,
             });
         });
 
@@ -82,10 +98,12 @@ export function useStoriesFeed() {
         const userId = session?.user?.id;
         if (!userId) return; // 👈 no session, nothing to load
 
+        const seq = ++reloadSeqRef.current;
         try {
             if (showLoading) setLoadingStories(true);
 
             const rawStories = await storiesApi.getActiveFeed(session?.user);
+            if (seq !== reloadSeqRef.current) return; // a newer reload is on its way
             const groups = formatStoriesToGroups(rawStories as Story[], userId);
             setStoryGroups(groups);
         } catch (error) {
@@ -101,6 +119,24 @@ export function useStoriesFeed() {
         let retryCount = 0;
         let isIntentionalClose = false; // 👈 new flag
         const MAX_RETRY_DELAY = 15000;
+
+        // Realtime fires for every view/like of every story: coalesce a burst
+        // into a single refetch instead of one full reload per event.
+        let reloadTimeout: ReturnType<typeof setTimeout> | null = null;
+        const scheduleReload = () => {
+            if (!isMounted) return;
+            if (reloadTimeout) clearTimeout(reloadTimeout);
+            reloadTimeout = setTimeout(() => {
+                reloadTimeout = null;
+                if (isMounted) reloadStories(false);
+            }, 500);
+        };
+        // Our own views are already applied locally (handleStorySeen): reloading
+        // the whole feed for each story we watch is pure waste.
+        const isOwnView = (payload: any) => {
+            const row = payload?.new && Object.keys(payload.new).length > 0 ? payload.new : payload?.old;
+            return !!row && row.viewer_id === session?.user?.id;
+        };
 
         const initRealtime = async (showLoading: boolean) => {
             const user = session?.user
@@ -119,11 +155,11 @@ export function useStoriesFeed() {
 
             const channel = supabase.channel(uniqueChannelName)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' },
-                    (payload) => { if (isMounted) reloadStories(false); })
+                    () => scheduleReload())
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'story_views' },
-                    (payload) => { if (isMounted) reloadStories(false); })
+                    (payload) => { if (!isOwnView(payload)) scheduleReload(); })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'story_likes' },
-                    (payload) => { if (isMounted) reloadStories(false); })
+                    () => scheduleReload())
                 .subscribe((status, err) => {
                     if (__DEV__) console.log('Stories channel status:', status, err);
 
@@ -160,6 +196,7 @@ export function useStoriesFeed() {
         return () => {
             isMounted = false;
             if (retryTimeout) clearTimeout(retryTimeout);
+            if (reloadTimeout) clearTimeout(reloadTimeout);
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
             }
@@ -167,29 +204,30 @@ export function useStoriesFeed() {
     }, [reloadStories]);
 
 
-    const handleStorySeen = async (storyId: string) => {
-        try {
-            await storiesApi.markAsSeen(storyId);
-            setStoryGroups(prev =>
-                prev.map(group => ({
-                    ...group,
-                    stories: group.stories.map(s =>
-                        s.id === storyId ? { ...s, is_seen_by_me: true } : s
-                    )
-                }))
-            );
-        } catch (e) {
-            console.error("Error marking story as seen:", e);
-        }
+    // The viewer already did the network call for these three (markAsSeen,
+    // toggleLike, deleteStory): here we only reflect it in the feed, right away.
+    const handleStorySeen = (storyId: string) => {
+        seenLocallyRef.current.add(storyId);
+        setStoryGroups(prev =>
+            prev.map(group => ({
+                ...group,
+                stories: group.stories.map(s =>
+                    s.id === storyId ? { ...s, is_seen_by_me: true } : s
+                )
+            }))
+        );
     };
 
-    const handleStoryLiked = async (storyId: string, reaction: string = '❤️') => {
-        try {
-            await storiesApi.toggleLike(storyId, reaction);
-            reloadStories(false);
-        } catch (e) {
-            console.error("Error liking the story:", e);
-        }
+    const handleStoryLiked = (storyId: string, _userId: string, liked: boolean) => {
+        likeOverridesRef.current.set(storyId, liked);
+        setStoryGroups(prev =>
+            prev.map(group => ({
+                ...group,
+                stories: group.stories.map(s =>
+                    s.id === storyId ? { ...s, is_liked_by_me: liked } : s
+                )
+            }))
+        );
     };
 
     const handleSendStory = async (uri: string, mediaType: "image" | "video") => {
@@ -205,19 +243,14 @@ export function useStoriesFeed() {
         }
     };
 
-    const handleStoryDeleted = async (storyId: string) => {
-        try {
-            await storiesApi.deleteStory(storyId);
-            setStoryGroups(prev =>
-                prev.map(group => ({
-                    ...group,
-                    stories: group.stories.filter(s => s.id !== storyId)
-                })).filter(group => group.stories.length > 0 || group.is_me)
-            );
-        } catch (error) {
-            console.error("Error deleting story:", error);
-            Alert.alert("Error", "Could not delete the story.");
-        }
+    const handleStoryDeleted = (storyId: string) => {
+        deletedLocallyRef.current.add(storyId);
+        setStoryGroups(prev =>
+            prev.map(group => ({
+                ...group,
+                stories: group.stories.filter(s => s.id !== storyId)
+            })).filter(group => group.stories.length > 0 || group.is_me)
+        );
     };
 
     return {

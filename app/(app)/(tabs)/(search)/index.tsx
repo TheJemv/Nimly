@@ -2,6 +2,12 @@ import { ESTILOS_DICEBEAR } from "@/constants/dicebear";
 import { getThemeColor } from '@/constants/theme';
 import { useBlockedUsers } from '@/context/BlockedUsersContext';
 import { supabase } from '@/lib/supabase';
+import {
+    loadSearchHistory,
+    saveSearchHistory,
+    SearchHistoryEntry,
+    withSearchHistoryEntry,
+} from '@/utils/searchHistory';
 import { createAvatar } from "@dicebear/core";
 import { GlassView } from 'expo-glass-effect';
 import { useRouter } from 'expo-router';
@@ -19,8 +25,14 @@ import {
 } from 'react-native';
 import { SvgXml } from "react-native-svg";
 
-const UserSearchResult = ({ item }: { item: any }) => {
-    const router = useRouter();
+interface UserSearchResultProps {
+    item: any;
+    onPress: () => void;
+    /** Recent searches: an X to remove it instead of the chevron. */
+    onRemove?: () => void;
+}
+
+const UserSearchResult = ({ item, onPress, onRemove }: UserSearchResultProps) => {
     const avatarSvg = useMemo(() => {
         if (!item.avatar_config) return null;
         const estilo = ESTILOS_DICEBEAR.find(e => e.id === item.avatar_config.styleId) || ESTILOS_DICEBEAR[0];
@@ -33,7 +45,7 @@ const UserSearchResult = ({ item }: { item: any }) => {
     return (
         <TouchableOpacity
             style={styles.userRow}
-            onPress={() => router.push(`/(app)/user/${item.id}`)}
+            onPress={onPress}
             activeOpacity={0.6}
         >
             <View style={styles.avatarWrapper}>
@@ -44,12 +56,19 @@ const UserSearchResult = ({ item }: { item: any }) => {
                 )}
             </View>
             <Text style={styles.usernameText}>@{item.username}</Text>
-            <SymbolView name="chevron.right" size={14} tintColor={getThemeColor("icon")} weight="semibold" />
+            {onRemove ? (
+                <TouchableOpacity onPress={onRemove} hitSlop={12} style={styles.removeButton} accessibilityLabel="Remove from recent searches">
+                    <SymbolView name="xmark" size={14} tintColor={getThemeColor("textSecondary")} weight="semibold" />
+                </TouchableOpacity>
+            ) : (
+                <SymbolView name="chevron.right" size={14} tintColor={getThemeColor("icon")} weight="semibold" />
+            )}
         </TouchableOpacity>
     );
 };
 
 export default function SearchScreen() {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -62,12 +81,43 @@ export default function SearchScreen() {
         [results, isBlocked, blockedIds],
     );
 
+    // Recent searches (last 20 people you opened from here, newest first),
+    // stored on the device only. Shown while the search box is empty.
+    const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
+    const visibleHistory = useMemo(
+        () => history.filter((h) => !isBlocked(h.id)),
+        [history, isBlocked, blockedIds],
+    );
+    const showingHistory = searchQuery.trim().length === 0;
+
     // 1. Get the current user's ID when the component mounts
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             setCurrentUserId(data.user?.id || null);
         });
     }, []);
+
+    useEffect(() => {
+        if (!currentUserId) return;
+        loadSearchHistory(currentUserId).then(setHistory);
+    }, [currentUserId]);
+
+    const updateHistory = (update: (prev: SearchHistoryEntry[]) => SearchHistoryEntry[]) => {
+        setHistory((prev) => {
+            const next = update(prev);
+            if (currentUserId) saveSearchHistory(currentUserId, next);
+            return next;
+        });
+    };
+
+    const openUser = (user: SearchHistoryEntry) => {
+        updateHistory((prev) => withSearchHistoryEntry(prev, user));
+        router.push(`/(app)/user/${user.id}`);
+    };
+
+    const removeFromHistory = (userId: string) => {
+        updateHistory((prev) => prev.filter((h) => h.id !== userId));
+    };
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -133,9 +183,22 @@ export default function SearchScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={visibleResults}
+                    data={showingHistory ? visibleHistory : visibleResults}
                     keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => <UserSearchResult item={item} />}
+                    renderItem={({ item }) => (
+                        <UserSearchResult
+                            item={item}
+                            onPress={() => openUser(item)}
+                            onRemove={showingHistory ? () => removeFromHistory(item.id) : undefined}
+                        />
+                    )}
+                    // Rows and X work on the first tap even with the keyboard up.
+                    keyboardShouldPersistTaps="handled"
+                    ListHeaderComponent={
+                        showingHistory && visibleHistory.length > 0
+                            ? <Text style={styles.sectionTitle}>Recent</Text>
+                            : null
+                    }
                     contentContainerStyle={styles.listPadding}
                     ItemSeparatorComponent={() => <View style={styles.separator} />}
                     ListEmptyComponent={() =>
@@ -165,6 +228,8 @@ const styles = StyleSheet.create({
     avatarWrapper: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden', backgroundColor: getThemeColor("surface"), marginRight: 15 },
     placeholderAvatar: { flex: 1, backgroundColor: getThemeColor("border") },
     usernameText: { flex: 1, fontSize: 17, fontWeight: '500', color: '#FFF', letterSpacing: -0.4 },
+    removeButton: { padding: 4 },
+    sectionTitle: { fontSize: 15, fontWeight: '600', color: getThemeColor("textSecondary"), marginBottom: 4 },
     separator: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 55 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyText: { textAlign: 'center', color: getThemeColor("textSecondary"), marginTop: 40, fontSize: 15 }

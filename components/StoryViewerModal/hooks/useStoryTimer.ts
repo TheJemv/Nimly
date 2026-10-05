@@ -1,215 +1,301 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated } from "react-native";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Animated, Easing } from "react-native";
 
 import { useAnimatedValue } from "@/utils/animations";
 
 const DEFAULT_IMAGE_DURATION = 5000;
+/** Shorter than this is a tap (navigate); longer is a hold (pause, hide the UI). */
+const TAP_MAX_MS = 250;
+
+/**
+ * Everything that can pause a story. The story only runs while NONE is active,
+ * so one thing ending (e.g. the keyboard closing) can't resume a story that
+ * something else (e.g. the finger still down) is holding.
+ */
+export type StoryPauseReason = "hold" | "drag" | "reply" | "menu" | "sheet" | "delete" | "closing";
 
 interface UseStoryTimerProps {
+  /** Id of the story on screen: the timer starts over whenever it changes. */
+  storyKey: string | undefined;
   isVideo: boolean;
   videoPlayer: any;
-  onNext: () => void;
+  /** Called with the id of the story that finished. */
+  onNext: (fromStoryKey?: string) => void;
   isEnabled: boolean;
-  isViewsSheetOpen: boolean;
   onMarkAsSeen?: () => void;
   /**
    * The video player blew up. Returning `true` = "I handled it" (e.g. I fell
-   * back from HLS to MP4 and the player is about to be recreated) → do NOT
-   * skip to the next story. `false`/undefined = skip as before.
+   * back from HLS to MP4 and the player is about to be recreated) → keep
+   * waiting. `false`/undefined = the story is shown as failed.
    */
   onVideoError?: () => boolean;
 }
 
 export function useStoryTimer({
+  storyKey,
   isVideo,
   videoPlayer,
   onNext,
   isEnabled,
-  isViewsSheetOpen,
   onMarkAsSeen,
   onVideoError,
 }: UseStoryTimerProps) {
   const [isMediaLoading, setIsMediaLoading] = useState(true);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
 
-  // `onNext` isn't memoized upstream; using a ref avoids re-subscribing the
-  // video listeners on every render.
+  // Callbacks change every render upstream; refs keep the listeners stable.
   const onNextRef = useRef(onNext);
   onNextRef.current = onNext;
-  const goNext = useCallback(() => onNextRef.current(), []);
-
+  const storyKeyRef = useRef(storyKey);
+  storyKeyRef.current = storyKey;
   const onVideoErrorRef = useRef(onVideoError);
   onVideoErrorRef.current = onVideoError;
+  const onMarkAsSeenRef = useRef(onMarkAsSeen);
+  onMarkAsSeenRef.current = onMarkAsSeen;
+  const playerRef = useRef(videoPlayer);
+  playerRef.current = videoPlayer;
+  const enabledRef = useRef(isEnabled);
+  enabledRef.current = isEnabled;
 
   const progressAnim = useAnimatedValue(0);
-  const currentProgressVal = useRef(0);
-  const isHoldingRef = useRef(false);
-  const pressInTimeRef = useRef(0);
-  const activeAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const progressValRef = useRef(0);
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
+  const pausesRef = useRef<Set<StoryPauseReason>>(new Set());
+  /** The media is on screen (loaded, or failed and showing the error). */
+  const readyRef = useRef(false);
+  /** Fixed-duration bar (images and failed media) vs following the video's time. */
+  const timedRef = useRef(!isVideo);
+  const mountedRef = useRef(true);
+  const pressInAtRef = useRef(0);
+  const holdUiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // expo-video releases the native object on unmount / source change. Any
   // later call throws NotFoundException, so EVERY access is guarded.
   const safeVideo = useCallback((fn: (p: any) => void) => {
-    if (!videoPlayer) return;
-    try { fn(videoPlayer); } catch { /* player already released */ }
-  }, [videoPlayer]);
+    const player = playerRef.current;
+    if (!player) return;
+    try { fn(player); } catch { /* player already released */ }
+  }, []);
 
   const readVideo = useCallback(<T,>(fn: (p: any) => T, fallback: T): T => {
-    if (!videoPlayer) return fallback;
-    try { return fn(videoPlayer); } catch { return fallback; }
-  }, [videoPlayer]);
+    const player = playerRef.current;
+    if (!player) return fallback;
+    try { return fn(player); } catch { return fallback; }
+  }, []);
 
-  const resetTimer = useCallback(() => {
-    setIsMediaLoading(true);
-    progressAnim.setValue(0);
-    currentProgressVal.current = 0;
-    isHoldingRef.current = false;
-    setIsHolding(false);
-    if (activeAnimationRef.current) activeAnimationRef.current.stop();
-  }, [progressAnim]);
+  const canRun = useCallback(
+    () => mountedRef.current && enabledRef.current && readyRef.current && pausesRef.current.size === 0,
+    [],
+  );
 
-  // --- Progress bar for IMAGES (fixed duration) ---
-  const startImageProgress = useCallback((fromVal = 0, duration = DEFAULT_IMAGE_DURATION) => {
-    progressAnim.setValue(fromVal);
-    currentProgressVal.current = fromVal;
-    if (activeAnimationRef.current) activeAnimationRef.current.stop();
-
-    activeAnimationRef.current = Animated.timing(progressAnim, {
+  // Linear, from wherever the bar is: resuming mid-story keeps the same speed.
+  const startTimedProgress = useCallback(() => {
+    animRef.current?.stop();
+    const from = progressValRef.current;
+    const remaining = (1 - from) * DEFAULT_IMAGE_DURATION;
+    if (remaining <= 0) {
+      onNextRef.current(storyKeyRef.current);
+      return;
+    }
+    const anim = Animated.timing(progressAnim, {
       toValue: 1,
-      duration,
+      duration: remaining,
+      easing: Easing.linear,
       useNativeDriver: false,
     });
-    activeAnimationRef.current.start(({ finished }) => {
-      if (finished && !isHoldingRef.current && !isViewsSheetOpen) goNext();
+    animRef.current = anim;
+    anim.start(({ finished }) => {
+      if (animRef.current === anim) animRef.current = null;
+      // Any pause stops the animation (finished = false), so reaching the end
+      // means it really ran its full time.
+      if (finished && mountedRef.current) {
+        progressValRef.current = 1;
+        onNextRef.current(storyKeyRef.current);
+      }
     });
-  }, [goNext, isViewsSheetOpen, progressAnim]);
+  }, [progressAnim]);
 
-  // --- Progress bar for VIDEO: follows the REAL playback time ---
+  const run = useCallback(() => {
+    if (!canRun()) return;
+    if (timedRef.current) startTimedProgress();
+    else safeVideo((p) => p.play());
+  }, [canRun, safeVideo, startTimedProgress]);
+
+  const halt = useCallback(() => {
+    if (timedRef.current) {
+      animRef.current?.stop();
+      animRef.current = null;
+      progressAnim.stopAnimation((val) => { progressValRef.current = val; });
+    } else {
+      safeVideo((p) => p.pause());
+    }
+  }, [progressAnim, safeVideo]);
+
+  const pause = useCallback((reason: StoryPauseReason) => {
+    const wasRunning = pausesRef.current.size === 0;
+    pausesRef.current.add(reason);
+    if (wasRunning) halt();
+  }, [halt]);
+
+  const resume = useCallback((reason: StoryPauseReason) => {
+    if (!pausesRef.current.delete(reason)) return;
+    run();
+  }, [run]);
+
+  // New story: start from zero. Layout effect = before paint and before the
+  // video listeners below subscribe, so the new bar never flashes the old
+  // progress and a fast `readyToPlay` isn't wiped by a late reset.
+  useLayoutEffect(() => {
+    animRef.current?.stop();
+    animRef.current = null;
+    progressAnim.setValue(0);
+    progressValRef.current = 0;
+    readyRef.current = false;
+    timedRef.current = !isVideo;
+    // A tap that navigated has already lifted the finger.
+    pausesRef.current.delete("hold");
+    if (holdUiTimeoutRef.current) clearTimeout(holdUiTimeoutRef.current);
+    setIsHolding(false);
+    setIsMediaLoading(true);
+    setMediaFailed(false);
+  }, [storyKey]);
+
+  /** The media couldn't load: show the error and move on after the normal time. */
+  const handleMediaFailed = useCallback(() => {
+    if (timedRef.current && readyRef.current) return;
+    if (!timedRef.current) safeVideo((p) => p.pause());
+    timedRef.current = true;
+    readyRef.current = true;
+    setIsMediaLoading(false);
+    setMediaFailed(true);
+    run();
+  }, [run, safeVideo]);
+
+  // --- VIDEO: the bar follows the REAL playback time ---
   // If the video buffers, `currentTime` doesn't advance → the bar freezes on
   // its own, and we don't move to the next one until the video truly ends.
   useEffect(() => {
-    if (!isVideo || !videoPlayer || !isEnabled) return;
+    if (!isVideo || !videoPlayer) return;
 
     let cancelled = false;
     try { videoPlayer.timeUpdateEventInterval = 0.2; } catch { /* noop */ }
+    // A late event from the previous story's player (e.g. its playToEnd right
+    // as you tap) must not move the new story.
+    const isStale = () => cancelled || playerRef.current !== videoPlayer;
 
     const syncStatus = () => {
-      const status = readVideo((p) => p.status, 'idle');
-      if (status === 'readyToPlay') {
+      if (isStale() || timedRef.current) return;
+      const status = readVideo((p) => p.status, "idle");
+      if (status === "readyToPlay") {
+        readyRef.current = true;
         setIsMediaLoading(false);
-        if (!isHoldingRef.current && !isViewsSheetOpen) safeVideo((p) => p.play());
-      } else if (status === 'loading' || status === 'idle') {
+        // Only plays if nothing is pausing the story (reply open, finger down...).
+        run();
+      } else if (status === "loading" || status === "idle") {
         // Loading / buffering: spinner and the bar does NOT advance.
         setIsMediaLoading(true);
-      } else if (status === 'error') {
-        // If the caller handles the error (HLS -> fallback to MP4), we don't skip:
-        // the player gets recreated with the new source.
+      } else if (status === "error") {
+        // If the caller handles it (HLS -> MP4 fallback) the player gets
+        // recreated with the new source: keep waiting.
         const handled = onVideoErrorRef.current?.() ?? false;
-        if (!handled && !isHoldingRef.current) goNext();
+        if (!handled) handleMediaFailed();
       }
     };
     syncStatus();
 
     const subs = [
-      videoPlayer.addListener?.('statusChange', () => { if (!cancelled) syncStatus(); }),
-      videoPlayer.addListener?.('sourceChange', () => {
-        if (cancelled) return;
-        currentProgressVal.current = 0;
-        progressAnim.setValue(0);
-        setIsMediaLoading(true);
-      }),
-      videoPlayer.addListener?.('timeUpdate', ({ currentTime }: { currentTime: number }) => {
-        if (cancelled || isHoldingRef.current) return;
+      videoPlayer.addListener?.("statusChange", () => syncStatus()),
+      videoPlayer.addListener?.("timeUpdate", ({ currentTime }: { currentTime: number }) => {
+        if (isStale() || timedRef.current) return;
         const dur = readVideo((p) => p.duration, 0);
         if (!dur || dur <= 0) return;
         const p = Math.min(Math.max(currentTime / dur, 0), 1);
-        currentProgressVal.current = p;
+        progressValRef.current = p;
         progressAnim.setValue(p);
       }),
-      videoPlayer.addListener?.('playToEnd', () => {
-        if (cancelled || isHoldingRef.current || isViewsSheetOpen) return;
-        currentProgressVal.current = 1;
+      videoPlayer.addListener?.("playToEnd", () => {
+        if (isStale() || timedRef.current || !mountedRef.current) return;
+        progressValRef.current = 1;
         progressAnim.setValue(1);
-        goNext();
+        onNextRef.current(storyKeyRef.current);
       }),
     ].filter(Boolean);
 
     return () => {
       cancelled = true;
-      subs.forEach((s: any) => s?.remove?.());
+      subs.forEach((s: any) => { try { s?.remove?.(); } catch { /* released */ } });
     };
-    // isEnabled / isViewsSheetOpen re-evaluate the effect; isHoldingRef is a ref.
-  }, [isVideo, videoPlayer, isEnabled, isViewsSheetOpen, goNext, progressAnim, readVideo, safeVideo]);
-
-  const handleMediaReady = useCallback(() => {
-    onMarkAsSeen?.();
-    if (isViewsSheetOpen || !isEnabled) return;
-
-    // For video, the status effect handles spinner + play + bar.
-    if (isVideo) return;
-
-    setIsMediaLoading(false);
-    startImageProgress(0, DEFAULT_IMAGE_DURATION);
-  }, [isEnabled, isVideo, isViewsSheetOpen, onMarkAsSeen, startImageProgress]);
-
-  const handlePressIn = useCallback(() => {
-    if (isMediaLoading || isViewsSheetOpen) return;
-    pressInTimeRef.current = Date.now();
-    isHoldingRef.current = true;
-    setIsHolding(true);
-
-    if (isVideo) {
-      safeVideo((p) => p.pause());
-    } else {
-      progressAnim.stopAnimation((val) => { currentProgressVal.current = val; });
-    }
-  }, [isMediaLoading, isVideo, isViewsSheetOpen, progressAnim, safeVideo]);
-
-  const handlePressOut = useCallback(() => {
-    if (!isHoldingRef.current || isMediaLoading || isViewsSheetOpen) return;
-    isHoldingRef.current = false;
-    setIsHolding(false);
-
-    if (isVideo) {
-      safeVideo((p) => p.play());
-      return;
-    }
-
-    const remaining = (1 - currentProgressVal.current) * DEFAULT_IMAGE_DURATION;
-    if (remaining > 0) startImageProgress(currentProgressVal.current, remaining);
-    else goNext();
-  }, [goNext, isMediaLoading, isVideo, isViewsSheetOpen, safeVideo, startImageProgress]);
-
-  const wasTapAction = useCallback(() => Date.now() - pressInTimeRef.current < 250, []);
-
-  const pauseTimerForSheet = useCallback(() => {
-    if (isVideo) safeVideo((p) => p.pause());
-    progressAnim.stopAnimation((val) => { currentProgressVal.current = val; });
-  }, [isVideo, progressAnim, safeVideo]);
-
-  const resumeTimerFromSheet = useCallback(() => {
-    if (isVideo) {
-      safeVideo((p) => p.play());
-      return;
-    }
-    const remaining = (1 - currentProgressVal.current) * DEFAULT_IMAGE_DURATION;
-    startImageProgress(currentProgressVal.current, remaining > 0 ? remaining : DEFAULT_IMAGE_DURATION);
-  }, [isVideo, safeVideo, startImageProgress]);
+  }, [isVideo, videoPlayer, handleMediaFailed, progressAnim, readVideo, run]);
 
   useEffect(() => {
-    return () => { progressAnim.stopAnimation(); };
+    if (isEnabled) {
+      pausesRef.current.delete("closing"); // reopened
+      run();
+    } else {
+      halt();
+    }
+  }, [isEnabled]);
+
+  /** Image loaded / first video frame painted. */
+  const handleMediaReady = useCallback(() => {
+    onMarkAsSeenRef.current?.();
+    // For video, the status listener handles spinner + play + bar.
+    if (!timedRef.current || readyRef.current) return;
+    readyRef.current = true;
+    setIsMediaLoading(false);
+    run();
+  }, [run]);
+
+  // Taps work even while the story is loading: that's when you most want to skip it.
+  const handlePressIn = useCallback(() => {
+    pressInAtRef.current = Date.now();
+    pause("hold");
+    // Hide the UI only for a real hold, not on every tap (it used to flicker).
+    if (holdUiTimeoutRef.current) clearTimeout(holdUiTimeoutRef.current);
+    holdUiTimeoutRef.current = setTimeout(() => setIsHolding(true), TAP_MAX_MS);
+  }, [pause]);
+
+  const handlePressOut = useCallback(() => {
+    if (holdUiTimeoutRef.current) clearTimeout(holdUiTimeoutRef.current);
+    setIsHolding(false);
+    resume("hold");
+  }, [resume]);
+
+  const wasTapAction = useCallback(() => Date.now() - pressInAtRef.current < TAP_MAX_MS, []);
+
+  /** Back on the very first story: play it again from the start. */
+  const restartStory = useCallback(() => {
+    animRef.current?.stop();
+    animRef.current = null;
+    progressAnim.setValue(0);
+    progressValRef.current = 0;
+    if (!timedRef.current) safeVideo((p) => { p.currentTime = 0; });
+    run();
+  }, [progressAnim, run, safeVideo]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      animRef.current?.stop();
+      progressAnim.stopAnimation();
+      if (holdUiTimeoutRef.current) clearTimeout(holdUiTimeoutRef.current);
+    };
   }, [progressAnim]);
 
   return {
     progressAnim,
     isMediaLoading,
+    mediaFailed,
     isHolding,
-    resetTimer,
     handleMediaReady,
+    handleMediaFailed,
     handlePressIn,
     handlePressOut,
     wasTapAction,
-    pauseTimerForSheet,
-    resumeTimerFromSheet,
+    restartStory,
+    pause,
+    resume,
   };
 }
