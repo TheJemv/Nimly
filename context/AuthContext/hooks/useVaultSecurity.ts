@@ -70,6 +70,10 @@ export function useVaultSecurity() {
     // Background claim in flight: overlapping runSetup calls (checkSession +
     // INITIAL_SESSION, TOKEN_REFRESHED…) must not race re-creating the watcher.
     const claimInFlightRef = useRef<Promise<void> | null>(null);
+    // Sign-out wipe still running: a sign-up right after must not set up the
+    // vault underneath it (the wipe would delete the new keys and put the
+    // state back to 'loading').
+    const purgeInFlightRef = useRef<Promise<void> | null>(null);
 
     const handleRemoteTakeover = async () => {
         Alert.alert(
@@ -190,13 +194,18 @@ export function useVaultSecurity() {
         const currentUserId = userSession.user.id;
 
         try {
+            if (purgeInFlightRef.current) await purgeInFlightRef.current;
+
             const storedOwnerId = await SecureStore.getItemAsync(OWNER_ID_STORE);
             let localPrivateKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORE);
 
-            // Account switch: the previous user's keys don't work here.
+            // Account switch: the previous user's keys don't work here, and
+            // neither does their passcode — left behind, it let the new account
+            // skip creating its own (or asked it for someone else's).
             if (storedOwnerId && storedOwnerId !== currentUserId) {
                 await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
                 await identityRotation.clear();
+                await vaultPasscode.clearLocal();
                 localPrivateKey = null;
             }
 
@@ -374,9 +383,24 @@ export function useVaultSecurity() {
         return doTakeover(user.id);
     }, []);
 
-    const purgeVaultData = async () => {
+    /** SIGNED_OUT: wipes this device's vault. One at a time; runSetup waits for it. */
+    const purgeVaultData = () => {
+        if (!purgeInFlightRef.current) {
+            purgeInFlightRef.current = wipeLocalVault().finally(() => { purgeInFlightRef.current = null; });
+        }
+        return purgeInFlightRef.current;
+    };
+
+    const wipeLocalVault = async () => {
         if (__DEV__) console.log('Vault: signed out, purging local security keys');
-        await releaseDevice();
+        // The session is already gone, so RLS would reject releasing the lock
+        // now (signOut() releases it beforehand): just stop watching, and never
+        // let a network call hold up the wipe.
+        ownedUserIdRef.current = null;
+        if (securityChannelRef.current) {
+            supabase.removeChannel(securityChannelRef.current);
+            securityChannelRef.current = null;
+        }
         await SecureStore.deleteItemAsync('nymly_vault_seed');
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
         await SecureStore.deleteItemAsync(OWNER_ID_STORE);
