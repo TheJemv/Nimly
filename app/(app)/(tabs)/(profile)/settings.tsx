@@ -28,7 +28,7 @@ export default function SettingsScreen() {
     const router = useRouter();
 
     // 👇 2. Get the session and global profile directly from the cache
-    const { session } = useAuth();
+    const { session, signOut } = useAuth();
     const { profile, refreshProfile } = useProfile();
 
     const [bio, setBio] = useState("");
@@ -145,7 +145,7 @@ export default function SettingsScreen() {
                 {
                     text: "Sign Out",
                     style: "destructive",
-                    onPress: () => supabase.auth.signOut()
+                    onPress: () => signOut()
                 }
             ]
         );

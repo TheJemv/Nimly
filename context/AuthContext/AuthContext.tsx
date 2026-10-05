@@ -22,8 +22,12 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
 interface AuthContextValue {
     session: Session | null;
     isLoading: boolean;
+    /** Signs out of THIS device only (releases the device lock and push token first). */
+    signOut: () => Promise<void>;
     vault: {
         state: VaultState;
+        /** Checks the device against the server again (the 'setup_failed' screen). */
+        retrySetup: () => Promise<void>;
         /** Legitimate migration: creates a new identity on this device. */
         confirmNewIdentity: () => Promise<void>;
         /** Creates the 6-digit PIN (the 'needs_passcode' screen). */
@@ -42,8 +46,10 @@ const notReady: PasscodeResult = { ok: false, message: 'not ready' };
 export const AuthContext = createContext<AuthContextValue>({
     session: null,
     isLoading: true,
+    signOut: async () => { },
     vault: {
         state: 'loading',
+        retrySetup: async () => { },
         confirmNewIdentity: async () => { },
         createPasscode: async () => notReady,
         unlockWithPasscode: async () => notReady,
@@ -65,11 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setupVaultIdentity,
         purgeVaultData,
         vaultState,
+        retrySetup,
         confirmNewIdentity,
         createPasscode,
         unlockWithPasscode,
         takeoverWithPasscode,
         forceTakeover,
+        signOut,
     } = useVaultSecurity();
     useProtectedRoute(session, isLoading);
 
@@ -133,8 +141,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             value={{
                 session,
                 isLoading,
+                signOut,
                 vault: {
                     state: vaultState,
+                    retrySetup,
                     confirmNewIdentity,
                     createPasscode,
                     unlockWithPasscode,

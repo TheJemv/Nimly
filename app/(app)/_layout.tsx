@@ -16,16 +16,19 @@ export const unstable_settings = {
 
 
 export default function RootLayout() {
-  const { session } = useAuth();
+  const { session, vault } = useAuth();
+  const userId = session?.user?.id;
+  const ownsAccount = vault.state === 'ready';
 
   // Opens the right screen when tapping a notification (chat / notifications),
   // whether the app is already open or on a cold start.
   useNotificationRouting();
 
   useEffect(() => {
-    // The token only makes sense with an active session.
-    if (session) registerForPushNotificationsAsync();
-  }, [session]);
+    // Only the device that holds the account registers its token: one stuck on
+    // "active on another device" would otherwise steal the real device's pushes.
+    if (userId && ownsAccount) registerForPushNotificationsAsync();
+  }, [userId, ownsAccount]);
 
   // React Native keeps timers frozen in the background: we need to
   // start/stop the Supabase token auto-refresh based on AppState, and

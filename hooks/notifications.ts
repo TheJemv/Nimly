@@ -1,5 +1,6 @@
 // hooks/notifications.ts
 import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -20,6 +21,10 @@ Notifications.setNotificationHandler({
 const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId;
+
+// The token THIS device wrote to the profile, so sign-out can remove exactly
+// that one (and never the token of a device that took over the account).
+const PUSH_TOKEN_STORE = 'nimly_push_token';
 
 /**
  * Requests notification permission, registers the Expo push token, and saves
@@ -63,11 +68,35 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
 
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-        await supabase
+        const { error } = await supabase
             .from('profiles')
             .update({ expo_push_token: token })
             .eq('id', user.id);
+        if (!error) {
+            try { await AsyncStorage.setItem(PUSH_TOKEN_STORE, token); } catch { /* not critical */ }
+        }
     }
 
     return token;
+}
+
+/**
+ * Removes this device's push token from the profile so it stops receiving the
+ * account's pushes. Must run BEFORE signing out: without a session, RLS rejects
+ * the update. Only clears it if the profile still points at THIS device.
+ */
+export async function unregisterPushTokenAsync(userId: string): Promise<void> {
+    try {
+        const token = await AsyncStorage.getItem(PUSH_TOKEN_STORE);
+        if (!token) return;
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({ expo_push_token: null })
+            .eq('id', userId)
+            .eq('expo_push_token', token);
+        if (!error) await AsyncStorage.removeItem(PUSH_TOKEN_STORE);
+    } catch (e) {
+        console.error('unregisterPushToken failed:', e);
+    }
 }

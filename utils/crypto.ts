@@ -44,37 +44,41 @@ const getOwnProfilePublicKey = async (): Promise<{ userId: string; publicKey: st
 /**
  * Uploads `public_key` (+ `public_key_updated_at` if the column exists).
  * If that column isn't in the DB yet, retries with just `public_key`.
+ * Throws unless the profile row was actually updated.
  */
 const publishPublicKey = async (userId: string, publicKey: string): Promise<void> => {
-    const withTs = await supabase
+    let res = await supabase
         .from('profiles')
         .update({ public_key: publicKey, public_key_updated_at: new Date().toISOString() })
-        .eq('id', userId);
-    if (!withTs.error) return;
-
-    const retry = await supabase.from('profiles').update({ public_key: publicKey }).eq('id', userId);
-    if (retry.error) throw retry.error;
-    console.warn("Vault: 'public_key_updated_at' column missing — stored public key only.");
+        .eq('id', userId)
+        .select('id');
+    if (res.error) {
+        res = await supabase.from('profiles').update({ public_key: publicKey }).eq('id', userId).select('id');
+        if (res.error) throw res.error;
+        console.warn("Vault: 'public_key_updated_at' column missing — stored public key only.");
+    }
+    // No error but no row updated (RLS / missing profile): nothing was published.
+    if (!res.data?.length) throw new Error("Public key not published");
 };
 
 export const vaultIdentity = {
     /**
-     * Creates a NEW E2EE identity (Curve25519 key pair). Stores the private key
-     * in the local Keychain and publishes only the public key.
+     * Creates a NEW E2EE identity (Curve25519 key pair) for `userId`. Stores the
+     * private key in the local Keychain and publishes only the public key.
+     *
+     * The key is marked as this user's (OWNER_ID_STORE) only AFTER the public key
+     * is published: if publishing fails, the next setup sees an unfinished
+     * identity and starts over, instead of trusting a key nobody can encrypt to.
      */
-    async generateIdentity(): Promise<string> {
+    async generateIdentity(userId: string): Promise<string> {
         try {
             const keyPair = nacl.box.keyPair();
             const privateKey = encodeBase64(keyPair.secretKey);
             const publicKey = encodeBase64(keyPair.publicKey);
 
             await SecureStore.setItemAsync(PRIVATE_KEY_STORE, privateKey);
-
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                await SecureStore.setItemAsync(OWNER_ID_STORE, user.id);
-                await publishPublicKey(user.id, publicKey);
-            }
+            await publishPublicKey(userId, publicKey);
+            await SecureStore.setItemAsync(OWNER_ID_STORE, userId);
             return publicKey;
         } catch (e: any) {
             console.error("Vault Identity Error:", e?.message || e);
@@ -105,9 +109,12 @@ export const vaultIdentity = {
      * EXPLICIT user choice on a device with no keys: discards the previous
      * encrypted history and creates a new identity.
      */
-    async createFreshIdentity(): Promise<void> {
+    async createFreshIdentity(userId: string): Promise<void> {
         await SecureStore.deleteItemAsync(PRIVATE_KEY_STORE);
-        await vaultIdentity.generateIdentity();
+        await SecureStore.deleteItemAsync(OWNER_ID_STORE);
+        // ECDH secrets derived from the old private key are useless from here on.
+        purgeSharedSecrets();
+        await vaultIdentity.generateIdentity(userId);
         await identityRotation.markRotated();
     },
 };
