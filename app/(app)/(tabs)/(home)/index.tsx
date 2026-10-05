@@ -83,9 +83,12 @@ export default function HomeScreen() {
       }
    }, [session?.user?.id]);
 
+   // Only when the user changes (loadPosts depends on the user id): `session`
+   // is a new object on every hourly token refresh, and reloading with the
+   // full-screen spinner then unmounted the feed and lost the scroll.
    useEffect(() => {
       loadPosts();
-   }, [session, loadPosts]);
+   }, [loadPosts]);
 
    // A post finished uploading or deleting in the background
    // (PostActivityContext): re-sync the feed without waiting for a manual refresh.

@@ -1,8 +1,8 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 
 import { blocksApi } from "@/api/blocks";
-import { toggleLike } from "@/api/posts";
+import { toggleLike, toStoragePath } from "@/api/posts";
 import { reportsApi } from "@/api/reports";
 
 import { AuthContext } from "@/context/AuthContext";
@@ -12,14 +12,6 @@ import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { buildVideoSource } from "@/utils/videoSource";
 import type { VideoSource } from "expo-video";
-
-/** Extracts the path inside the 'media' bucket from a value that may come as a
- *  bare path ("userId/file.jpg") or a full URL (.../media/userId/file.jpg). */
-const toStoragePath = (value: string): string => {
-    const marker = "/media/";
-    const i = value.lastIndexOf(marker);
-    return i >= 0 ? value.slice(i + marker.length) : value;
-};
 
 // The posts `type` column was never saved correctly for video (createPost
 // didn't set it), so it's unreliable — we detect by file extension instead
@@ -137,16 +129,24 @@ export function usePost(post: any, onDelete?: () => void) {
         return () => { active = false; };
     }, [post.media_url, isVideo, post.playback_status, hlsFailed]);
 
+    // The token only matters when the player loads the playlist, so it's read
+    // through a ref instead of being a dependency: a new source makes
+    // useVideoPlayer recreate the player, and the hourly token refresh was
+    // restarting every video on screen. Any other change picks up the latest one.
+    const accessTokenRef = useRef(session?.access_token);
+    accessTokenRef.current = session?.access_token;
+    const hasToken = Boolean(session?.access_token);
+
     const videoSource: VideoSource = useMemo(
         () => buildVideoSource({
             ownerId: post.user_id,
             mediaId: post.id,
             playbackStatus: post.playback_status,
             mp4Url: mediaUrl,
-            accessToken: session?.access_token,
+            accessToken: accessTokenRef.current,
             hlsFailed,
         }),
-        [post.user_id, post.id, post.playback_status, mediaUrl, session?.access_token, hlsFailed],
+        [post.user_id, post.id, post.playback_status, mediaUrl, hasToken, hlsFailed],
     );
 
     const postText = post.content;
@@ -157,9 +157,9 @@ export function usePost(post: any, onDelete?: () => void) {
     //  ==== Actions ====
     const handleDelete = () => {
         // PostActivityContext hides the post right away, deletes it in the
-        // background and shows the "Deleting…" banner. We pass post.media_url so
-        // it deletes the correct file from storage.
-        const performDelete = () => startDelete({ id: post.id, mediaUrl: isMedia ? post.media_url : null });
+        // background and shows the "Deleting…" banner. deletePost looks up the
+        // post's file itself and removes it from storage too.
+        const performDelete = () => startDelete({ id: post.id });
 
         if (Platform.OS === 'ios') {
             ActionSheetIOS.showActionSheetWithOptions(

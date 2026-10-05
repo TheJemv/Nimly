@@ -4,7 +4,7 @@ import { createPost, deletePost } from "@/api/posts";
 
 type UploadMedia = { uri: string; type: "image" | "video" };
 type PendingPost = { userId: string; text: string; media?: UploadMedia };
-type PostToDelete = { id: string; mediaUrl?: string | null };
+type PostToDelete = { id: string };
 
 export type PostActivityStatus = "idle" | "running" | "done" | "error";
 
@@ -102,14 +102,14 @@ export function PostActivityProvider({ children }: { children: React.ReactNode }
         setUploadStatus("idle");
     }, []);
 
-    const startDelete = useCallback(async ({ id, mediaUrl }: PostToDelete) => {
+    const startDelete = useCallback(async ({ id }: PostToDelete) => {
         setDeletedIds((prev) => new Set(prev).add(id));
         if (deletesInFlightRef.current === 0) deleteFailedRef.current = false;
         deletesInFlightRef.current += 1;
         clearTimer(deleteTimerRef);
         setDeleteStatus("running");
         try {
-            await deletePost(id, mediaUrl);
+            await deletePost(id);
         } catch (e) {
             if (__DEV__) console.warn("Post delete failed:", e);
             deleteFailedRef.current = true;

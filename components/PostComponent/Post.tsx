@@ -13,7 +13,7 @@ import Animated, {
 
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
 
@@ -54,6 +54,7 @@ interface Props {
 
 export default function PostComponent({ post, onDelete, onCommentPress, isActive = true, muted: mutedProp, onToggleMute: onToggleMuteProp }: Props) {
     const router = useRouter();
+    const pathname = usePathname();
     const {
         //  Likes
         handleLike,
@@ -206,7 +207,8 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                     onPress={() => {
                         if (isOwner) {
                             router.push("/(app)/(tabs)/(profile)");
-                        } else {
+                        } else if (pathname !== `/user/${post.user_id}`) {
+                            // Already on this author's profile: don't stack it again.
                             router.push(`/(app)/user/${post.user_id}`);
                         }
                     }}
