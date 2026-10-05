@@ -1,5 +1,5 @@
 // app/_layout.tsx
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-get-random-values';
 
@@ -21,7 +21,7 @@ import { useIncomingMessageCache } from '@/hooks/useIncomingMessageCache';
 import { useStartupUpdate } from '@/hooks/useStartupUpdate';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { StatusBar, StyleSheet, View } from 'react-native';
+import { AppState, StatusBar, StyleSheet, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { scrubBreadcrumb, scrubSentryEvent } from '@/utils/sentryScrub';
 
@@ -68,6 +68,11 @@ const HOME_OVERLAY_WATCHDOG_MS = 8000;
 
 // How often we check that the server is still up AFTER startup.
 const HEALTH_POLL_MS = 20000;
+
+// A single failed ping isn't an outage (a cell handoff, or the sockets iOS
+// tears down while we're in the background): wait this long and ping again
+// before showing the "Connection Lost" screen.
+const HEALTH_CONFIRM_DELAY_MS = 2500;
 
 /**
  * Is the server responding? Hits the REST endpoint directly (with the apikey)
@@ -143,13 +148,35 @@ function RootLayoutNav() {
         }
     }, [isLoading]);
 
+    // Bumped every time the app goes to the background. iOS freezes in-flight
+    // requests and timers there, and on return the 4s health timeout fires
+    // instantly — a false "offline" that says nothing about the server. Any
+    // check that straddled a trip to the background is thrown away.
+    const backgroundEpoch = useRef(0);
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'background') backgroundEpoch.current += 1;
+        });
+        return () => sub.remove();
+    }, []);
+
     // The check above only runs on startup. If the server goes down WHILE
     // the app is open, without this the app would look "business as usual"
     // but with everything empty/dark (every fetch fails silently). We check
     // every 20s and when returning from the background; if it comes back,
     // it recovers on its own.
     const revalidateConnection = useCallback(async () => {
-        setIsOffline(!(await isServerReachable()));
+        if (AppState.currentState !== 'active') return;
+        const epoch = backgroundEpoch.current;
+
+        let reachable = await isServerReachable();
+        if (!reachable) {
+            await new Promise((r) => setTimeout(r, HEALTH_CONFIRM_DELAY_MS));
+            reachable = await isServerReachable();
+        }
+
+        if (epoch !== backgroundEpoch.current) return;
+        setIsOffline(!reachable);
     }, []);
 
     useEffect(() => {
@@ -167,11 +194,21 @@ function RootLayoutNav() {
         }
     }, [ready]);
 
+    // Once the app has been shown, losing the connection must NOT unmount the
+    // navigator: remounting it restarts navigation at (auth) → the welcome
+    // screen flashes → redirect to a freshly reloaded Home, and the user loses
+    // whatever screen they were on. After startup the error screen is drawn
+    // on top instead, and the app underneath stays exactly as it was.
+    const [appShown, setAppShown] = useState(false);
+    useEffect(() => {
+        if (ready && !isOffline) setAppShown(true);
+    }, [ready, isOffline]);
+
     if (!ready) {
         return startupStalled ? <AppRecoveryView reason="timeout" /> : null;
     }
 
-    if (isOffline) {
+    if (isOffline && !appShown) {
         return <ConnectionErrorView onRetrySuccess={() => setIsOffline(false)} />;
     }
 
@@ -200,6 +237,12 @@ function RootLayoutNav() {
                 */}
                 {showHomeOverlay && <HomeLoadingOverlay />}
             </BottomSheetModalProvider>
+
+            {isOffline && (
+                <View style={StyleSheet.absoluteFill}>
+                    <ConnectionErrorView onRetrySuccess={() => setIsOffline(false)} />
+                </View>
+            )}
         </GestureHandlerRootView>
     );
 }
