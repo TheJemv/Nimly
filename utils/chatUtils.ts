@@ -1,3 +1,5 @@
+import type { KlipyGif } from '@/api/klipy/gifs';
+
 /**
  * Cleans up a message's text before it is sent.
  * - Trims whitespace and line breaks from the start and end.
@@ -24,4 +26,27 @@ export const isValidMessage = (text: string): boolean => {
 
   // If it's empty after trimming whitespace, it's not valid
   return text.trim().length > 0;
+};
+// GIF messages only ever render from KLIPY's CDN: a GIF row is plain text in
+// the DB, so anything else in it would make the recipient's app fetch an
+// arbitrary URL (and leak their IP to whoever controls it).
+const GIF_HOST = 'https://static.klipy.com/';
+
+/**
+ * The `content` of a GIF message: the GIF's URL, with its pixel size after `#`
+ * so the bubble can be laid out at the right size before the GIF loads.
+ */
+export const buildGifContent = (gif: KlipyGif): string | null => {
+  const media = gif.media_formats.mediumgif ?? gif.media_formats.gif ?? gif.media_formats.tinygif;
+  if (!media?.url.startsWith(GIF_HOST)) return null;
+  const [w, h] = media.dims;
+  return `${media.url}#w=${w}&h=${h}`;
+};
+
+/** Reverses `buildGifContent`. Null when the content isn't a KLIPY GIF URL. */
+export const parseGifContent = (content: string | null | undefined): { url: string; width?: number; height?: number } | null => {
+  if (!content?.startsWith(GIF_HOST)) return null;
+  const [url, fragment = ''] = content.split('#');
+  const size = /^w=(\d+)&h=(\d+)$/.exec(fragment);
+  return size ? { url, width: Number(size[1]), height: Number(size[2]) } : { url };
 };

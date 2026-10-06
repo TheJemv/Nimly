@@ -3,6 +3,7 @@ import {
    ActivityIndicator,
    Alert,
    FlatList,
+   Keyboard,
    KeyboardAvoidingView,
    Platform,
    Text,
@@ -22,6 +23,8 @@ import Animated, {
 
 // Expo
 import { Button, Host, Menu, Image as SwiftImage } from "@expo/ui/swift-ui";
+import { contentShape, frame, glassEffect, menuIndicator, shapes } from "@expo/ui/swift-ui/modifiers";
+import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { GlassView } from "expo-glass-effect";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -30,6 +33,8 @@ import { SymbolView } from "expo-symbols";
 import { getThemeColor } from "@/constants/theme";
 
 // Components
+import { GifMessageBubble } from "@/components/GifMessageBubble";
+import GifPicker from "@/components/GifPicker";
 import MediaMessageBubble from "@/components/MediaMessageBubble";
 import { MessageContent } from "@/components/MessageContent";
 import NymlyCamera from "@/components/NymlyCamera";
@@ -37,8 +42,11 @@ import { ReplyPreview, replyMediaKind } from "@/components/ReplyPreview";
 import { ReplyStory } from "@/components/ReplyStory";
 import UserAvatar from "@/components/UserAvatar";
 
+// Hooks
+import { useChatNotifications } from "@/hooks/useChatNotifications";
+
 // Utils
-import { cleanChatMessage } from "@/utils/chatUtils";
+import { buildGifContent, cleanChatMessage } from "@/utils/chatUtils";
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
 import { prefetchChatMedia } from "@/utils/mediaPrefetch";
 import { ChatSystemNotice } from "./components/ChatSystemNotice";
@@ -47,6 +55,7 @@ import { cornerRadius, decorateMessages, formatBubbleTime, type DecoratedMessage
 
 // More
 import { chatApi } from "@/api/chat";
+import type { KlipyGif } from "@/api/klipy/gifs";
 import { styles } from "./chat.styles";
 import { useChatMedia, useChatSync } from "./hooks";
 
@@ -97,12 +106,31 @@ export default function ChatScreen() {
       messageCutoff,
       currentUserId,
       loadMoreMessages,
-      sendText
+      sendText,
+      sendGif
    } = useChatSync(targetFriendId, routeUser?.public_key);
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
 
+   // Clears this chat's iPhone notifications while it's open.
+   useChatNotifications(chatId);
+
    const listRef = useRef<FlatList<any> | null>(null);
+   const gifSheetRef = useRef<BottomSheetModal>(null);
+
+   const openCamera = useCallback(() => setCameraVisible(true), []);
+   const openGifPicker = useCallback(() => {
+      Keyboard.dismiss();
+      gifSheetRef.current?.present();
+   }, []);
+
+   const openAttachMenuAndroid = useCallback(() => {
+      Alert.alert("Send", undefined, [
+         { text: "GIF", onPress: openGifPicker },
+         { text: "Camera", onPress: openCamera },
+         { text: "Cancel", style: "cancel" },
+      ]);
+   }, [openGifPicker, openCamera]);
 
    // Swipe left to reveal the time of each message. Only your own bubble
    // shifts (toward the center, never clipped); on received messages the
@@ -299,12 +327,26 @@ export default function ChatScreen() {
       }
    };
 
+   // Tapping a GIF in the picker sends it right away (as a reply, if one is set).
+   const handleSendGif = useCallback((gif: KlipyGif) => {
+      const content = buildGifContent(gif);
+      if (!content) return;
+      const reply = replyingTo;
+      setReplyingTo(null);
+      scrollToBottom();
+      sendGif(content, reply);
+   }, [replyingTo, scrollToBottom, sendGif]);
+
    const retrySend = useCallback((item: any) => {
+      // Reuse the same client_id so the unique index keeps the retry idempotent.
+      if (item.type === 'gif') {
+         sendGif(item.content, item.reply_to ?? null, item.id);
+         return;
+      }
       const pubKey = friendProfile?.public_key || routeUser?.public_key;
       if (!pubKey) return;
-      // Reuse the same client_id so the unique index keeps the retry idempotent.
       sendText(item.__plain ?? "", pubKey, item.reply_to ?? null, item.id);
-   }, [friendProfile, routeUser, sendText]);
+   }, [friendProfile, routeUser, sendText, sendGif]);
 
    const renderItem = useCallback(({ item }: { item: any }) => {
       if (item.__system) {
@@ -318,6 +360,7 @@ export default function ChatScreen() {
       // View-once capsule already opened: the sender marks content='OPENED_CAPSULE'
       const isOpenedCapsule = item.content === 'OPENED_CAPSULE';
       const isText = !isOpenedCapsule && (item.type === 'text' || !item.type);
+      const isGif = !isOpenedCapsule && item.type === 'gif';
       const isViewOnceSender = item.type === 'image-view-once' && mine;
 
       const replyData = Array.isArray(item.reply_to) ? item.reply_to[0] : item.reply_to;
@@ -371,6 +414,7 @@ export default function ChatScreen() {
                            isMedia ? styles.bubbleImage : styles.bubble,
                            mine ? styles.myBubble : styles.theirBubble,
                            corners,
+                           isGif && styles.bubbleGif,
                            pending && styles.bubblePending,
                         ]}
                      >
@@ -389,6 +433,8 @@ export default function ChatScreen() {
                                  onLocked={() => markLocked(item.id)}
                               />
                            )
+                        ) : isGif ? (
+                           <GifMessageBubble content={item.content} />
                         ) : (
                            <MediaMessageBubble
                               filePath={item.content}
@@ -583,11 +629,30 @@ export default function ChatScreen() {
          )}
 
          <View style={styles.inputBar}>
-            <TouchableOpacity style={styles.plusHost} onPress={() => setCameraVisible(true)}>
-               <GlassView style={styles.plusButton}>
-                  <SymbolView name="camera" size={22} tintColor={getThemeColor("tint")} />
-               </GlassView>
-            </TouchableOpacity>
+            {Platform.OS === 'ios' ? (
+               <Host style={styles.plusHost}>
+                  {/* Native menu: on iOS 26 it opens as Liquid Glass from the button.
+                      Opening upward, iOS puts the first item closest to the finger. */}
+                  <Menu
+                     label={<SwiftImage systemName="plus" size={20} color={getThemeColor("tint")} />}
+                     modifiers={[
+                        menuIndicator('hidden'),
+                        frame({ width: 44, height: 44 }),
+                        contentShape(shapes.circle()),
+                        glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'circle' }),
+                     ]}
+                  >
+                     <Button systemImage="camera" label="Camera" onPress={openCamera} />
+                     <Button systemImage="sparkles.rectangle.stack" label="GIF" onPress={openGifPicker} />
+                  </Menu>
+               </Host>
+            ) : (
+               <TouchableOpacity style={styles.plusHost} onPress={openAttachMenuAndroid}>
+                  <GlassView style={styles.plusButton}>
+                     <SymbolView name="plus" size={22} tintColor={getThemeColor("tint")} />
+                  </GlassView>
+               </TouchableOpacity>
+            )}
 
             <TextInput
                style={styles.input}
@@ -626,6 +691,8 @@ export default function ChatScreen() {
                }
             }}
          />
+
+         <GifPicker ref={gifSheetRef} onSelect={handleSendGif} />
       </KeyboardAvoidingView>
    );
 }
