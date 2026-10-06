@@ -531,16 +531,89 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         }
     };
 
+    /** Bubble shown right away (gray, "sending") until the real row replaces it. */
+    const pendingMessage = useCallback(
+        (clientId: string, type: "text" | "gif", content: string, replyTo: any | null) => ({
+            id: clientId,
+            client_id: clientId,
+            chat_id: chatId,
+            sender_id: currentUserId,
+            content,
+            type,
+            is_read: false,
+            created_at: new Date().toISOString(),
+            reply_to_id: replyTo?.id ?? null,
+            reply_to: replyTo
+                ? { id: replyTo.id, content: replyTo.content, sender_id: replyTo.sender_id, type: replyTo.type ?? null }
+                : null,
+            reply_to_story: null,
+            __status: "sending" as const,
+        }),
+        [chatId, currentUserId]
+    );
+
+    /** New message -> prepended; retry -> goes back to "sending" in place. */
+    const showPending = useCallback((optimistic: { id: string } & Record<string, unknown>) => {
+        setMessages((prev) =>
+            prev.some((m) => m.id === optimistic.id)
+                ? prev.map((m) => (m.id === optimistic.id ? { ...m, __status: "sending" as const } : m))
+                : [optimistic, ...prev]
+        );
+    }, []);
+
+    const markFailed = useCallback((clientId: string) => {
+        setMessages((prev) =>
+            prev.map((m) => (m.id === clientId ? { ...m, __status: "failed" as const } : m))
+        );
+    }, []);
+
     /**
-     * Optimistic text send: renders the bubble instantly (in gray, "sending"
-     * state), encrypts + saves it to the backend, then reconciles the temporary
-     * copy with the real row (via realtime or the insert response, whichever
-     * arrives first). If something fails, the bubble stays marked as "failed".
+     * Saves a message row and swaps the pending bubble for the real row (via
+     * realtime or the insert response, whichever arrives first). Throws if it
+     * couldn't be saved.
      *
      * The temp <-> real row correlation is done via `client_id` (a uuid generated
      * on the client, with a unique index on the table). Retrying reuses the same
      * client_id, so the unique index makes the send idempotent: if a previous
      * attempt did go through, the upsert won't duplicate it and we just fetch that row.
+     */
+    const saveMessage = useCallback(async (row: { client_id: string } & Record<string, unknown>) => {
+        const clientId = row.client_id;
+
+        let { data, error } = await supabase
+            .from("messages")
+            .upsert(row, { onConflict: "client_id", ignoreDuplicates: true })
+            .select(REPLY_SELECT)
+            .maybeSingle();
+
+        // No row returned => it already existed (a previous attempt got through): fetch it.
+        if (!error && !data) {
+            ({ data, error } = await supabase
+                .from("messages")
+                .select(REPLY_SELECT)
+                .eq("client_id", clientId)
+                .maybeSingle());
+        }
+
+        if (error) throw error;
+        if (!data) throw new Error("Insert returned no row");
+
+        const real = data;
+        // Realtime may have already done the swap; avoid duplicates.
+        setMessages((prev) => {
+            const hasTemp = prev.some((m) => m.id === clientId);
+            if (prev.some((m) => m.id === real.id)) {
+                return hasTemp ? prev.filter((m) => m.id !== clientId) : prev;
+            }
+            return hasTemp
+                ? prev.map((m) => (m.id === clientId ? real : m))
+                : [real, ...prev];
+        });
+    }, []);
+
+    /**
+     * Optimistic text send: renders the bubble instantly, encrypts + saves it.
+     * If something fails, the bubble stays marked as "failed".
      */
     const sendText = useCallback(
         async (
@@ -554,32 +627,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
             if (!friendPublicKey) return { ok: false, reason: "no-key" };
 
             const clientId = existingClientId ?? randomUUID();
-            const replyToId = replyTo?.id ?? null;
-
-            const optimistic = {
-                id: clientId,
-                client_id: clientId,
-                chat_id: chatId,
-                sender_id: currentUserId,
-                content: text,
-                type: "text",
-                is_read: false,
-                created_at: new Date().toISOString(),
-                reply_to_id: replyToId,
-                reply_to: replyTo
-                    ? { id: replyTo.id, content: replyTo.content, sender_id: replyTo.sender_id, type: replyTo.type ?? null }
-                    : null,
-                reply_to_story: null,
-                __status: "sending" as const,
-                __plain: text,
-            };
-
-            // New message -> prepended; retry -> goes back to "sending" in place.
-            setMessages((prev) =>
-                prev.some((m) => m.id === clientId)
-                    ? prev.map((m) => (m.id === clientId ? { ...m, __status: "sending" as const } : m))
-                    : [optimistic, ...prev]
-            );
+            showPending({ ...pendingMessage(clientId, "text", text, replyTo), __plain: text });
 
             try {
                 const encryptedContent = await vaultCrypto.encryptMessage(text, friendPublicKey);
@@ -587,58 +635,56 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
 
                 vaultRAMCache[encryptedContent] = text;
 
-                let { data, error } = await supabase
-                    .from("messages")
-                    .upsert(
-                        {
-                            chat_id: chatId,
-                            sender_id: currentUserId,
-                            content: encryptedContent,
-                            type: "text",
-                            is_read: false,
-                            reply_to_id: replyToId,
-                            client_id: clientId,
-                        },
-                        { onConflict: "client_id", ignoreDuplicates: true }
-                    )
-                    .select(REPLY_SELECT)
-                    .maybeSingle();
-
-                // No row returned => it already existed (a previous attempt got through): fetch it.
-                if (!error && !data) {
-                    ({ data, error } = await supabase
-                        .from("messages")
-                        .select(REPLY_SELECT)
-                        .eq("client_id", clientId)
-                        .maybeSingle());
-                }
-
-                if (error) throw error;
-                if (!data) throw new Error("Insert returned no row");
-
-                const real = data;
-                // Realtime may have already done the swap; avoid duplicates.
-                setMessages((prev) => {
-                    const hasTemp = prev.some((m) => m.id === clientId);
-                    if (prev.some((m) => m.id === real.id)) {
-                        return hasTemp ? prev.filter((m) => m.id !== clientId) : prev;
-                    }
-                    return hasTemp
-                        ? prev.map((m) => (m.id === clientId ? real : m))
-                        : [real, ...prev];
+                await saveMessage({
+                    chat_id: chatId,
+                    sender_id: currentUserId,
+                    content: encryptedContent,
+                    type: "text",
+                    is_read: false,
+                    reply_to_id: replyTo?.id ?? null,
+                    client_id: clientId,
                 });
-
                 return { ok: true };
             } catch (e) {
                 console.error("❌ [SEND] Vault Send Error:", e);
                 Sentry.captureException(e, { tags: { area: 'chat-send' } });
-                setMessages((prev) =>
-                    prev.map((m) => (m.id === clientId ? { ...m, __status: "failed" as const } : m))
-                );
+                markFailed(clientId);
                 return { ok: false, reason: "send-failed" };
             }
         },
-        [chatId, currentUserId]
+        [chatId, currentUserId, pendingMessage, showPending, saveMessage, markFailed]
+    );
+
+    /**
+     * Optimistic GIF send. `content` comes from `buildGifContent`: a public
+     * KLIPY URL, stored as-is (no encryption, so no contact key needed).
+     */
+    const sendGif = useCallback(
+        async (content: string, replyTo: any | null, existingClientId?: string): Promise<SendResult> => {
+            if (!content || !chatId || !currentUserId) return { ok: false, reason: "invalid" };
+
+            const clientId = existingClientId ?? randomUUID();
+            showPending(pendingMessage(clientId, "gif", content, replyTo));
+
+            try {
+                await saveMessage({
+                    chat_id: chatId,
+                    sender_id: currentUserId,
+                    content,
+                    type: "gif",
+                    is_read: false,
+                    reply_to_id: replyTo?.id ?? null,
+                    client_id: clientId,
+                });
+                return { ok: true };
+            } catch (e) {
+                console.error("❌ [SEND] GIF Send Error:", e);
+                Sentry.captureException(e, { tags: { area: 'chat-send-gif' } });
+                markFailed(clientId);
+                return { ok: false, reason: "send-failed" };
+            }
+        },
+        [chatId, currentUserId, pendingMessage, showPending, saveMessage, markFailed]
     );
 
     return {
@@ -654,6 +700,7 @@ export function useChatSync(targetFriendId: string | undefined, routeUserPublicK
         currentUserId,
         loadMoreMessages,
         markMessagesAsRead,
-        sendText
+        sendText,
+        sendGif
     };
 }

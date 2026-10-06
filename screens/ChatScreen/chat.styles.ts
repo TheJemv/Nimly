@@ -33,6 +33,7 @@ export const styles = StyleSheet.create({
    myBubble: { alignSelf: 'flex-end', backgroundColor: tint },
    theirBubble: { alignSelf: 'flex-start', backgroundColor: surface },
    bubblePending: { opacity: 0.5 },
+   bubbleGif: { backgroundColor: 'transparent' },
    plainBubbleText: { color: '#fff', fontSize: 16 },
    sendStatusText: { color: textSecondary, fontSize: 11, marginTop: 3, marginHorizontal: 2 },
    sendStatusFailed: { color: tint },

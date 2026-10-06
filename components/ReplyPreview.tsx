@@ -29,6 +29,7 @@ interface ReplyPreviewProps {
 export const replyMediaKind = (content?: string | null, type?: string | null): { icon: string; label: string } | null => {
    const t = (type || "").toLowerCase();
    if (content === "OPENED_CAPSULE") return { icon: "photo.fill", label: "Photo" };
+   if (t === "gif") return { icon: "sparkles.rectangle.stack.fill", label: "GIF" };
    if (t.includes("video") || /\.mp4/i.test(content || "")) return { icon: "video.fill", label: "Video" };
    if (t.includes("once")) return { icon: "photo.fill", label: "One-time photo" };
    if (t.includes("image")) return { icon: "photo.fill", label: "Photo" };

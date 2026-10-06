@@ -32,10 +32,12 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, isSto
     const normType = (type || "").toLowerCase().replace(/[_\s]/g, "-");
     const isViewOnce = normType.includes("once");
     const isVideo = normType.includes("video") || /\.mp4/i.test(content || "");
-    const media = !isStoryReply && !isOpenedCapsule && isMediaMessage(content, type);
+    // GIFs are a plain (unencrypted) KLIPY URL, nothing to decrypt.
+    const isGif = normType === "gif";
+    const media = !isStoryReply && !isOpenedCapsule && !isGif && isMediaMessage(content, type);
 
     // Hook must run unconditionally; skip work when we already know it's media.
-    const { text, status } = useDecryptedMessage(media || isOpenedCapsule || isStoryReply ? "" : content, friendPublicKey);
+    const { text, status } = useDecryptedMessage(media || isGif || isOpenedCapsule || isStoryReply ? "" : content, friendPublicKey);
 
     const messageStyle = hasUnread ? styles.lastMessageUnread : isMine ? styles.lastMessageMine : styles.lastMessageRead;
     const prefix = isMine ? "You: " : "";
@@ -54,6 +56,7 @@ const LastMessageContent = memo(({ content, friendPublicKey, isMine, type, isSto
 
     let body: string;
     if (isOpenedCapsule) body = "👁 Opened";
+    else if (isGif) body = "GIF";
     else if (media) body = isVideo ? "🎥 Video" : isViewOnce ? "📷 One-time photo" : "📷 Photo";
     else if (status === "pending") body = "…";
     else if (status === "failed") body = "🔒 Encrypted message";
