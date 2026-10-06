@@ -42,6 +42,9 @@ import { ReplyPreview, replyMediaKind } from "@/components/ReplyPreview";
 import { ReplyStory } from "@/components/ReplyStory";
 import UserAvatar from "@/components/UserAvatar";
 
+// Hooks
+import { useChatNotifications } from "@/hooks/useChatNotifications";
+
 // Utils
 import { buildGifContent, cleanChatMessage } from "@/utils/chatUtils";
 import { vaultCrypto, vaultRAMCache } from "@/utils/crypto";
@@ -108,6 +111,9 @@ export default function ChatScreen() {
    } = useChatSync(targetFriendId, routeUser?.public_key);
 
    const { sendCapturedImage, isUploading } = useChatMedia(chatId || '', currentUserId || '');
+
+   // Clears this chat's iPhone notifications while it's open.
+   useChatNotifications(chatId);
 
    const listRef = useRef<FlatList<any> | null>(null);
    const gifSheetRef = useRef<BottomSheetModal>(null);

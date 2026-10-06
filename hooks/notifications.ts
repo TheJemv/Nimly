@@ -5,17 +5,55 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+// The chat on screen right now (see useChatNotifications). Its pushes are
+// redundant while the user is reading it.
+let activeChatId: string | null = null;
+export const setActiveChat = (chatId: string | null) => { activeChatId = chatId; };
+export const isActiveChat = (chatId: string) => activeChatId === chatId;
+
+type PushData = { type?: string; table?: string; chat_id?: string; chatId?: string; senderId?: string };
+const pushData = (n: Notifications.Notification) => (n.request.content.data ?? {}) as PushData;
+
+/** `chat_id` comes from the handler_new_message trigger, `chatId` from send-push. */
+const pushChatId = (n: Notifications.Notification) => pushData(n).chat_id ?? pushData(n).chatId ?? null;
+
+const isMessagePush = (n: Notifications.Notification) => {
+    const data = pushData(n);
+    return data.type === 'message' || data.table === 'messages' || !!data.senderId;
+};
+
+async function dismissPresented(match: (n: Notifications.Notification) => boolean) {
+    try {
+        const presented = await Notifications.getPresentedNotificationsAsync();
+        await Promise.all(
+            presented.filter(match).map((n) => Notifications.dismissNotificationAsync(n.request.identifier))
+        );
+    } catch (e) {
+        console.warn('[notifications] dismiss failed', e);
+    }
+}
+
+/** Removes a chat's message pushes from Notification Center. */
+export const dismissChatNotifications = (chatId: string) => dismissPresented((n) => pushChatId(n) === chatId);
+
+/** Removes activity pushes (requests, likes…) once they've been seen in the app. */
+export const dismissActivityNotifications = () => dismissPresented((n) => !isMessagePush(n));
+
 // Without a handler, expo-notifications does NOT show the notification when the
 // app is in the foreground: the user would receive the message "silently" and
 // it looked like notifications weren't working. This makes the banner show
-// just like it does in the background.
+// just like it does in the background — except for the chat being read, where
+// the message already shows up on screen.
 Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+        const show = !(activeChatId && pushChatId(notification) === activeChatId);
+        return {
+            shouldShowBanner: show,
+            shouldShowList: show,
+            shouldPlaySound: show,
+            shouldSetBadge: false,
+        };
+    },
 });
 
 const projectId =

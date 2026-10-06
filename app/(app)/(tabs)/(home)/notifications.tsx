@@ -9,6 +9,7 @@ import NotificationItem, {
 } from '@/components/NotificationItem';
 import { getThemeColor } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { dismissActivityNotifications } from '@/hooks/notifications';
 import { useFreshPostIds } from '@/hooks/usePostListAnimation';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
@@ -78,6 +79,8 @@ export default function NotificationsScreen() {
             .eq('is_read', false);
 
         if (error) console.error("Error marking all as read:", error);
+        // Seen here, so they don't need to sit in the iPhone's Notification Center either.
+        dismissActivityNotifications();
     }, [userId]);
 
     const fetchPendingRequests = useCallback(async () => {
