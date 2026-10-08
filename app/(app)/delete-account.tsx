@@ -1,3 +1,4 @@
+import { faceApi, isFaceConfigured } from "@/api/face";
 import { ThemedText } from "@/components/themed-text";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +25,10 @@ export default function DeleteAccountScreen() {
     const handlePurge = async () => {
         try {
             setLoading(true);
+            // Face first, while the session still exists: if it fails we stop here
+            // rather than leave biometric data behind for an account that's gone.
+            if (isFaceConfigured) await faceApi.remove();
+
             const { error } = await supabase.rpc('delete_user_account');
             if (error) throw error;
 
@@ -56,6 +61,9 @@ export default function DeleteAccountScreen() {
                         <ThemedText style={styles.listItem}>• Your profile and username.</ThemedText>
                         <ThemedText style={styles.listItem}>• All connections, friend requests, and history.</ThemedText>
                         <ThemedText style={styles.listItem}>• Your posts and stories.</ThemedText>
+                        {isFaceConfigured && (
+                            <ThemedText style={styles.listItem}>• Your face data (Nimly Face).</ThemedText>
+                        )}
                     </View>
 
                     <ThemedText style={styles.finalWarning}>

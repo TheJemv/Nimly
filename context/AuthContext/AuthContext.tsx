@@ -1,164 +1,166 @@
+import { createContext, useContext, useEffect, useState } from "react";
 
-import { createContext, useContext, useEffect, useState } from 'react';
-
-import { supabase } from '@/lib/supabase';
-import * as Sentry from '@sentry/react-native';
-import { Session } from '@supabase/supabase-js';
+import { supabase } from "@/lib/supabase";
+import * as Sentry from "@sentry/react-native";
+import { Session } from "@supabase/supabase-js";
 
 // Custom Hooks
-import { useProtectedRoute, useVaultSecurity } from './hooks';
-import type { PasscodeResult, VaultState } from './hooks/useVaultSecurity';
+import { useProtectedRoute, useVaultSecurity } from "./hooks";
+import type { PasscodeResult, VaultState } from "./hooks/useVaultSecurity";
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
-    if (__DEV__) return promise;
-    return Promise.race([
-        promise,
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error('Auth operation timed out')), ms)
-        ),
-    ]);
+  if (__DEV__) return promise;
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Auth operation timed out")), ms),
+    ),
+  ]);
 };
 
 interface AuthContextValue {
-    session: Session | null;
-    isLoading: boolean;
-    /** Signs out of THIS device only (releases the device lock and push token first). */
-    signOut: () => Promise<void>;
-    vault: {
-        state: VaultState;
-        /** Checks the device against the server again (the 'setup_failed' screen). */
-        retrySetup: () => Promise<void>;
-        /** Legitimate migration: creates a new identity on this device. */
-        confirmNewIdentity: () => Promise<void>;
-        /** Creates the 6-digit PIN (the 'needs_passcode' screen). */
-        createPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Unlocks the 12h auto-lock (the 'locked_timeout' screen). */
-        unlockWithPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Account locked on another device → takeover with the PIN. */
-        takeoverWithPasscode: (code: string) => Promise<PasscodeResult>;
-        /** Fallback: takeover with the account password. */
-        forceTakeover: (password: string) => Promise<PasscodeResult>;
-    };
+  session: Session | null;
+  isLoading: boolean;
+  /** Signs out of THIS device only (releases the device lock and push token first). */
+  signOut: () => Promise<void>;
+  vault: {
+    state: VaultState;
+    /** Checks the device against the server again (the 'setup_failed' screen). */
+    retrySetup: () => Promise<void>;
+    /** Legitimate migration: creates a new identity on this device. */
+    confirmNewIdentity: () => Promise<void>;
+    /** Creates the 6-digit PIN (the 'needs_passcode' screen). */
+    createPasscode: (code: string) => Promise<PasscodeResult>;
+    /** Unlocks the 12h auto-lock (the 'locked_timeout' screen). */
+    unlockWithPasscode: (code: string) => Promise<PasscodeResult>;
+    /** Account locked on another device → takeover with the PIN. */
+    takeoverWithPasscode: (code: string) => Promise<PasscodeResult>;
+    /** Fallback: takeover with the account password. */
+    forceTakeover: (password: string) => Promise<PasscodeResult>;
+  };
 }
 
-const notReady: PasscodeResult = { ok: false, message: 'not ready' };
+const notReady: PasscodeResult = { ok: false, message: "not ready" };
 
 export const AuthContext = createContext<AuthContextValue>({
-    session: null,
-    isLoading: true,
-    signOut: async () => { },
-    vault: {
-        state: 'loading',
-        retrySetup: async () => { },
-        confirmNewIdentity: async () => { },
-        createPasscode: async () => notReady,
-        unlockWithPasscode: async () => notReady,
-        takeoverWithPasscode: async () => notReady,
-        forceTakeover: async () => notReady,
-    },
+  session: null,
+  isLoading: true,
+  signOut: async () => {},
+  vault: {
+    state: "loading",
+    retrySetup: async () => {},
+    confirmNewIdentity: async () => {},
+    createPasscode: async () => notReady,
+    unlockWithPasscode: async () => notReady,
+    takeoverWithPasscode: async () => notReady,
+    forceTakeover: async () => notReady,
+  },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [session, setSession] = useState<Session | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-    // Attaches only the id to Sentry events (no PII: no email / IP).
-    useEffect(() => {
-        Sentry.setUser(session?.user?.id ? { id: session.user.id } : null);
-    }, [session?.user?.id]);
+  // Attaches only the id to Sentry events (no PII: no email / IP).
+  useEffect(() => {
+    Sentry.setUser(session?.user?.id ? { id: session.user.id } : null);
+  }, [session?.user?.id]);
 
-    const {
-        setupVaultIdentity,
-        purgeVaultData,
-        vaultState,
-        retrySetup,
-        confirmNewIdentity,
-        createPasscode,
-        unlockWithPasscode,
-        takeoverWithPasscode,
-        forceTakeover,
-        signOut,
-    } = useVaultSecurity();
-    useProtectedRoute(session, isLoading);
+  const {
+    setupVaultIdentity,
+    purgeVaultData,
+    vaultState,
+    retrySetup,
+    confirmNewIdentity,
+    createPasscode,
+    unlockWithPasscode,
+    takeoverWithPasscode,
+    forceTakeover,
+    signOut,
+  } = useVaultSecurity();
+  useProtectedRoute(session, isLoading);
 
-    useEffect(() => {
-        let isMounted = true;
-        let hasChecked = false;
+  useEffect(() => {
+    let isMounted = true;
+    let hasChecked = false;
 
-        const checkSession = async () => {
-            if (hasChecked) return;
-            hasChecked = true;
-            try {
-                const { data: { session: currentSession } } = await withTimeout(
-                    supabase.auth.getSession(),
-                    10000
-                );
+    const checkSession = async () => {
+      if (hasChecked) return;
+      hasChecked = true;
+      try {
+        const {
+          data: { session: currentSession },
+        } = await withTimeout(supabase.auth.getSession(), 10000);
 
-                if (!isMounted) return;
+        if (!isMounted) return;
 
-                setSession(currentSession);
-                setIsLoading(false);
+        setSession(currentSession);
+        setIsLoading(false);
 
-                // The vault decides for itself when to claim the device
-                // (only if the vault ends up usable here, not in 'needs_new_identity').
-                if (currentSession) setupVaultIdentity(currentSession);
-            } catch (e) {
-                console.error("Session check failed:", e);
-                if (isMounted) {
-                    setSession(null);
-                    setIsLoading(false);
-                }
-            }
-        };
+        // The vault decides for itself when to claim the device
+        // (only if the vault ends up usable here, not in 'needs_new_identity').
+        if (currentSession) setupVaultIdentity(currentSession);
+      } catch (e) {
+        console.error("Session check failed:", e);
+        if (isMounted) {
+          setSession(null);
+          setIsLoading(false);
+        }
+      }
+    };
 
-        checkSession();
+    checkSession();
 
-        const { data: authListener } = supabase.auth.onAuthStateChange((event, currentSession) => {
-            if (!isMounted) return;
-            setSession(currentSession);
-            setIsLoading(false);
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        if (!isMounted) return;
+        setSession(currentSession);
+        setIsLoading(false);
 
-            // Supabase runs this callback while it holds its auth lock (signOut
-            // awaits it). A supabase request made from in here waits for that
-            // same lock: it deadlocked every request for the rest of the app's
-            // life — the vault purge never finished and the next sign-up hung
-            // on the splash. The vault work runs once the callback has returned.
-            setTimeout(() => {
-                if (!isMounted) return;
-                if (currentSession) {
-                    setupVaultIdentity(currentSession);
-                } else if (event === 'SIGNED_OUT') {
-                    purgeVaultData().catch((e) => console.error("Vault purge failed:", e));
-                }
-            }, 0);
-        });
-
-        return () => {
-            isMounted = false;
-            authListener.subscription.unsubscribe();
-        };
-    }, []);
-
-    return (
-        <AuthContext.Provider
-            value={{
-                session,
-                isLoading,
-                signOut,
-                vault: {
-                    state: vaultState,
-                    retrySetup,
-                    confirmNewIdentity,
-                    createPasscode,
-                    unlockWithPasscode,
-                    takeoverWithPasscode,
-                    forceTakeover,
-                },
-            }}
-        >
-            {children}
-        </AuthContext.Provider>
+        // Supabase runs this callback while it holds its auth lock (signOut
+        // awaits it). A supabase request made from in here waits for that
+        // same lock: it deadlocked every request for the rest of the app's
+        // life — the vault purge never finished and the next sign-up hung
+        // on the splash. The vault work runs once the callback has returned.
+        setTimeout(() => {
+          if (!isMounted) return;
+          if (currentSession) {
+            setupVaultIdentity(currentSession);
+          } else if (event === "SIGNED_OUT") {
+            purgeVaultData().catch((e) =>
+              console.error("Vault purge failed:", e),
+            );
+          }
+        }, 0);
+      },
     );
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        session,
+        isLoading,
+        signOut,
+        vault: {
+          state: vaultState,
+          retrySetup,
+          confirmNewIdentity,
+          createPasscode,
+          unlockWithPasscode,
+          takeoverWithPasscode,
+          forceTakeover,
+        },
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthContext);

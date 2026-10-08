@@ -1,4 +1,5 @@
 // app/(app)/settings.tsx
+import { faceApi, isFaceConfigured } from "@/api/face";
 import { ThemedText } from "@/components/themed-text";
 import { getThemeColor } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -34,6 +35,7 @@ export default function SettingsScreen() {
     const [bio, setBio] = useState("");
     const [initialBio, setInitialBio] = useState("");
     const [updating, setUpdating] = useState(false);
+    const [deletingFace, setDeletingFace] = useState(false);
 
     // --- Version / OTA info (expo-updates) ---
     const { currentlyRunning, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
@@ -151,6 +153,32 @@ export default function SettingsScreen() {
         );
     }
 
+    // DELETE FACE DATA: removes the face registered in Nimly Face (also fine if there was none).
+    function handleDeleteFace() {
+        Alert.alert(
+            "Delete Face Data",
+            "Nimly Face will no longer recognize you. You can scan your face again anytime from your profile.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        setDeletingFace(true);
+                        try {
+                            await faceApi.remove();
+                            Alert.alert("Face data deleted", "Your face data was removed from Nimly Face.");
+                        } catch (e: any) {
+                            Alert.alert("Could not delete face data", e.message);
+                        } finally {
+                            setDeletingFace(false);
+                        }
+                    }
+                }
+            ]
+        );
+    }
+
     // DELETE ACCOUNT: Redirect to the timer page
     async function goToDeleteAccount() {
         router.push("/(app)/delete-account");
@@ -218,6 +246,19 @@ export default function SettingsScreen() {
                             <ThemedText style={styles.menuText}>Sign out current session</ThemedText>
                             <SymbolView name="chevron.right" size={14} tintColor={textSec} />
                         </TouchableOpacity>
+
+                        {/* DELETE FACE DATA (Nimly Face) */}
+                        {isFaceConfigured && (
+                            <TouchableOpacity style={styles.menuItem} onPress={handleDeleteFace} disabled={deletingFace}>
+                                <View style={[styles.iconBox, { backgroundColor: '#333' }]}>
+                                    {deletingFace
+                                        ? <ActivityIndicator size="small" color="#FFF" />
+                                        : <SymbolView name="faceid" size={18} tintColor="#FFF" />}
+                                </View>
+                                <ThemedText style={styles.menuText}>Delete my face data</ThemedText>
+                                <SymbolView name="chevron.right" size={14} tintColor={textSec} />
+                            </TouchableOpacity>
+                        )}
 
                         {/* DELETE ACCOUNT */}
                         <TouchableOpacity style={styles.menuItem} onPress={goToDeleteAccount}>

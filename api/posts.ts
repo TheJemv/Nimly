@@ -1,3 +1,4 @@
+import { faceApi, isFaceConfigured } from "@/api/face";
 import { supabase } from "@/lib/supabase";
 import { parseGifContent } from "@/utils/chatUtils";
 import { IMAGE_QUALITY, optimizeImageForUpload } from "@/utils/compressImage";
@@ -56,6 +57,8 @@ export const createPost = async (
     media?: PostMedia
 ) => {
     let mediaPath = null;
+    // Photo with its author in it (Nimly Face): shown with a "Verified" badge.
+    let isVerified = false;
     if (!media && !text) return
     if (media?.type === 'gif') {
         // GIFs aren't uploaded: media_url keeps KLIPY's URL as-is. It doesn't
@@ -66,9 +69,19 @@ export const createPost = async (
         try {
             // Video -> 1080p / 5.5 Mbps. Image -> JPEG q0.92 up to 2400px.
             // Never fails: falls back to the original if it can't.
-            const sourceUri = media.type === 'video'
+            let sourceUri = media.type === 'video'
                 ? await compressVideoForUpload(media.uri, VIDEO_QUALITY.feed)
                 : await optimizeImageForUpload(media.uri, IMAGE_QUALITY.post);
+
+            if (media.type === 'image' && isFaceConfigured) {
+                // Checked on the original: the blur below would hide the author's face too.
+                // A failed check only means no badge, never a failed post.
+                isVerified = await faceApi.isUserInPhoto(sourceUri, userId).catch(() => false);
+
+                // Registered Nimly Face users get their faces blurred before the photo is posted.
+                // If the blur fails, the post fails too (retry from the banner): never post it unblurred.
+                sourceUri = await faceApi.blurRegisteredFaces(sourceUri);
+            }
 
             const base64 = await FileSystem.readAsStringAsync(sourceUri, {
                 encoding: FileSystem.EncodingType.Base64,
@@ -99,7 +112,9 @@ export const createPost = async (
         .insert({
             user_id: userId,
             content: text ? text : null,
-            media_url: mediaPath ? mediaPath : null
+            media_url: mediaPath ? mediaPath : null,
+            // The column defaults to false: only sent when there's a badge to show.
+            ...(isVerified ? { is_verified: true } : {}),
         })
         .select()
         .single();

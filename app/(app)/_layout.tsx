@@ -77,6 +77,7 @@ export default function RootLayout() {
         }}
       />
       <Stack.Screen name="chat-info" options={{ headerShown: true, headerTitle: "Chat Info" }} />
+      <Stack.Screen name="face-scan" options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
     </Stack>
     </VaultKeyGate>
   );

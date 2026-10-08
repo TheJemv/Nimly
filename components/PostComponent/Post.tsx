@@ -288,12 +288,27 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
                                 </GestureDetector>
                             </>
                         ) : (
-                            <Image
-                                source={{ uri: mediaUrl ?? undefined }}
-                                style={styles.image}
-                                contentFit="cover"
-                                transition={400}
-                            />
+                            <>
+                                <Image
+                                    source={{ uri: mediaUrl ?? undefined }}
+                                    style={styles.image}
+                                    contentFit="cover"
+                                    transition={400}
+                                />
+                                {/* The author is in their own photo (checked with Nimly Face on upload). */}
+                                {post.is_verified && !gif && (
+                                    <View style={styles.verifiedBadge} pointerEvents="none">
+                                        <BlurView intensity={30} tint="dark" style={styles.muteBlur} />
+                                        <SymbolView
+                                            name="checkmark.circle.fill"
+                                            type="palette"
+                                            colors={["#fff", TINT]}
+                                            size={16}
+                                        />
+                                        <Text style={styles.verifiedText}>Verified</Text>
+                                    </View>
+                                )}
+                            </>
                         )}
                         <Animated.View style={[styles.heartBurst, heartAnimStyle]} pointerEvents="none">
                             <SymbolView name="heart.fill" size={90} tintColor="#fff" />
