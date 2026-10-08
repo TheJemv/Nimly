@@ -9,12 +9,18 @@ import { styles } from './CommentInputFooter.styles';
 interface CommentInputFooterProps extends BottomSheetFooterProps {
     postId: string | null;
     onCommentPosted: (comment: any) => void;
+    /** Opens the GIF picker; a GIF is posted as its own comment, without the text. */
+    onOpenGifPicker: () => void;
+    /** A GIF comment is being posted. */
+    sendingGif: boolean;
     insets: { bottom: number };
 }
 
 export default function CommentInputFooter({
     postId,
     onCommentPosted,
+    onOpenGifPicker,
+    sendingGif,
     insets,
     ...footerProps
 }: CommentInputFooterProps) {
@@ -53,6 +59,17 @@ export default function CommentInputFooter({
         <BottomSheetFooter {...footerProps} bottomInset={0}>
             <View style={[styles.footerWrapper, { paddingBottom: keyboardVisible ? 12 : Math.max(insets.bottom, 12) }]}>
                 <View style={styles.inputArea}>
+                    <TouchableOpacity
+                        style={styles.gifBtn}
+                        onPress={() => {
+                            Keyboard.dismiss();
+                            onOpenGifPicker();
+                        }}
+                        disabled={sendingGif}
+                        accessibilityLabel="Comment with a GIF"
+                    >
+                        <SymbolView name="sparkles.rectangle.stack" size={24} tintColor={getThemeColor("tint")} />
+                    </TouchableOpacity>
                     <BottomSheetTextInput
                         style={styles.input}
                         placeholder="Write a comment..."
@@ -62,7 +79,7 @@ export default function CommentInputFooter({
                         multiline
                     />
                     <TouchableOpacity style={[styles.sendBtn, !text.trim() && { opacity: 0.5 }]} onPress={handleSend} disabled={!text.trim() || isPosting}>
-                        {isPosting ? <ActivityIndicator size="small" color="#FFF" /> :
+                        {isPosting || sendingGif ? <ActivityIndicator size="small" color="#FFF" /> :
                             <SymbolView name="arrow.up.circle.fill" size={32} tintColor={text.trim() ? getThemeColor("tint") : getThemeColor("icon")} />}
                     </TouchableOpacity>
                 </View>

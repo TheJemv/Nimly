@@ -1,5 +1,5 @@
 import { getThemeColor } from '@/constants/theme';
-import { BottomSheetBackdrop, BottomSheetFooterProps, BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetBackdrop, BottomSheetFooterProps, BottomSheetModal, BottomSheetModalProps } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback } from 'react';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,10 +9,12 @@ interface NymlySheetProps {
     snapPoints: string[];
     onChange?: (index: number) => void;
     footerComponent?: React.FC<BottomSheetFooterProps>;
+    /** How it stacks over a sheet that's already open (library default: 'switch'). */
+    stackBehavior?: BottomSheetModalProps['stackBehavior'];
 }
 
 const NymlySheet = forwardRef<BottomSheetModal, NymlySheetProps>(
-    ({ children, snapPoints, onChange, footerComponent }, ref) => {
+    ({ children, snapPoints, onChange, footerComponent, stackBehavior }, ref) => {
         const insets = useSafeAreaInsets();
 
         const renderBackdrop = useCallback(
@@ -36,6 +38,7 @@ const NymlySheet = forwardRef<BottomSheetModal, NymlySheetProps>(
                 onChange={onChange}
                 backdropComponent={renderBackdrop}
                 footerComponent={footerComponent}
+                stackBehavior={stackBehavior}
 
                 // We block automatic sizing to avoid the "mini" state
                 enableDynamicSizing={false}

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { parseGifContent } from "@/utils/chatUtils";
 import { IMAGE_QUALITY, optimizeImageForUpload } from "@/utils/compressImage";
 import { VIDEO_QUALITY, compressVideoForUpload } from "@/utils/compressVideo";
 import { decode } from 'base64-arraybuffer';
@@ -6,6 +7,10 @@ import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 
 export type PostType = "TEXT" | "IMAGE" | "VIDEO";
+
+/** A post's single media. For a GIF, `uri` is the content built by
+ *  `buildGifContent` (KLIPY's URL + its size) and nothing is uploaded. */
+export type PostMedia = { uri: string; type: 'image' | 'video' | 'gif' };
 
 /**
  * Uploads files to the 'media' bucket using the legacy API to ensure the actual file size.
@@ -43,16 +48,21 @@ export const uploadPostMedia = async (uri: string, type: "image" | "video") => {
 };
 
 /**
- * Creates a new post allowing text, media (image/video), or both combined.
+ * Creates a new post allowing text, media (image/video/GIF), or both combined.
  */
 export const createPost = async (
     userId: string,
     text: string,
-    media?: { uri: string; type: 'image' | 'video' }
+    media?: PostMedia
 ) => {
     let mediaPath = null;
     if (!media && !text) return
-    if (media) {
+    if (media?.type === 'gif') {
+        // GIFs aren't uploaded: media_url keeps KLIPY's URL as-is. It doesn't
+        // end in a video extension, so the transcode trigger skips it.
+        if (!parseGifContent(media.uri)) throw new Error("Invalid GIF");
+        mediaPath = media.uri;
+    } else if (media) {
         try {
             // Video -> 1080p / 5.5 Mbps. Image -> JPEG q0.92 up to 2400px.
             // Never fails: falls back to the original if it can't.
@@ -140,9 +150,10 @@ export const deletePost = async (postId: string) => {
 
         // 2. If it had an image/video, delete it from Storage. Best-effort: the
         // post is already gone, a leftover file must not bring it back.
+        // A GIF lives on KLIPY, there's nothing of ours to remove.
         const paths = (deleted ?? [])
             .map((p) => p.media_url)
-            .filter((url): url is string => Boolean(url))
+            .filter((url): url is string => Boolean(url) && !parseGifContent(url))
             .map(toStoragePath);
         if (paths.length > 0) {
             const { data: removed, error: storageError } = await supabase.storage.from('media').remove(paths);

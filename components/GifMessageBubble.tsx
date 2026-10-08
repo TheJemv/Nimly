@@ -9,8 +9,15 @@ const MAX_WIDTH = 240;
 const MAX_HEIGHT = 300;
 const MIN_WIDTH = 120;
 
+interface Props {
+    content: string;
+    /** Box the GIF is fitted into (chat bubble size by default). */
+    maxWidth?: number;
+    maxHeight?: number;
+}
+
 /** A GIF message: the GIF at its own aspect ratio, no bubble behind it. */
-export const GifMessageBubble = memo(({ content }: { content: string }) => {
+export const GifMessageBubble = memo(({ content, maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT }: Props) => {
     const gif = useMemo(() => parseGifContent(content), [content]);
     const [failed, setFailed] = useState(false);
 
@@ -26,10 +33,10 @@ export const GifMessageBubble = memo(({ content }: { content: string }) => {
     // Sized from the dimensions stored with the URL, so the row doesn't jump
     // when the GIF finishes loading. Square if they're missing.
     const ratio = gif.width && gif.height ? gif.width / gif.height : 1;
-    let width = MAX_WIDTH;
+    let width = maxWidth;
     let height = width / ratio;
-    if (height > MAX_HEIGHT) {
-        height = MAX_HEIGHT;
+    if (height > maxHeight) {
+        height = maxHeight;
         width = Math.max(MIN_WIDTH, height * ratio);
     }
 

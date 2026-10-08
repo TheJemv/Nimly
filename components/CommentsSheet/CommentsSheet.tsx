@@ -1,19 +1,27 @@
+import { GifMessageBubble } from "@/components/GifMessageBubble";
+import GifPicker from "@/components/GifPicker";
 import UserAvatar from "@/components/UserAvatar";
 import NymlySheet from '@/components/nymly-sheet';
 import { AuthContext } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { BottomSheetFlatList, BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useRouter } from "expo-router";
-import { forwardRef, useCallback, useContext, useMemo } from 'react';
+import { forwardRef, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { blocksApi } from "@/api/blocks";
+import { createComment } from "@/api/comments";
+import type { KlipyGif } from "@/api/klipy/gifs";
 import { reportsApi } from "@/api/reports";
+import { buildGifContent, parseGifContent } from "@/utils/chatUtils";
 import { promptReportReason } from "@/utils/moderation";
 import { styles } from './CommentsSheet.styles';
 import CommentInputFooter from './components/CommentInputFooter';
 import { useComments } from './hooks';
+
+const GIF_MAX_WIDTH = 180;
+const GIF_MAX_HEIGHT = 220;
 
 interface Props {
     postId: string | null;
@@ -32,9 +40,35 @@ const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId }, ref) => {
         [comments, isBlocked, blockedIds],
     );
 
+    // A GIF comment is just the GIF: its content is the GIF's KLIPY URL (same
+    // format as GIF chat messages), posted as soon as it's picked.
+    const gifSheetRef = useRef<BottomSheetModal>(null);
+    const [sendingGif, setSendingGif] = useState(false);
+    const openGifPicker = useCallback(() => gifSheetRef.current?.present(), []);
+
+    const handleSelectGif = useCallback(async (gif: KlipyGif) => {
+        const content = buildGifContent(gif);
+        if (!content || !postId) return;
+        setSendingGif(true);
+        try {
+            addComment(await createComment(postId, content));
+        } catch {
+            Alert.alert("Error", "Could not post the GIF");
+        } finally {
+            setSendingGif(false);
+        }
+    }, [postId, addComment]);
+
     const renderFooter = useCallback((props: any) => (
-        <CommentInputFooter {...props} postId={postId} insets={insets} onCommentPosted={addComment} />
-    ), [postId, insets, addComment]);
+        <CommentInputFooter
+            {...props}
+            postId={postId}
+            insets={insets}
+            onCommentPosted={addComment}
+            onOpenGifPicker={openGifPicker}
+            sendingGif={sendingGif}
+        />
+    ), [postId, insets, addComment, openGifPicker, sendingGif]);
 
     const handleProfileUser = useCallback((item: any) => {
         if (session?.user.id === item.user?.id) return;
@@ -131,23 +165,32 @@ const CommentsSheet = forwardRef<BottomSheetModal, Props>(({ postId }, ref) => {
                 <TouchableOpacity onPress={() => handleProfileUser(item)} disabled={session?.user.id === item.user?.id}>
                     <Text style={styles.username}>@{item.user?.username}</Text>
                 </TouchableOpacity>
-                <Text style={styles.commentText}>{item.content}</Text>
+                {parseGifContent(item.content) ? (
+                    <View style={styles.commentGif}>
+                        <GifMessageBubble content={item.content} maxWidth={GIF_MAX_WIDTH} maxHeight={GIF_MAX_HEIGHT} />
+                    </View>
+                ) : (
+                    <Text style={styles.commentText}>{item.content}</Text>
+                )}
             </View>
         </TouchableOpacity>
     ), [session?.user.id, handleProfileUser, handleCommentLongPress]);
 
     return (
-        <NymlySheet ref={ref} snapPoints={['65%', '100%']} footerComponent={renderFooter}>
-            <View style={styles.sheetContainer}>
-                <View style={styles.headerContainer}><Text style={styles.sheetTitle}>Comments</Text></View>
-                <BottomSheetFlatList
-                    data={visibleComments}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderComment}
-                    contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
-                />
-            </View>
-        </NymlySheet>
+        <>
+            <NymlySheet ref={ref} snapPoints={['65%', '100%']} footerComponent={renderFooter}>
+                <View style={styles.sheetContainer}>
+                    <View style={styles.headerContainer}><Text style={styles.sheetTitle}>Comments</Text></View>
+                    <BottomSheetFlatList
+                        data={visibleComments}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderComment}
+                        contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
+                    />
+                </View>
+            </NymlySheet>
+            <GifPicker ref={gifSheetRef} onSelect={handleSelectGif} />
+        </>
     );
 });
 

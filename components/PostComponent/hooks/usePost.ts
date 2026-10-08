@@ -8,6 +8,7 @@ import { reportsApi } from "@/api/reports";
 import { AuthContext } from "@/context/AuthContext";
 import { useBlockedUsers } from "@/context/BlockedUsersContext";
 import { usePostActivity } from "@/context/PostActivityContext";
+import { parseGifContent } from "@/utils/chatUtils";
 import { getCachedMedia } from "@/utils/mediaCache";
 import { promptReportReason } from "@/utils/moderation";
 import { buildVideoSource } from "@/utils/videoSource";
@@ -93,7 +94,9 @@ export function usePost(post: any, onDelete?: () => void) {
     const isOwner = session?.user.id === post.user_id;
 
     const isMedia = Boolean(post.media_url);
-    const isVideo = isMedia && isVideoPath(post.media_url);
+    // A GIF post keeps KLIPY's URL in media_url instead of a path in our bucket.
+    const gif = useMemo(() => parseGifContent(post.media_url), [post.media_url]);
+    const isVideo = isMedia && !gif && isVideoPath(post.media_url);
 
     const [mediaUrl, setMediaUrl] = useState<string | null>(null);
 
@@ -119,6 +122,8 @@ export function usePost(post: any, onDelete?: () => void) {
     useEffect(() => {
         let active = true;
         if (!post.media_url) { setMediaUrl(null); return; }
+        // Public KLIPY asset: nothing to sign; expo-image caches it.
+        if (gif) { setMediaUrl(gif.url); return; }
 
         const needsMp4 = !isVideo || post.playback_status !== 'ready' || hlsFailed;
         if (!needsMp4) { setMediaUrl(null); return; }
@@ -127,7 +132,7 @@ export function usePost(post: any, onDelete?: () => void) {
             .then((uri) => { if (active) setMediaUrl(uri); })
             .catch(() => { if (active) setMediaUrl(null); });
         return () => { active = false; };
-    }, [post.media_url, isVideo, post.playback_status, hlsFailed]);
+    }, [post.media_url, gif, isVideo, post.playback_status, hlsFailed]);
 
     // The token only matters when the player loads the playlist, so it's read
     // through a ref instead of being a dependency: a new source makes
@@ -258,6 +263,7 @@ export function usePost(post: any, onDelete?: () => void) {
         handleDoubleTapLike,
 
         isMedia,
+        gif,
         isVideo,
         mediaUrl,
         videoSource,

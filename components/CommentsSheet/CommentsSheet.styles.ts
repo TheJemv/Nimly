@@ -14,4 +14,5 @@ export const styles = StyleSheet.create({
     commentContent: { flex: 1 },
     username: { color: '#FFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
     commentText: { color: TEXT, fontSize: 15, lineHeight: 20 },
+    commentGif: { marginTop: 4, alignSelf: 'flex-start' },
 });

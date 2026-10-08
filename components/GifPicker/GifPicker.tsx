@@ -24,8 +24,11 @@ interface Props {
 }
 
 /** Bottom sheet to search KLIPY and pick a GIF: categories first, then results. */
+// 'push': opened from the comments sheet, it goes on top of it. With 'switch'
+// the comments sheet is minimized and, in this version of the library, never
+// comes back after the picker closes.
 const GifPicker = forwardRef<BottomSheetModal, Props>(({ onSelect }, ref) => (
-    <NymlySheet ref={ref} snapPoints={SNAP_POINTS}>
+    <NymlySheet ref={ref} snapPoints={SNAP_POINTS} stackBehavior="push">
         <GifPickerContent onSelect={onSelect} />
     </NymlySheet>
 ));

@@ -1,16 +1,22 @@
+import type { KlipyGif } from "@/api/klipy/gifs";
+import type { PostMedia } from "@/api/posts";
+import GifPicker from "@/components/GifPicker";
 import NymlyCamera from "@/components/NymlyCamera";
 import { getThemeColor } from "@/constants/theme";
 import { usePostActivity } from "@/context/PostActivityContext";
+import { buildGifContent, parseGifContent } from "@/utils/chatUtils";
+import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useVideoPlayer, VideoView } from "expo-video";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
    Alert,
    Image,
+   Keyboard,
    KeyboardAvoidingView,
    Platform,
    Pressable,
@@ -40,8 +46,10 @@ export default function NewPostScreen() {
    const { uploadStatus, startUpload } = usePostActivity();
 
    const [text, setText] = useState("");
-   const [media, setMedia] = useState<{ uri: string; type: 'image' | 'video' } | undefined>(undefined);
+   // A single media per post: a photo, video or GIF replaces whatever was there.
+   const [media, setMedia] = useState<PostMedia | undefined>(undefined);
    const [isCameraVisible, setCameraVisible] = useState(false);
+   const gifSheetRef = useRef<BottomSheetModal>(null);
 
    const tintColor = getThemeColor("tint");
    const MAX_CHARS = 128;
@@ -80,6 +88,16 @@ export default function NewPostScreen() {
          console.error("Error picking media:", e);
          Alert.alert("Error", "Could not open gallery.");
       }
+   };
+
+   const openGifPicker = () => {
+      Keyboard.dismiss();
+      gifSheetRef.current?.present();
+   };
+
+   const handleSelectGif = (gif: KlipyGif) => {
+      const content = buildGifContent(gif);
+      if (content) setMedia({ uri: content, type: 'gif' });
    };
 
    // TEXT NORMALIZATION
@@ -161,7 +179,10 @@ export default function NewPostScreen() {
                            {media.type === 'video' ? (
                               <VideoView player={previewPlayer} style={styles.mediaPreview} nativeControls={false} contentFit="cover" />
                            ) : (
-                              <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
+                              <Image
+                                 source={{ uri: media.type === 'gif' ? parseGifContent(media.uri)?.url : media.uri }}
+                                 style={styles.mediaPreview}
+                              />
                            )}
                            <TouchableOpacity style={styles.removeBtn} onPress={() => setMedia(undefined)}>
                               <SymbolView name="xmark" size={12} tintColor="#FFF" />
@@ -181,6 +202,9 @@ export default function NewPostScreen() {
                   <TouchableOpacity style={styles.toolIconBtn} onPress={pickMedia}>
                      <SymbolView name="photo" size={22} tintColor={tintColor} />
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolIconBtn} onPress={openGifPicker} accessibilityLabel="Add a GIF">
+                     <SymbolView name="sparkles.rectangle.stack" size={22} tintColor={tintColor} />
+                  </TouchableOpacity>
                </View>
 
                <Text style={[styles.counterText, isOverLimit && styles.counterError]}>
@@ -197,6 +221,8 @@ export default function NewPostScreen() {
                setMedia({ uri, type });
             }}
          />
+
+         <GifPicker ref={gifSheetRef} onSelect={handleSelectGif} />
       </View>
    );
 }
