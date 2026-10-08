@@ -8,6 +8,7 @@ import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
 import { getThemeColor } from "@/constants/theme";
+import { isFaceScanAvailable } from "@/modules/face-scan";
 import { supabase } from "@/lib/supabase";
 
 import { friendsApi } from "@/api/friends";
@@ -40,6 +41,7 @@ export default function ProfileScreen() {
     const openSettings = () => router.push("/settings");
     const openAvatarSelect = () => router.push("/avatar-select");
     const openFriendsList = () => router.push("/(app)/(tabs)/(profile)/friends");
+    const openFaceScan = () => router.push("/face-scan");
 
     const handleOpenComments = (postId: string) => {
         setActiveCommentPostId(postId);
@@ -106,6 +108,12 @@ export default function ProfileScreen() {
             options={{
                 headerTitle: username ? `@${username}` : "Profile",
                 headerLargeTitle: false,
+                // Only on binaries that ship the face scan camera (older ones get this code by OTA).
+                headerLeft: isFaceScanAvailable ? () => (
+                    <TouchableOpacity onPress={openFaceScan}>
+                        <SymbolView name='faceid' size={24} tintColor="#fff" />
+                    </TouchableOpacity>
+                ) : undefined,
                 headerRight: () => (
                     <TouchableOpacity onPress={openSettings}>
                         <SymbolView name='line.3.horizontal' size={24} tintColor="#fff" />
