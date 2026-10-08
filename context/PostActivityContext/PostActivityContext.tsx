@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { createPost, deletePost } from "@/api/posts";
+import { createPost, deletePost, type PostMedia } from "@/api/posts";
 
-type UploadMedia = { uri: string; type: "image" | "video" };
-type PendingPost = { userId: string; text: string; media?: UploadMedia };
+type PendingPost = { userId: string; text: string; media?: PostMedia };
 type PostToDelete = { id: string };
 
 export type PostActivityStatus = "idle" | "running" | "done" | "error";

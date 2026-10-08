@@ -52,7 +52,11 @@ Deno.serve(async (req) => {
         .maybeSingle()
 
       pushTitle = `@${sender?.username || 'Someone'}`
-      pushBody = record.type === 'text' ? 'sent you a message' : 'sent you a photo'
+      pushBody =
+        record.type === 'text' ? 'sent you a message'
+        : record.type === 'gif' ? 'sent you a GIF'
+        : record.type === 'video' ? 'sent you a video'
+        : 'sent you a photo'
 
       // The app opens /chat with `id` = whoever sent it (which for the recipient is the
       // "friend" in the conversation) and uses `sender` to paint the header

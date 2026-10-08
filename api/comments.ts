@@ -18,6 +18,7 @@ export const getComments = async (postId: string, page: number = 0) => {
     return data;
 };
 
+/** `content` is the text, or for a GIF comment the GIF alone (`buildGifContent`). */
 export const createComment = async (postId: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("You must be signed in to comment");

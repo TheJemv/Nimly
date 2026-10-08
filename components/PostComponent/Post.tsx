@@ -32,6 +32,9 @@ import { usePost } from './hooks/usePost';
 const TEXT = getThemeColor("text");
 const TINT = getThemeColor("tint");
 const ACTION_HIT_SLOP = { top: 10, bottom: 10, left: 6, right: 6 };
+// A GIF keeps its own shape, clamped between the photo frame (8:9) and 16:9.
+const GIF_MIN_RATIO = 8 / 9;
+const GIF_MAX_RATIO = 16 / 9;
 
 interface Props {
     post: any;
@@ -65,6 +68,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
 
         //  Media
         isMedia,
+        gif,
         isVideo,
         mediaUrl,
         videoSource,
@@ -198,6 +202,9 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
     // Video: videoSource alone is enough (HLS ready even if the signed URL for
     // the MP4 hasn't resolved yet). Image: mediaUrl.
     const mediaReady = Boolean(mediaUrl || videoSource);
+    const mediaFrameStyle = gif?.width && gif?.height
+        ? [styles.mediaFrame, { aspectRatio: Math.min(Math.max(gif.width / gif.height, GIF_MIN_RATIO), GIF_MAX_RATIO) }]
+        : styles.mediaFrame;
 
     return (
         <View>
@@ -248,7 +255,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
 
             {isMedia && mediaReady ? (
                 <GestureDetector gesture={imageTapGesture}>
-                    <View style={styles.mediaFrame}>
+                    <View style={mediaFrameStyle}>
                         {isVideo ? (
                             <>
                                 <VideoView
@@ -296,7 +303,7 @@ export default function PostComponent({ post, onDelete, onCommentPress, isActive
             ) : isMedia ? (
                 // Same footprint while the media resolves, so the post doesn't
                 // grow (and shove the feed around) once it arrives.
-                <View style={styles.mediaFrame} />
+                <View style={mediaFrameStyle} />
             ) : null}
 
             <View style={styles.actions}>

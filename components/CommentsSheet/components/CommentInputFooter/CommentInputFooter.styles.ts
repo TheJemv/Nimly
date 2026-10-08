@@ -20,6 +20,11 @@ export const styles = StyleSheet.create({
         paddingVertical: 12,
         color: "#fff"
     },
+    gifBtn: {
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     sendBtn: {
         height: 44,
         width: 44,
